@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>DELTA</title>
+  <meta name="theme-color" content="#03070d" />
+  <meta name="description" content="DELTA, tu asistente personal" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icono.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icono-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/estilos.css" />
+</head>
+<body>
+  <!-- Pantalla de entrada -->
+  <section id="entrada" class="entrada" hidden>
+    <div class="entrada-caja">
+      <div class="marca">DELTA</div>
+      <p>Identifíquese, señor.</p>
+      <form id="form-entrada">
+        <input id="clave" type="password" placeholder="Clave de acceso" autocomplete="current-password" required />
+        <button type="submit">Entrar</button>
+      </form>
+      <p id="error-entrada" class="error" hidden></p>
+    </div>
+  </section>
+
+  <main id="app" class="app" hidden>
+    <header class="barra">
+      <div class="marca">DELTA</div>
+      <div class="barra-datos">
+        <span id="clima" class="dato"></span>
+        <span id="reloj" class="dato reloj">--:--</span>
+      </div>
+      <button id="btn-ajustes" class="icono" aria-label="Ajustes" title="Ajustes">⚙</button>
+    </header>
+
+    <div class="rejilla">
+      <!-- Columna izquierda: hoy y calendario -->
+      <section class="panel" id="panel-agenda" data-tab="agenda">
+        <h2>Agenda</h2>
+        <div id="resumen-hoy" class="resumen"></div>
+        <ul id="lista-eventos" class="lista"></ul>
+        <h3>Recordatorios</h3>
+        <ul id="lista-recordatorios" class="lista"></ul>
+      </section>
+
+      <!-- Centro: orbe y conversación -->
+      <section class="centro" data-tab="hablar">
+        <button id="orbe" class="orbe" aria-label="Tocar para hablar">
+          <canvas id="lienzo" width="600" height="600"></canvas>
+          <span id="estado-orbe" class="estado-orbe">Toque para hablar</span>
+        </button>
+        <div id="conversacion" class="conversacion" aria-live="polite"></div>
+        <form id="form-chat" class="form-chat">
+          <input id="texto" type="text" placeholder="Escríbale a DELTA…" autocomplete="off" />
+          <button id="btn-mic" type="button" class="icono mic" aria-label="Hablar" title="Hablar">🎙</button>
+          <button type="submit" class="enviar" aria-label="Enviar">➤</button>
+        </form>
+      </section>
+
+      <!-- Derecha: tareas y conexiones -->
+      <section class="panel" id="panel-tareas" data-tab="tareas">
+        <h2>Tareas</h2>
+        <form id="form-tarea" class="form-mini">
+          <input id="nueva-tarea" type="text" placeholder="Nueva tarea…" />
+          <button type="submit">+</button>
+        </form>
+        <ul id="lista-tareas" class="lista"></ul>
+        <h3>Conexiones</h3>
+        <ul id="lista-conexiones" class="conexiones"></ul>
+        <h3>Avisos recientes</h3>
+        <ul id="lista-avisos" class="lista tenue"></ul>
+      </section>
+    </div>
+
+    <!-- Pestañas para el celular -->
+    <nav class="pestanas">
+      <button data-ir="agenda">Agenda</button>
+      <button data-ir="hablar" class="activa">DELTA</button>
+      <button data-ir="tareas">Tareas</button>
+    </nav>
+  </main>
+
+  <dialog id="ajustes" class="dialogo">
+    <form method="dialog">
+      <h2>Ajustes</h2>
+      <label>Zona horaria <input id="aj-zona" type="text" /></label>
+      <label>Hora del resumen diario <input id="aj-resumen" type="time" /></label>
+      <label class="fila"><input id="aj-voz" type="checkbox" /> Responder en voz alta</label>
+      <label class="fila"><input id="aj-manos" type="checkbox" /> Manos libres (diga "Delta…")</label>
+      <div class="botones">
+        <button type="button" id="btn-push">Activar avisos en este equipo</button>
+        <button type="button" id="btn-prueba">Enviar aviso de prueba</button>
+        <button type="button" id="btn-instalar" hidden>Instalar app</button>
+      </div>
+      <p id="aj-msg" class="tenue"></p>
+      <div class="botones"><button value="cerrar" id="aj-guardar" class="primario">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
