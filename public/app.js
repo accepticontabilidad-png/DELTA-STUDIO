@@ -228,50 +228,66 @@ $("#orbe").addEventListener("click", escuchar);
 $("#btn-mic").addEventListener("click", escuchar);
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 
-// ---------------- Orbe animado ----------------
+// ---------------- Orbe animado (logo DELTA al centro) ----------------
 const orbe = (() => {
   const lienzo = $("#lienzo");
   const ctx = lienzo.getContext("2d");
   let estado = "reposo";
   let energia = 0.2;
-  const textos = { reposo: "Toque para hablar", escuchando: "Escuchando…", pensando: "Pensando…", hablando: "Hablando…" };
-  const colores = { reposo: [63, 208, 255], escuchando: [255, 181, 71], pensando: [140, 160, 255], hablando: [63, 230, 255] };
+  const textos = { reposo: "Toque para hablar", escuchando: "Escuchando", pensando: "Pensando", hablando: "Hablando" };
+  const colores = { reposo: [139, 115, 255], escuchando: [255, 158, 232], pensando: [183, 166, 255], hablando: [160, 135, 255] };
   let color = [...colores.reposo];
+  const chispas = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
 
   function dibujar(t) {
     const W = lienzo.width, C = W / 2;
     ctx.clearRect(0, 0, W, W);
-    const objetivo = { reposo: 0.25, escuchando: 0.8, pensando: 0.55, hablando: 0.7 + 0.3 * Math.abs(Math.sin(t / 120)) }[estado];
+    const objetivo = { reposo: 0.25, escuchando: 0.85, pensando: 0.55, hablando: 0.65 + 0.35 * Math.abs(Math.sin(t / 120)) }[estado];
     energia += (objetivo - energia) * 0.06;
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
 
-    // Halo
-    const halo = ctx.createRadialGradient(C, C, W * 0.05, C, C, W * 0.48);
-    halo.addColorStop(0, rgba(0.35 * energia + 0.1));
+    // Resplandor de fondo
+    const halo = ctx.createRadialGradient(C, C, W * 0.04, C, C, W * 0.48);
+    halo.addColorStop(0, rgba(0.32 * energia + 0.12));
+    halo.addColorStop(0.55, rgba(0.06));
     halo.addColorStop(1, rgba(0));
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, W, W);
 
-    // Anillos giratorios
-    const anillos = [[0.42, 1, 0.0006, [0.1, 0.6]], [0.37, 2, -0.0009, [0.3, 0.9]], [0.32, 1.5, 0.0013, [0.05, 0.35]]];
-    anillos.forEach(([rad, grosor, vel, [a0, a1]], i) => {
+    // Partículas orbitando (como polvo de estrellas)
+    for (const p of chispas) {
+      p.a += p.v * (1 + energia * 3);
+      const rr = W * (p.r + 0.01 * Math.sin(t / 900 + p.t));
+      const brillo = 0.25 + 0.6 * Math.abs(Math.sin(t / 700 + p.t));
+      ctx.fillStyle = `rgba(233,230,255,${brillo * (0.4 + energia * 0.6)})`;
+      ctx.beginPath();
+      ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Anillos de neón
+    const anillos = [[0.44, 1.2, 0.0005, 0.55], [0.39, 2.2, -0.0008, 0.8], [0.345, 1, 0.0012, 0.35]];
+    anillos.forEach(([rad, grosor, vel, largo], i) => {
       const giro = t * vel * (1 + energia);
-      ctx.strokeStyle = rgba(0.35 + 0.4 * energia);
+      ctx.strokeStyle = rgba(0.3 + 0.45 * energia);
       ctx.lineWidth = grosor * 2;
+      ctx.shadowColor = rgba(0.9);
+      ctx.shadowBlur = 12 * energia;
       for (let k = 0; k < 3; k++) {
         ctx.beginPath();
-        const ini = giro + (k * Math.PI * 2) / 3 + a0 * Math.PI;
-        ctx.arc(C, C, W * rad, ini, ini + (a1 - a0) * Math.PI * 0.6);
+        const ini = giro + (k * Math.PI * 2) / 3;
+        ctx.arc(C, C, W * rad, ini, ini + largo * Math.PI * 0.6);
         ctx.stroke();
       }
-      if (i === 0) { // marcas
+      ctx.shadowBlur = 0;
+      if (i === 0) { // marcas tipo instrumento
         ctx.strokeStyle = rgba(0.18);
         ctx.lineWidth = 2;
-        for (let k = 0; k < 60; k++) {
-          const a = (k / 60) * Math.PI * 2 - giro * 0.3;
-          const r1 = W * 0.455, r2 = W * (k % 5 ? 0.465 : 0.475);
+        for (let k = 0; k < 72; k++) {
+          const a = (k / 72) * Math.PI * 2 - giro * 0.3;
+          const r1 = W * 0.465, r2 = W * (k % 6 ? 0.475 : 0.488);
           ctx.beginPath();
           ctx.moveTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1);
           ctx.lineTo(C + Math.cos(a) * r2, C + Math.sin(a) * r2);
@@ -280,40 +296,64 @@ const orbe = (() => {
       }
     });
 
-    // Núcleo con onda
+    // Onda de voz alrededor del logo
     ctx.beginPath();
-    const puntos = 90;
+    const puntos = 120;
     for (let k = 0; k <= puntos; k++) {
       const a = (k / puntos) * Math.PI * 2;
-      const onda = Math.sin(a * 6 + t / 260) * Math.sin(a * 3 - t / 410) * 10 * energia;
-      const rad = W * (0.2 + 0.02 * Math.sin(t / 700)) + onda;
+      const onda = Math.sin(a * 7 + t / 230) * Math.sin(a * 3 - t / 380) * 14 * energia;
+      const rad = W * 0.29 + onda;
       const x = C + Math.cos(a) * rad, y = C + Math.sin(a) * rad;
       k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
-    const nucleo = ctx.createRadialGradient(C, C, 0, C, C, W * 0.23);
-    nucleo.addColorStop(0, "rgba(255,255,255,0.95)");
-    nucleo.addColorStop(0.25, rgba(0.9));
-    nucleo.addColorStop(1, rgba(0.08));
-    ctx.fillStyle = nucleo;
-    ctx.shadowColor = rgba(0.9);
-    ctx.shadowBlur = 40 * energia + 10;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Delta en el centro
-    ctx.strokeStyle = "rgba(3,15,25,0.65)";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    const s = W * 0.07;
-    ctx.moveTo(C, C - s); ctx.lineTo(C + s * 0.95, C + s * 0.65); ctx.lineTo(C - s * 0.95, C + s * 0.65); ctx.closePath();
+    ctx.strokeStyle = rgba(0.25 + 0.5 * energia);
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
     requestAnimationFrame(dibujar);
   }
   requestAnimationFrame(dibujar);
   return {
-    estado(e) { estado = e; $("#estado-orbe").textContent = textos[e]; },
+    estado(e) { estado = e; $("#estado-orbe").textContent = textos[e]; $("#orbe").dataset.estado = e; },
   };
+})();
+
+// ---------------- Fondo: cielo estrellado y malla de puntos ----------------
+(() => {
+  const lienzo = $("#estrellas");
+  const ctx = lienzo.getContext("2d");
+  let W, H, estrellas;
+  const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function medir() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    estrellas = Array.from({ length: Math.round((W * H) / 5000) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 + 0.2, f: Math.random() * 6 }));
+  }
+  function dibujar(t = 0) {
+    ctx.clearRect(0, 0, W, H);
+    for (const e of estrellas) {
+      const a = 0.35 + 0.45 * Math.abs(Math.sin(t / 1600 + e.f));
+      ctx.fillStyle = e.r > 1 ? `rgba(201,191,255,${a})` : `rgba(255,255,255,${a * 0.8})`;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+    }
+    // Malla de puntos ondulada (como en la portada)
+    const filas = 14, cols = Math.ceil(W / 18);
+    for (let i = 0; i < filas; i++) {
+      const prof = i / filas;
+      for (let j = 0; j <= cols; j++) {
+        const x = (j / cols) * W;
+        const y = H - 150 + i * 11 + Math.sin(j / 7 + t / 2200 + i / 3) * 16 * (1 - prof * 0.5) + Math.sin(j / 19 - t / 3100) * 22;
+        ctx.fillStyle = `rgba(139,115,255,${0.08 + 0.32 * prof})`;
+        ctx.fillRect(x, y, 1.6, 1.6);
+      }
+    }
+    if (!reducir) requestAnimationFrame(dibujar);
+  }
+  addEventListener("resize", medir);
+  medir();
+  requestAnimationFrame(dibujar);
 })();
 
 // ---------------- Reloj y clima ----------------
