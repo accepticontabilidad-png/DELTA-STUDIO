@@ -15,6 +15,14 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 - **Avisos donde estés:** notificación en el celular/PC (app instalada) y mensaje por WhatsApp.
 - **Panel tipo centro de comando:** orbe animado, reloj, clima, agenda, tareas y estado de las conexiones.
 
+## Fase 2: correo, bolsa y noticias
+
+- **Correo (Gmail):** "¿Qué correos importantes tengo?", "Resúmeme lo que mandó Acme", "Contéstale que sí el jueves". DELTA lee, resume, saca citas y tareas, y escribe borradores. **Nunca envía sin que usted lo vea y diga "envíalo".**
+- **Bolsa:** "¿Cómo va la bolsa?", "¿Cómo le fue a Nvidia este año?", "Agrega Tesla a mi lista", "Dame ideas para invertir". Lista inicial: S&P 500, Nasdaq, IPC, dólar/peso, Apple, Microsoft, Nvidia, Amazon, Walmart de México y Bitcoin. Avisa si algo se mueve más de 3 % en el día. Solo informa: no compra ni vende, y sus ideas no son asesoría financiera.
+- **Noticias:** "¿Qué hay de nuevo en cine?", "Agrega fútbol a mis noticias". Temas iniciales: marketing, tendencias, IA, ciencia, arte, cine, economía mundial y política en México.
+- **Resumen de la mañana** ahora incluye correos sin leer, mercados y un titular por tema.
+- En el panel derecho hay una lista de **Mercados** que se actualiza sola.
+
 ## Próximas fases
 
 - Conectar las cuentas de tus clientes (Meta Ads, Instagram, TikTok, Google) y ver sus estadísticas.
@@ -69,7 +77,19 @@ docker run -d -p 3000:3000 -v delta-datos:/data --env-file .env delta
    **iPhone:** botón Compartir → "Agregar a pantalla de inicio".
 4. Abre DELTA desde el ícono, ve a ⚙ → "Activar avisos en este equipo" y acepta el permiso.
 
-### 5. Conectar WhatsApp
+### 5. Conectar Gmail
+
+Se hace una sola vez (unos 10 minutos):
+
+1. Entre a [console.cloud.google.com](https://console.cloud.google.com) con su cuenta de Gmail y cree un proyecto llamado "DELTA".
+2. En **APIs y servicios → Biblioteca** busque **Gmail API** y actívela.
+3. En **APIs y servicios → Pantalla de consentimiento de OAuth**: tipo **Externo**, nombre "DELTA", su correo como contacto. En "Usuarios de prueba" agregue su Gmail.
+4. Luego, en esa misma pantalla, toque **Publicar app** (pasa a "En producción"). Si la deja "En prueba", Google corta el permiso cada 7 días. Al ser solo para usted no hace falta que Google la verifique: al conectar verá un aviso de "app no verificada"; toque **Configuración avanzada → Ir a DELTA**.
+5. En **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**: tipo **Aplicación web**. En "URI de redireccionamiento autorizados" ponga `https://SU-DIRECCION/oauth/google` (ej. `https://delta-studio-production.up.railway.app/oauth/google`).
+6. Copie el **ID de cliente** en `GOOGLE_CLIENT_ID` y el **Secreto** en `GOOGLE_CLIENT_SECRET` (en Railway: pestaña Variables). Opcional: ponga su correo en `GMAIL_CUENTA` para que DELTA solo acepte esa cuenta.
+7. En la app: ⚙ → **Conectar Gmail** y acepte los permisos.
+
+### 6. Conectar WhatsApp
 
 WhatsApp exige usar su plataforma oficial para negocios. Se hace una sola vez:
 

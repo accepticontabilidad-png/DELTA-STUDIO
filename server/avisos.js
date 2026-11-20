@@ -4,6 +4,9 @@ import { enviarWhatsApp } from "./whatsapp.js";
 import { enviarPush } from "./push.js";
 import { utcALocal, ahoraLocalISO, siguiente } from "./tiempo.js";
 import { resumenDelDia, legible } from "./agenda.js";
+import * as correo from "./gmail.js";
+import * as mercados from "./mercados.js";
+import * as noticias from "./noticias.js";
 
 const oyentes = new Set(); // pantallas abiertas de la app (tiempo real)
 export function suscribirPantalla(fn) {
@@ -58,8 +61,55 @@ async function revisar() {
     const partes = [`Buenos días, señor. Hoy tiene ${r.eventos.length} cita(s) y ${r.total_pendientes} tarea(s) pendiente(s).`];
     for (const e of r.eventos) partes.push(`• ${e.inicio.split(", ").slice(-1)[0]} ${e.titulo}`);
     if (r.tareas_vencidas.length) partes.push(`Atrasadas: ${r.tareas_vencidas.map((t) => t.titulo).join(", ")}.`);
+    partes.push(...(await extrasDelResumen()));
     await avisar(partes.join("\n"), "Resumen del día");
   }
+
+  await revisarBolsa(local);
+}
+
+/** Correo, bolsa y noticias para el resumen de la mañana. Si algo falla, se omite sin tumbar el resumen. */
+export async function extrasDelResumen() {
+  const [mail, bolsa, notas] = await Promise.allSettled([
+    correo.pendientesDeHoy(),
+    mercados.verMercados(null, "dia"),
+    noticias.titulares(1),
+  ]);
+  const partes = [];
+  if (mail.status === "fulfilled" && mail.value) {
+    const c = mail.value.correos;
+    partes.push(c.length ? `\n📧 ${c.length} correo(s) sin leer:` : "\n📧 Sin correos nuevos importantes.");
+    for (const m of c.slice(0, 5)) partes.push(`• ${m.de.replace(/<.*>/, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}`);
+  }
+  if (bolsa.status === "fulfilled") {
+    const ok = bolsa.value.filter((d) => !d.error).slice(0, 6);
+    if (ok.length) partes.push("\n📈 Mercados:", ...ok.map((d) => "• " + mercados.lineaCorta(d)));
+  }
+  if (notas.status === "fulfilled") {
+    const t = notas.value.filter((x) => x.noticias?.length).slice(0, 6);
+    if (t.length) partes.push("\n📰 Noticias:", ...t.map((x) => `• ${x.tema}: ${x.noticias[0].titulo}`));
+  }
+  return partes;
+}
+
+// Alertas de bolsa: cada 20 min en horario de mercado (lunes a viernes, 8 a 16 h local), una por símbolo al día.
+let ultimaRevisionBolsa = 0;
+async function revisarBolsa(local) {
+  if (Date.now() - ultimaRevisionBolsa < 20 * 60000) return;
+  const dia = new Date(local.slice(0, 10) + "T12:00:00Z").getUTCDay();
+  const h = Number(local.slice(11, 13));
+  if (dia === 0 || dia === 6 || h < 8 || h >= 16) return;
+  ultimaRevisionBolsa = Date.now();
+  if (getAjuste("alertas_bolsa", "si") !== "si") return;
+  const hoy = local.slice(0, 10);
+  let avisados = {};
+  try { avisados = JSON.parse(getAjuste("alertas_bolsa_hoy", "{}")); } catch {}
+  if (avisados.dia !== hoy) avisados = { dia: hoy, simbolos: [] };
+  const fuertes = (await mercados.movimientosFuertes().catch(() => [])).filter((d) => !avisados.simbolos.includes(d.simbolo));
+  if (!fuertes.length) return;
+  avisados.simbolos.push(...fuertes.map((d) => d.simbolo));
+  setAjuste("alertas_bolsa_hoy", JSON.stringify(avisados));
+  await avisar("Movimiento fuerte en la bolsa:\n" + fuertes.map((d) => "• " + mercados.lineaCorta(d)).join("\n"), "Bolsa");
 }
 
 export function iniciarVigilante() {

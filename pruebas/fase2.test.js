@@ -1,0 +1,85 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+process.env.DATA_DIR ||= fs.mkdtempSync(path.join(os.tmpdir(), "delta-f2-"));
+const mercados = await import("../server/mercados.js");
+const noticias = await import("../server/noticias.js");
+const gmail = await import("../server/gmail.js");
+
+test("mercados: interpreta la respuesta de Yahoo", () => {
+  const d = mercados.interpretarGrafica(
+    {
+      chart: {
+        result: [{
+          meta: { symbol: "AAPL", shortName: "Apple Inc.", currency: "USD", regularMarketPrice: 110, fiftyTwoWeekHigh: 120, fiftyTwoWeekLow: 80 },
+          indicators: { quote: [{ close: [100, null, 105, 110] }] },
+        }],
+      },
+    },
+    "Apple",
+  );
+  assert.equal(d.nombre, "Apple");
+  assert.equal(d.precio, 110);
+  assert.equal(d.cambio_dia_pct, 4.76);
+  assert.equal(d.cambio_periodo_pct, 10);
+  assert.equal(d.max_52s, 120);
+  assert.throws(() => mercados.interpretarGrafica({ chart: { result: null, error: { description: "No data found" } } }), /No data/);
+});
+
+test("mercados: lista de seguimiento editable", () => {
+  assert.ok(mercados.lista().some((x) => x.simbolo === "^MXX"));
+  mercados.agregar("tsla", "Tesla");
+  assert.ok(mercados.lista().some((x) => x.simbolo === "TSLA" && x.nombre === "Tesla"));
+  mercados.quitar("TSLA");
+  assert.ok(!mercados.lista().some((x) => x.simbolo === "TSLA"));
+  assert.throws(() => mercados.quitar("NOEXISTE"), /no está/);
+  assert.throws(() => mercados.agregar("a b;c"), /no válido/);
+});
+
+test("noticias: lee el RSS de Google Noticias", () => {
+  const xml = `<rss><channel><item><title>IA cambia el marketing &amp; más - El País</title><link>https://news.google.com/x</link>
+  <pubDate>Fri, 20 Nov 2026 10:00:00 GMT</pubDate><source url="https://elpais.com">El País</source></item></channel></rss>`;
+  const [n] = noticias.leerRSS(xml);
+  assert.equal(n.titulo, "IA cambia el marketing & más");
+  assert.equal(n.fuente, "El País");
+  assert.equal(n.fecha, "2026-11-20T10:00:00.000Z");
+});
+
+test("noticias: temas editables", () => {
+  assert.ok(noticias.temas().includes("política México"));
+  noticias.agregarTema("fútbol");
+  assert.ok(noticias.temas().includes("fútbol"));
+  noticias.quitarTema("Fútbol");
+  assert.ok(!noticias.temas().includes("fútbol"));
+});
+
+test("gmail: saca el texto del correo (texto plano o HTML)", () => {
+  const b = (s) => Buffer.from(s).toString("base64url");
+  assert.equal(
+    gmail.textoDeMensaje({ mimeType: "multipart/alternative", parts: [
+      { mimeType: "text/html", body: { data: b("<p>Hola</p>") } },
+      { mimeType: "text/plain", body: { data: b("Hola jefe") } },
+    ] }),
+    "Hola jefe",
+  );
+  assert.equal(gmail.textoDeMensaje({ mimeType: "text/html", body: { data: b("<style>x{}</style><p>Pago&nbsp;listo</p>") } }), "Pago listo");
+});
+
+test("gmail: arma el correo con acentos y sin inyección de cabeceras", () => {
+  const raw = gmail.armarMIME({ para: "a@b.com\r\nBcc: espia@x.com", asunto: "Cotización", cuerpo: "Señor, adjunto." });
+  const txt = Buffer.from(raw, "base64url").toString();
+  assert.match(txt, /^To: a@b.com Bcc: espia@x.com\r\n/);
+  assert.ok(!/\r\nBcc:/.test(txt));
+  assert.match(txt, /Subject: =\?UTF-8\?B\?/);
+  const cuerpo = txt.split("\r\n\r\n")[1].replace(/\r\n/g, "");
+  assert.equal(Buffer.from(cuerpo, "base64").toString(), "Señor, adjunto.");
+});
+
+test("gmail: sin configurar no está conectado", () => {
+  delete process.env.GOOGLE_CLIENT_ID;
+  assert.equal(gmail.gmailConectado(), false);
+  assert.throws(() => gmail.urlConexion({ protocol: "https", get: () => "x" }), /GOOGLE_CLIENT_ID/);
+});
