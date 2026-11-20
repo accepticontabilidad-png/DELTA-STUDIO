@@ -10,6 +10,7 @@ import { iniciarVigilante, suscribirPantalla, avisar } from "./avisos.js";
 import { whatsappConfigurado, verificarWebhook, crearReceptorWebhook } from "./whatsapp.js";
 import { llavesPush, guardarSuscripcion } from "./push.js";
 import { zonaHoraria } from "./tiempo.js";
+import { guardarArchivo, infoArchivo, MAX_BYTES, MAX_POR_MENSAJE } from "./archivos.js";
 import * as seg from "./seguridad.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
@@ -74,16 +75,30 @@ const envolver = (fn) => async (req, res) => {
 };
 
 api.post("/chat", envolver(async (req) => {
-  const texto = String(req.body?.texto || "").trim();
+  const archivos = Array.isArray(req.body?.archivos) ? req.body.archivos : [];
+  if (archivos.length > MAX_POR_MENSAJE) throw new Error(`Máximo ${MAX_POR_MENSAJE} archivos por mensaje`);
+  if (archivos.some((id) => !infoArchivo(id))) throw new Error("Uno de los archivos ya no existe; adjúntelo de nuevo");
+  let texto = String(req.body?.texto || "").trim();
+  if (!texto && archivos.length) texto = "Revise lo que le adjunto, por favor.";
   if (!texto) throw new Error("Mensaje vacío");
   if (texto.length > 4000) throw new Error("Mensaje demasiado largo");
-  const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app");
+  const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app", archivos);
   return { respuesta };
 }));
 
 api.get("/historial", envolver(() =>
-  db.prepare("SELECT rol, texto, canal, fecha FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT 40").all(inicioConversacion()).reverse(),
+  db.prepare("SELECT rol, texto, canal, fecha, archivos FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT 40")
+    .all(inicioConversacion())
+    .reverse()
+    .map(({ archivos, ...m }) => ({ ...m, archivos: archivos ? JSON.parse(archivos).map(infoArchivo).filter(Boolean).map((a) => a.nombre) : [] })),
 ));
+
+// Archivos adjuntos: llegan tal cual (sin JSON), uno por petición, y se guardan en privado.
+api.post(
+  "/archivos",
+  express.raw({ type: () => true, limit: MAX_BYTES }),
+  envolver((req) => guardarArchivo(req.body, decodeURIComponent(String(req.get("x-nombre") || "archivo")))),
+);
 
 // Empieza una conversación nueva: DELTA olvida la plática anterior (no la agenda ni su memoria).
 api.post("/conversacion/nueva", envolver(() => { nuevaConversacion(); return { ok: true }; }));
@@ -147,6 +162,12 @@ api.get("/vivo", (req, res) => {
   const quitar = suscribirPantalla((d) => res.write(`data: ${JSON.stringify(d)}\n\n`));
   const latido = setInterval(() => res.write(": ok\n\n"), 25000);
   req.on("close", () => { quitar(); clearInterval(latido); });
+});
+
+// Errores al recibir datos (por ejemplo, un archivo demasiado grande).
+api.use((err, _req, res, _next) => {
+  const grande = err?.type === "entity.too.large";
+  res.status(grande ? 413 : 400).json({ error: grande ? "El archivo pesa más de 10 MB." : "No se pudo recibir eso." });
 });
 
 app.use("/api", api);

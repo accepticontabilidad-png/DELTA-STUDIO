@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
+import { bloquesDeArchivo, infoArchivo, listarArchivos } from "./archivos.js";
 import { ahoraLocalISO, zonaHoraria, utcALocal } from "./tiempo.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
@@ -23,7 +24,8 @@ Tu estilo: como JARVIS de Iron Man, elegante, eficiente, con un toque de humor s
 
 Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. En la PC se ven tres columnas: Agenda a la izquierda, tú (el orbe y la conversación) al centro y Tareas a la derecha. En el celular son tres pestañas abajo: Agenda, DELTA y Tareas.
-- Pantalla Agenda: muestra las citas, las tareas con fecha y los recordatorios por día o por semana (botones "Día" y "Semana", flechas para avanzar o retroceder y "Hoy"). Tiene el botón "+ Agregar" para crear una cita, tarea o recordatorio a mano. Ahí también se pueden borrar.
+- Pantalla Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano. En la PC, el botón "Ampliar" pone el calendario en toda la pantalla.
+- Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
 - Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
 - Botón de engranaje ⚙ (arriba a la derecha): zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, empezar conversación nueva y cerrar sesión.
 - Para hablar contigo: tocar el orbe o el micrófono.
@@ -32,6 +34,7 @@ Lo que puedes hacer hoy (fase 1, sus actividades). Más adelante tendrás acceso
 - Tareas: crear, listar, completar, cambiar y borrar.
 - Calendario: agendar citas y reuniones, moverlas, consultarlas.
 - Recordatorios y avisos: programar avisos a una hora concreta, únicos o repetidos.
+- Archivos: cuando el usuario adjunte algo, léelo con cuidado y responde a lo que pide (resumir, analizar números, revisar un contrato, describir una foto, sacar fechas para agendar…). Si no dice qué quiere, da un resumen breve y pregunta qué necesita. Si te pregunta por un archivo anterior que ya no tienes a la vista, usa leer_archivo con el id que aparece en "[Adjuntó: …]".
 - Memoria: cuando el usuario te cuente algo que valga la pena recordar a futuro (nombres de clientes, preferencias, datos de su negocio), guárdalo con guardar_memoria.
 
 Reglas:
@@ -237,6 +240,20 @@ const herramientasBase = [
   }),
 ];
 
+herramientasBase.push(
+  betaTool({
+    name: "leer_archivo",
+    description: "Vuelve a abrir un archivo que el usuario adjuntó antes (foto, PDF, Word, Excel, CSV o texto), por su id. Úsalo si te pregunta por un archivo que ya no tienes a la vista.",
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Id del archivo (32 caracteres)" } }, required: ["id"] },
+    run: async ({ id }) => bloquesDeArchivo(id),
+  }),
+  betaTool({
+    name: "listar_archivos",
+    description: "Lista los últimos archivos que el usuario ha adjuntado (id, nombre, tipo, fecha).",
+    inputSchema: { type: "object", properties: {} },
+    run: async () => JSON.stringify(listarArchivos(20)),
+  }),
+);
 const herramientas = herramientasBase.map(conRegistro);
 
 const ACCIONES_QUE_CAMBIAN = new Set([
@@ -317,9 +334,15 @@ export function quitarDisculpas(texto) {
   return quedan.length && quedan.length < parrafos.length ? quedan.join("\n\n").trim() : texto;
 }
 
+const notaArchivos = (json) => {
+  const ids = json ? JSON.parse(json) : [];
+  const info = ids.map(infoArchivo).filter(Boolean);
+  return info.length ? `\n[Adjuntó: ${info.map((a) => `${a.nombre} (archivo ${a.id})`).join(", ")}]` : "";
+};
+
 function historial() {
   const filas = db
-    .prepare("SELECT rol, texto, acciones FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT ?")
+    .prepare("SELECT rol, texto, acciones, archivos FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT ?")
     .all(inicioConversacion(), TURNOS_HISTORIAL * 2)
     .reverse();
   // La API exige que la conversación empiece por el usuario y alterne roles.
@@ -330,7 +353,7 @@ function historial() {
     // para que DELTA no tome por cierto algo que solo dijo.
     // Solo se anota cuando hubo herramientas, o cuando afirmó un cambio que no hizo
     // (anotar "ninguna" en cada plática hacía que DELTA se disculpara una y otra vez).
-    let texto = f.texto;
+    let texto = f.texto + notaArchivos(f.archivos);
     if (f.rol === "assistant" && f.acciones) {
       if (!f.acciones.endsWith("ninguna]")) texto += "\n" + f.acciones;
       else if (afirmaAccion(f.texto)) texto += "\n[Nota: ese cambio no se guardó. La agenda actual es la verdad. No lo menciones al usuario.]";
@@ -348,13 +371,18 @@ function historial() {
  * @param {string} texto
  * @param {"app"|"voz"|"whatsapp"} canal
  */
-export async function hablarConDelta(texto, canal = "app") {
+export async function hablarConDelta(texto, canal = "app", archivos = []) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return "Aún no tengo cerebro conectado, señor. Falta poner la clave de Claude (ANTHROPIC_API_KEY) en la configuración.";
   }
   const mensajes = [
     ...historial(),
-    { role: "user", content: `${contextoActual(canal)}\n\n${texto}` },
+    {
+      role: "user",
+      content: archivos.length
+        ? [...archivos.flatMap(bloquesDeArchivo), { type: "text", text: `${contextoActual(canal)}${notaArchivos(JSON.stringify(archivos))}\n\n${texto}` }]
+        : `${contextoActual(canal)}\n\n${texto}`,
+    },
   ];
 
   const acciones = [];
@@ -378,10 +406,10 @@ export async function hablarConDelta(texto, canal = "app") {
     );
   }
 
-  const guardar = db.prepare("INSERT INTO conversacion (rol, texto, canal, acciones) VALUES (?, ?, ?, ?)");
-  guardar.run("user", texto, canal, null);
+  const guardar = db.prepare("INSERT INTO conversacion (rol, texto, canal, acciones, archivos) VALUES (?, ?, ?, ?, ?)");
+  guardar.run("user", texto, canal, null, archivos.length ? JSON.stringify(archivos) : null);
   respuesta = quitarDisculpas(respuesta);
-  guardar.run("assistant", respuesta, canal, resumirAcciones(acciones));
+  guardar.run("assistant", respuesta, canal, resumirAcciones(acciones), null);
   return respuesta;
 }
 

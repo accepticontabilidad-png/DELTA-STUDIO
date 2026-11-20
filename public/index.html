@@ -47,13 +47,17 @@
       <section class="panel" id="panel-agenda" data-tab="agenda">
         <div class="ag-cabeza">
           <h2>Agenda</h2>
-          <button id="ag-agregar" class="ag-agregar" type="button">+ Agregar</button>
+          <div class="ag-botones">
+            <button id="ag-ampliar" class="ag-ampliar" type="button" title="Ver el calendario en grande">⤢ Ampliar</button>
+            <button id="ag-agregar" class="ag-agregar" type="button">+ Agregar</button>
+          </div>
         </div>
         <div id="resumen-hoy" class="resumen"></div>
         <div class="ag-control">
           <div class="segmento" role="tablist" aria-label="Vista">
             <button type="button" data-vista="dia" class="activa">Día</button>
             <button type="button" data-vista="semana">Semana</button>
+            <button type="button" data-vista="mes">Mes</button>
           </div>
           <div class="navegar">
             <button type="button" id="ag-ant" aria-label="Anterior">‹</button>
@@ -74,7 +78,10 @@
           <span id="estado-orbe" class="estado-orbe">Toque para hablar</span>
         </button>
         <div id="conversacion" class="conversacion" aria-live="polite"></div>
+        <div id="adjuntos" class="adjuntos" hidden></div>
         <form id="form-chat" class="form-chat">
+          <input id="archivo" type="file" multiple hidden accept="image/*,.pdf,.docx,.xlsx,.csv,.txt,.md,application/pdf,text/csv,text/plain" />
+          <button id="btn-clip" type="button" class="icono clip" aria-label="Adjuntar archivo" title="Adjuntar foto o archivo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 19.9a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg></button>
           <input id="texto" type="text" placeholder="Escríbale a DELTA…" autocomplete="off" />
           <button id="btn-mic" type="button" class="icono mic" aria-label="Hablar" title="Hablar"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <button type="submit" class="enviar" aria-label="Enviar">➤</button>
@@ -127,6 +134,15 @@
         <button type="submit" class="primario">Guardar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="detalle" class="dialogo">
+    <span id="det-tipo" class="det-tipo"></span>
+    <h3 id="det-titulo" class="det-titulo"></h3>
+    <p id="det-cuando" class="det-cuando"></p>
+    <p id="det-lugar" class="det-linea" hidden></p>
+    <p id="det-sub" class="det-linea tenue" hidden></p>
+    <div id="det-acciones" class="botones"></div>
   </dialog>
 
   <dialog id="ajustes" class="dialogo">

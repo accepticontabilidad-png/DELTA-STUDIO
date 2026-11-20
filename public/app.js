@@ -120,11 +120,29 @@ const sumarDias = (dia, n) => {
 const diaSemana = (dia) => new Date(dia + "T12:00:00Z").getUTCDay(); // 0 = domingo
 const nombreDia = (dia, opciones) => new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", ...opciones }).format(new Date(dia + "T12:00:00Z"));
 
+const sumarMeses = (dia, n) => {
+  const [a, m] = dia.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1 + n, 1)).toISOString().slice(0, 10);
+};
+const minutosDelDia = (iso) => {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: zona, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(iso));
+  return Number(p.find((x) => x.type === "hour").value) * 60 + Number(p.find((x) => x.type === "minute").value);
+};
+const lunesDe = (dia) => sumarDias(dia, -((diaSemana(dia) + 6) % 7));
+const mayuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const HORA_PX = 48;
+const horaCorta = (iso) => fmtHora(iso).replace(/\s*([ap])\.?\s*m\.?/i, "$1m").replace(/^0/, "");
+let agendaItems = [];
+
+agendaEstado.vista = ["dia", "semana", "mes"].includes(guardado.get("delta_vista")) ? guardado.get("delta_vista") : "dia";
+document.querySelectorAll("[data-vista]").forEach((x) => x.classList.toggle("activa", x.dataset.vista === agendaEstado.vista));
+
 function rangoVisible() {
-  const hoy = agendaEstado.dia || claveDia(new Date());
-  if (agendaEstado.vista === "dia") return [hoy, hoy];
-  const lunes = sumarDias(hoy, -((diaSemana(hoy) + 6) % 7));
-  return [lunes, sumarDias(lunes, 6)];
+  const ref = agendaEstado.dia || claveDia(new Date());
+  if (agendaEstado.vista === "dia") return [ref, ref];
+  if (agendaEstado.vista === "semana") { const l = lunesDe(ref); return [l, sumarDias(l, 6)]; }
+  const l = lunesDe(ref.slice(0, 8) + "01");
+  return [l, sumarDias(l, 41)]; // 6 semanas
 }
 
 async function cargarAgenda() {
@@ -132,39 +150,163 @@ async function cargarAgenda() {
   const [desde, hasta] = rangoVisible();
   const datos = await api(`/agenda?desde=${desde}&hasta=${hasta}`);
   const hoy = claveDia(new Date());
+  const v = agendaEstado.vista;
 
-  const titulo = agendaEstado.vista === "dia"
+  const titulo = v === "dia"
     ? (desde === hoy ? "Hoy, " : "") + nombreDia(desde, { weekday: "long", day: "numeric", month: "long" })
-    : `${nombreDia(desde, { day: "numeric", month: "short" })} – ${nombreDia(hasta, { day: "numeric", month: "short", year: "numeric" })}`;
-  $("#ag-titulo").textContent = titulo.charAt(0).toUpperCase() + titulo.slice(1);
+    : v === "semana"
+      ? `${nombreDia(desde, { day: "numeric", month: "short" })} – ${nombreDia(hasta, { day: "numeric", month: "short", year: "numeric" })}`
+      : nombreDia(agendaEstado.dia, { month: "long", year: "numeric" });
+  $("#ag-titulo").textContent = mayuscula(titulo);
 
-  const items = [
-    ...datos.eventos.map((e) => ({ tipo: "evento", cuando: e.inicio, titulo: e.titulo, sub: [e.lugar, e.cliente].filter(Boolean).join(" · "), borrar: `data-borrar-evento="${e.id}"` })),
-    ...datos.tareas.map((t) => ({ tipo: "tarea", cuando: t.fecha_limite, titulo: t.titulo, sub: [t.cliente, t.prioridad === "alta" ? "prioridad alta" : ""].filter(Boolean).join(" · "), hecha: t.estado === "hecha" })),
-    ...datos.recordatorios.map((r) => ({ tipo: "recordatorio", cuando: r.cuando, titulo: r.mensaje, sub: r.repetir !== "no" ? `se repite: ${r.repetir}` : "", borrar: `data-borrar-recordatorio="${r.id}"` })),
-  ].sort((a, b) => a.cuando.localeCompare(b.cuando));
+  agendaItems = [
+    ...datos.eventos.map((e) => ({ tipo: "evento", cuando: e.inicio, fin: e.fin, titulo: e.titulo, lugar: e.lugar, sub: [e.cliente, e.notas].filter(Boolean).join(" · "), borrar: { attr: "data-borrar-evento", id: e.id } })),
+    ...datos.tareas.map((t) => ({ tipo: "tarea", cuando: t.fecha_limite, titulo: t.titulo, sub: [t.cliente, t.prioridad === "alta" ? "prioridad alta" : "", t.notas].filter(Boolean).join(" · "), hecha: t.estado === "hecha", id: t.id })),
+    ...datos.recordatorios.map((r) => ({ tipo: "recordatorio", cuando: r.cuando, titulo: r.mensaje, sub: r.repetir !== "no" ? `Se repite: ${r.repetir}` : "", borrar: { attr: "data-borrar-recordatorio", id: r.id } })),
+  ].sort((a, b) => a.cuando.localeCompare(b.cuando))
+    .map((i, n) => ({ ...i, n, dia: claveDia(new Date(i.cuando)), ini: minutosDelDia(i.cuando) }));
 
   const dias = [];
   for (let d = desde; d <= hasta; d = sumarDias(d, 1)) dias.push(d);
-  $("#ag-contenido").innerHTML = dias.map((d) => {
-    const delDia = items.filter((i) => claveDia(new Date(i.cuando)) === d);
-    const cabeza = agendaEstado.vista === "semana"
-      ? `<h4><span>${esc(nombreDia(d, { weekday: "long", day: "numeric" }))}</span>${d === hoy ? "<span>hoy</span>" : ""}</h4>` : "";
-    const lista = delDia.length
-      ? `<ul>${delDia.map((i) => `<li class="ag-item ${i.tipo}${i.hecha ? " hecha" : ""}"><span class="ag-hora">${fmtHora(i.cuando)}</span><span class="ag-texto">${esc(i.titulo)}${i.sub ? `<span class="sub">${esc(i.sub)}</span>` : ""}</span>${i.borrar ? `<button class="x" ${i.borrar} title="Borrar" aria-label="Borrar">✕</button>` : "<span></span>"}</li>`).join("")}</ul>`
-      : `<div class="ag-vacio">${agendaEstado.vista === "dia" ? "Nada agendado este día." : "Libre"}</div>`;
-    return `<div class="ag-dia${d === hoy ? " hoy" : ""}">${cabeza}${lista}</div>`;
-  }).join("");
+  const cont = $("#ag-contenido");
+  cont.className = `ag-contenido vista-${v}`;
+  if (v === "mes") cont.innerHTML = vistaMes(dias, hoy);
+  else { cont.innerHTML = vistaHoras(dias, hoy); colocarHoras(cont); }
 }
 
-document.querySelectorAll("[data-vista]").forEach((b) => b.addEventListener("click", () => {
-  agendaEstado.vista = b.dataset.vista;
-  document.querySelectorAll("[data-vista]").forEach((x) => x.classList.toggle("activa", x === b));
+function vistaMes(dias, hoy) {
+  const mes = agendaEstado.dia.slice(0, 7);
+  const cab = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"].map((d) => `<span>${d}</span>`).join("");
+  const celdas = dias.map((d) => {
+    const del = agendaItems.filter((i) => i.dia === d);
+    const chips = del.slice(0, 3).map((i) => `<span class="chip ${i.tipo}${i.hecha ? " hecha" : ""}"><b>${horaCorta(i.cuando)}</b> ${esc(i.titulo)}</span>`).join("");
+    const mas = del.length > 3 ? `<span class="mas">+${del.length - 3} más</span>` : "";
+    const clases = ["cal-celda", d.slice(0, 7) !== mes ? "fuera" : "", d === hoy ? "hoy" : "", del.length ? "con" : ""].filter(Boolean).join(" ");
+    return `<button type="button" class="${clases}" data-ir-dia="${d}" aria-label="${esc(nombreDia(d, { weekday: "long", day: "numeric", month: "long" }))}, ${del.length} cosas"><span class="num">${Number(d.slice(8))}</span><span class="chips">${chips}${mas}</span></button>`;
+  }).join("");
+  return `<div class="cal-mes"><div class="cal-sem">${cab}</div><div class="cal-celdas">${celdas}</div></div>`;
+}
+
+function vistaHoras(dias, hoy) {
+  const items = agendaItems.filter((i) => dias.includes(i.dia));
+  const dur = (i) => (i.tipo === "evento" ? (i.fin ? Math.max(15, (new Date(i.fin) - new Date(i.cuando)) / 6e4) : 60) : 30);
+  let ini = 8 * 60, fin = 20 * 60;
+  for (const i of items) { ini = Math.min(ini, Math.floor(i.ini / 60) * 60); fin = Math.max(fin, Math.min(24 * 60, Math.ceil((i.ini + dur(i)) / 60) * 60)); }
+  agendaEstado.horas = { ini, fin };
+  const regla = [];
+  for (let m = ini; m < fin; m += 60) regla.push(`<span>${String(m / 60).padStart(2, "0")}:00</span>`);
+  const cab = agendaEstado.vista === "semana"
+    ? `<div class="cal-cab"><span></span>${dias.map((d) => `<button type="button" class="cal-cab-dia${d === hoy ? " hoy" : ""}" data-ir-dia="${d}"><small>${nombreDia(d, { weekday: "short" }).replace(".", "")}</small><b>${Number(d.slice(8))}</b></button>`).join("")}</div>`
+    : "";
+  const ahora = minutosDelDia(new Date().toISOString());
+  const cols = dias.map((d) => {
+    const del = items.filter((i) => i.dia === d);
+    // Carriles: si dos cosas se enciman, se ponen lado a lado.
+    let grupo = [], finGrupo = -1, carriles = [];
+    const cerrar = () => { const n = carriles.length; grupo.forEach((g) => (g.de = n)); grupo = []; carriles = []; };
+    for (const i of del) {
+      const f = i.ini + dur(i);
+      if (i.ini >= finGrupo) cerrar();
+      let c = carriles.findIndex((x) => x <= i.ini);
+      if (c < 0) { c = carriles.length; carriles.push(f); } else carriles[c] = f;
+      i.carril = c; grupo.push(i); finGrupo = Math.max(finGrupo, f);
+    }
+    cerrar();
+    const evs = del.map((i) => `<button type="button" class="cal-ev ${i.tipo}${i.hecha ? " hecha" : ""}" data-item="${i.n}" data-top="${i.ini - ini}" data-alto="${dur(i)}" data-carril="${i.carril}" data-de="${i.de}"><b>${horaCorta(i.cuando)}</b> <span>${esc(i.titulo)}</span></button>`).join("");
+    const linea = d === hoy && ahora >= ini && ahora <= fin ? `<div class="cal-ahora" data-top="${ahora - ini}"></div>` : "";
+    return `<div class="cal-col${d === hoy ? " hoy" : ""}" data-dia="${d}">${evs}${linea}</div>`;
+  }).join("");
+  const vacio = agendaEstado.vista === "dia" && !items.length ? `<p class="ag-vacio">Nada agendado este día. Toque una hora para agregar algo.</p>` : "";
+  return `${vacio}<div class="cal-horas dias-${dias.length}">${cab}<div class="cal-cuerpo"><div class="cal-regla">${regla.join("")}</div>${cols}</div></div>`;
+}
+
+// Las posiciones se ponen con JS (la política de seguridad no permite estilos en el HTML).
+function colocarHoras(cont) {
+  const { ini, fin } = agendaEstado.horas;
+  const px = (min) => (min / 60) * HORA_PX;
+  cont.querySelectorAll(".cal-col, .cal-regla").forEach((c) => (c.style.height = px(fin - ini) + "px"));
+  cont.querySelectorAll("[data-top]").forEach((el) => {
+    el.style.top = px(Number(el.dataset.top)) + "px";
+    if (el.dataset.alto) {
+      const alto = Math.max(22, px(Number(el.dataset.alto)) - 2);
+      el.style.height = alto + "px";
+      el.classList.toggle("corto", alto < 40);
+      const de = Number(el.dataset.de) || 1, c = Number(el.dataset.carril) || 0;
+      el.style.left = `calc(${(100 / de) * c}% + 2px)`;
+      el.style.width = `calc(${100 / de}% - 4px)`;
+    }
+  });
+  const primero = cont.querySelector(".cal-ev, .cal-ahora");
+  const caja = cont.querySelector(".cal-cuerpo");
+  if (caja) caja.scrollTop = primero ? Math.max(0, primero.offsetTop - 40) : px(Math.max(0, 9 * 60 - ini));
+}
+
+function verDetalle(i) {
+  const tipos = { evento: "Cita", tarea: "Tarea", recordatorio: "Recordatorio" };
+  $("#det-tipo").textContent = tipos[i.tipo];
+  $("#det-tipo").className = `det-tipo ${i.tipo}`;
+  $("#det-titulo").textContent = i.titulo;
+  $("#det-cuando").textContent = mayuscula(`${nombreDia(i.dia, { weekday: "long", day: "numeric", month: "long" })}, ${fmtHora(i.cuando)}${i.fin ? " a " + fmtHora(i.fin) : ""}`);
+  $("#det-lugar").textContent = i.lugar ? `📍 ${i.lugar}` : "";
+  $("#det-lugar").hidden = !i.lugar;
+  $("#det-sub").textContent = i.sub || "";
+  $("#det-sub").hidden = !i.sub;
+  const acc = [];
+  if (i.tipo === "tarea" && !i.hecha) acc.push(`<button type="button" data-hecha="${i.id}" class="primario">Marcar como hecha</button>`);
+  if (i.borrar) acc.push(`<button type="button" ${i.borrar.attr}="${i.borrar.id}">${i.tipo === "evento" ? "Borrar cita" : "Quitar recordatorio"}</button>`);
+  $("#det-acciones").innerHTML = acc.join("") + `<button type="button" id="det-cerrar">Cerrar</button>`;
+  $("#detalle").showModal();
+}
+$("#detalle").addEventListener("click", (e) => {
+  if (e.target === $("#detalle") || e.target.id === "det-cerrar") $("#detalle").close();
+  else if (e.target.closest("[data-hecha],[data-borrar-evento],[data-borrar-recordatorio]")) setTimeout(() => $("#detalle").close(), 0);
+});
+
+function abrirAgregar(dia, hora) {
+  $("#form-agregar").reset();
+  $("#ag-f-dia").value = dia || agendaEstado.dia || claveDia(new Date());
+  if (hora) $("#ag-f-hora").value = hora;
+  $("#ag-f-msg").hidden = true;
+  elegirTipo("cita");
+  $("#agregar").showModal();
+}
+
+$("#ag-contenido").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-item]");
+  if (item) return verDetalle(agendaItems[Number(item.dataset.item)]);
+  const ir = e.target.closest("[data-ir-dia]");
+  if (ir) { agendaEstado.dia = ir.dataset.irDia; cambiarVista("dia"); return; }
+  const col = e.target.closest(".cal-col");
+  if (col && e.target === col) {
+    const min = agendaEstado.horas.ini + Math.floor(((e.offsetY / HORA_PX) * 60) / 30) * 30;
+    abrirAgregar(col.dataset.dia, `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`);
+  }
+});
+
+function cambiarVista(v) {
+  agendaEstado.vista = v;
+  guardado.set("delta_vista", v);
+  document.querySelectorAll("[data-vista]").forEach((x) => x.classList.toggle("activa", x.dataset.vista === v));
   cargarAgenda();
-}));
-$("#ag-ant").addEventListener("click", () => { agendaEstado.dia = sumarDias(agendaEstado.dia, agendaEstado.vista === "dia" ? -1 : -7); cargarAgenda(); });
-$("#ag-sig").addEventListener("click", () => { agendaEstado.dia = sumarDias(agendaEstado.dia, agendaEstado.vista === "dia" ? 1 : 7); cargarAgenda(); });
+}
+document.querySelectorAll("[data-vista]").forEach((b) => b.addEventListener("click", () => cambiarVista(b.dataset.vista)));
+const mover = (n) => {
+  const v = agendaEstado.vista;
+  agendaEstado.dia = v === "mes" ? sumarMeses(agendaEstado.dia, n) : sumarDias(agendaEstado.dia, v === "dia" ? n : 7 * n);
+  cargarAgenda();
+};
+$("#ag-ant").addEventListener("click", () => mover(-1));
+$("#ag-sig").addEventListener("click", () => mover(1));
 $("#ag-hoy").addEventListener("click", () => { agendaEstado.dia = claveDia(new Date()); cargarAgenda(); });
+
+// En la computadora, el calendario se puede ampliar a toda la pantalla.
+function ampliar(si) {
+  document.body.classList.toggle("cal-amplio", si);
+  $("#ag-ampliar").textContent = si ? "⤡ Reducir" : "⤢ Ampliar";
+  guardado.set("delta_cal_amplio", si ? "1" : "");
+}
+$("#ag-ampliar").addEventListener("click", () => { ampliar(!document.body.classList.contains("cal-amplio")); cargarAgenda(); });
+ampliar(guardado.get("delta_cal_amplio") === "1");
 
 // Agregar cita, tarea o recordatorio a mano
 let tipoNuevo = "cita";
@@ -174,13 +316,7 @@ function elegirTipo(tipo) {
   $("#agregar").className = `dialogo tipo-${tipo}`;
 }
 document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => elegirTipo(b.dataset.tipo)));
-$("#ag-agregar").addEventListener("click", () => {
-  $("#form-agregar").reset();
-  $("#ag-f-dia").value = agendaEstado.dia || claveDia(new Date());
-  $("#ag-f-msg").hidden = true;
-  elegirTipo("cita");
-  $("#agregar").showModal();
-});
+$("#ag-agregar").addEventListener("click", () => abrirAgregar());
 $("#ag-f-cancelar").addEventListener("click", () => $("#agregar").close());
 $("#form-agregar").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -200,10 +336,16 @@ $("#form-agregar").addEventListener("submit", async (e) => {
 });
 
 // ---------------- Conversación ----------------
-function burbuja(rol, texto) {
+function burbuja(rol, texto, archivos = []) {
   const div = document.createElement("div");
   div.className = `burbuja ${rol}`;
   div.textContent = texto;
+  if (archivos.length) {
+    const lista = document.createElement("div");
+    lista.className = "burbuja-archivos";
+    for (const n of archivos) { const s = document.createElement("span"); s.textContent = "📎 " + n; lista.appendChild(s); }
+    div.prepend(lista);
+  }
   $("#conversacion").appendChild(div);
   $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
   return div;
@@ -213,18 +355,23 @@ async function cargarHistorial() {
   const h = await api("/historial");
   $("#conversacion").innerHTML = "";
   if (!h.length) burbuja("assistant", "A sus órdenes, señor. Puede pedirme que agende una cita, anote una tarea o le recuerde algo.");
-  h.forEach((m) => burbuja(m.rol, m.texto));
+  h.forEach((m) => burbuja(m.rol, m.texto, m.archivos || []));
 }
 
 let ocupado = false;
 async function enviar(texto, canal = "app") {
-  if (!texto || ocupado) return;
+  const listos = adjuntos.filter((a) => a.id);
+  if ((!texto && !listos.length) || ocupado) return;
+  if (adjuntos.some((a) => a.subiendo)) { burbuja("aviso", "Espere un momento, todavía se está subiendo el archivo."); return; }
   ocupado = true;
-  burbuja("user", texto);
+  const archivos = listos.map((a) => a.id);
+  burbuja("user", texto, listos.map((a) => a.nombre));
+  adjuntos = adjuntos.filter((a) => !a.id && !a.error);
+  pintarAdjuntos();
   const espera = burbuja("assistant pensando", "Procesando…");
   orbe.estado("pensando");
   try {
-    const { respuesta } = await api("/chat", { method: "POST", body: { texto, canal } });
+    const { respuesta } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
     espera.className = "burbuja assistant";
     espera.textContent = respuesta;
     if (canal === "voz" || guardado.get("delta_voz") === "1") hablar(respuesta);
@@ -238,6 +385,70 @@ async function enviar(texto, canal = "app") {
     ocupado = false;
   }
 }
+
+// ---------------- Archivos adjuntos ----------------
+const MAX_MB = 10;
+let adjuntos = []; // { clave, nombre, tamano, subiendo, id, error }
+const tamanoLegible = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
+
+function pintarAdjuntos() {
+  const caja = $("#adjuntos");
+  caja.hidden = !adjuntos.length;
+  caja.innerHTML = adjuntos.map((a) => `<span class="adjunto${a.subiendo ? " subiendo" : ""}${a.error ? " error" : ""}" title="${esc(a.error || a.nombre)}">📎 <span class="nombre">${esc(a.nombre)}</span><small>${a.error ? esc(a.error) : a.subiendo ? "subiendo…" : tamanoLegible(a.tamano)}</small><button type="button" data-quitar-adjunto="${a.clave}" aria-label="Quitar">✕</button></span>`).join("");
+}
+$("#adjuntos").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-quitar-adjunto]");
+  if (!b) return;
+  adjuntos = adjuntos.filter((a) => String(a.clave) !== b.dataset.quitarAdjunto);
+  pintarAdjuntos();
+});
+
+// Las fotos se achican antes de subirlas (más rápido y dentro del límite).
+async function achicarFoto(archivo) {
+  if (!/^image\/(jpeg|png|webp)$/.test(archivo.type) || archivo.size < 1.5 * 1048576) return archivo;
+  try {
+    const img = await createImageBitmap(archivo);
+    const escala = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = Math.round(img.width * escala);
+    lienzo.height = Math.round(img.height * escala);
+    lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
+    const blob = await new Promise((r) => lienzo.toBlob(r, "image/jpeg", 0.85));
+    return blob ? new File([blob], archivo.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : archivo;
+  } catch { return archivo; }
+}
+
+async function subir(archivo) {
+  const a = { clave: Math.random().toString(36).slice(2), nombre: archivo.name, tamano: archivo.size, subiendo: true };
+  adjuntos.push(a);
+  pintarAdjuntos();
+  try {
+    if (adjuntos.filter((x) => !x.error).length > 5) throw new Error("máximo 5 por mensaje");
+    const listo = await achicarFoto(archivo);
+    if (listo.size > MAX_MB * 1048576) throw new Error(`pesa más de ${MAX_MB} MB`);
+    const r = await fetch("/api/archivos", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/octet-stream", "X-Delta": "1", "X-Nombre": encodeURIComponent(listo.name) },
+      body: listo,
+    });
+    if (r.status === 401) { mostrarEntrada(); throw new Error("sesión cerrada"); }
+    const datos = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(datos.error || "no se pudo subir");
+    Object.assign(a, { id: datos.id, nombre: datos.nombre, tamano: datos.tamano });
+  } catch (err) {
+    a.error = err.message;
+  } finally {
+    a.subiendo = false;
+    pintarAdjuntos();
+  }
+}
+$("#btn-clip").addEventListener("click", () => $("#archivo").click());
+$("#archivo").addEventListener("change", (e) => {
+  for (const f of e.target.files) subir(f);
+  e.target.value = "";
+  $("#texto").focus();
+});
 
 $("#form-chat").addEventListener("submit", (e) => {
   e.preventDefault();

@@ -6,7 +6,8 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 
 - **Conversación con voz:** tocas el orbe, hablas, y DELTA responde en voz alta. También tiene modo manos libres: dices "Delta, …" y te escucha.
 - **Tareas:** "Anota que tengo que mandarle el reporte a Acme el viernes, es urgente."
-- **Calendario propio:** "Agenda junta con Café Luna mañana a las 10 por Zoom." Te avisa 15 minutos antes.
+- **Calendario propio:** "Agenda junta con Café Luna mañana a las 10 por Zoom." Te avisa 15 minutos antes. En la app se ve como calendario de Día, Semana o Mes.
+- **Archivos:** con el clip 📎 adjuntas fotos (o la cámara del celular), PDF, Word (.docx), Excel (.xlsx), CSV o texto, y DELTA los lee y analiza. Hasta 10 MB cada uno y 5 por mensaje.
 - **Recordatorios:** "Recuérdame pagar la renta cada mes el día 1 a las 9." Únicos, diarios, semanales o mensuales.
 - **Resumen de la mañana:** cada día a la hora que elijas (8:00 por defecto) te manda tus citas y pendientes.
 - **Memoria:** recuerda lo que le cuentes (nombres de clientes, preferencias) para futuras conversaciones.
@@ -92,6 +93,7 @@ Cómo se protege DELTA:
 - **Clave obligatoria.** Sin `CLAVE_ACCESO` (mínimo 12 caracteres) DELTA no arranca, así que nunca queda abierta por error.
 - **Sesión protegida.** Al entrar, el navegador recibe una sesión que el código de la página no puede leer (cookie `HttpOnly`, `SameSite=Strict`, `Secure` en HTTPS). Dura 30 días. Desde ⚙ puedes cerrar la sesión en este equipo o en **todos** los equipos (útil si pierdes el celular). Cambiar `CLAVE_ACCESO` también cierra todas las sesiones.
 - **Bloqueo de intentos.** 5 claves incorrectas desde una misma conexión la bloquean 15 minutos; 20 en una hora desde cualquier lado bloquean la entrada una hora. Te llega una alerta por WhatsApp y al celular cuando pasa. Las sesiones ya abiertas siguen funcionando.
+- **Archivos privados.** Lo que adjuntas se guarda en el disco de DELTA con un nombre al azar, solo se puede subir con sesión abierta y nunca queda publicado en internet. Se reconoce por su contenido (no por el nombre) y se rechaza lo que no sea foto, PDF, Office o texto.
 - **WhatsApp verificado.** Cada mensaje se comprueba con la firma de Meta (`WHATSAPP_APP_SECRET`) y solo se atiende tu número. Nadie puede fingir ser tú.
 - **Protección contra páginas trampa.** Toda acción que cambia algo exige una cabecera especial que otro sitio web no puede enviar, y la app no se puede incrustar en otras páginas.
 - **Cabeceras de seguridad** (CSP, nosniff, no-referrer, HSTS en HTTPS) que impiden cargar código de terceros.

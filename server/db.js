@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
+export const DATA_DIR = process.env.DATA_DIR || "./data";
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, "delta.db"));
@@ -79,6 +79,12 @@ CREATE TABLE IF NOT EXISTS suscripciones_push (
 // Columna añadida después: qué herramientas usó DELTA en cada respuesta.
 try {
   db.exec("ALTER TABLE conversacion ADD COLUMN acciones TEXT");
+} catch {
+  /* ya existe */
+}
+// Y qué archivos adjuntó el usuario en cada mensaje (lista de ids en JSON).
+try {
+  db.exec("ALTER TABLE conversacion ADD COLUMN archivos TEXT");
 } catch {
   /* ya existe */
 }
