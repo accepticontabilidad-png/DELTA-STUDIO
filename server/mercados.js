@@ -53,9 +53,19 @@ export function interpretarGrafica(json, nombre) {
   const r = json?.chart?.result?.[0];
   if (!r) throw new Error(json?.chart?.error?.description || "Sin datos");
   const m = r.meta || {};
-  const cierres = (r.indicators?.quote?.[0]?.close || []).filter((x) => typeof x === "number");
+  // Cierres por día de bolsa (con su fecha), sin huecos.
+  const ts = r.timestamp || [];
+  const crudos = r.indicators?.quote?.[0]?.close || [];
+  const off = Number(m.gmtoffset) || 0;
+  const diaDe = (t) => Math.floor((t + off) / 86400);
+  const filas = ts.map((t, i) => ({ dia: diaDe(t), c: crudos[i] })).filter((f) => typeof f.c === "number");
+  const cierres = filas.map((f) => f.c);
   const precio = m.regularMarketPrice ?? cierres.at(-1);
-  const anterior = cierres.length >= 2 ? cierres.at(-2) : m.chartPreviousClose ?? m.previousClose;
+  // Cierre anterior = último cierre de un día ANTERIOR al de la cotización actual.
+  // (Si se toma "el penúltimo de la lista" y hoy aún no tiene barra, se compara contra hace 2 días.)
+  const hoy = m.regularMarketTime ? diaDe(m.regularMarketTime) : filas.at(-1)?.dia;
+  const previos = filas.filter((f) => f.dia < hoy);
+  const anterior = previos.length ? previos.at(-1).c : m.chartPreviousClose ?? m.previousClose;
   const inicio = cierres[0];
   const red = (x) => (typeof x === "number" ? Math.round(x * 100) / 100 : null);
   return {
