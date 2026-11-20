@@ -15,6 +15,7 @@ test("mercados: interpreta la respuesta de Yahoo", () => {
       chart: {
         result: [{
           meta: { symbol: "AAPL", shortName: "Apple Inc.", currency: "USD", regularMarketPrice: 110, fiftyTwoWeekHigh: 120, fiftyTwoWeekLow: 80 },
+          timestamp: [1, 86401, 172801, 259201],
           indicators: { quote: [{ close: [100, null, 105, 110] }] },
         }],
       },
@@ -27,6 +28,25 @@ test("mercados: interpreta la respuesta de Yahoo", () => {
   assert.equal(d.cambio_periodo_pct, 10);
   assert.equal(d.max_52s, 120);
   assert.throws(() => mercados.interpretarGrafica({ chart: { result: null, error: { description: "No data found" } } }), /No data/);
+});
+
+test("mercados: el cambio del día se compara con el cierre de AYER, aunque hoy no tenga barra todavía", () => {
+  const dia = 86400;
+  const base = { symbol: "NVDA", currency: "USD", gmtoffset: 0 };
+  // Lunes 100, martes 120, miércoles 140 (sin barra de hoy jueves); precio actual del jueves 133.
+  const sinBarraHoy = {
+    chart: { result: [{
+      meta: { ...base, regularMarketPrice: 133, regularMarketTime: 3 * dia + 50000 },
+      timestamp: [0 * dia + 50000, 1 * dia + 50000, 2 * dia + 50000],
+      indicators: { quote: [{ close: [100, 120, 140] }] },
+    }] },
+  };
+  assert.equal(mercados.interpretarGrafica(sinBarraHoy).cambio_dia_pct, -5); // contra 140, no contra 120
+  // Con barra de hoy (cierre parcial nulo o con valor) sigue comparando contra ayer.
+  const conBarraHoy = structuredClone(sinBarraHoy);
+  conBarraHoy.chart.result[0].timestamp.push(3 * dia + 50000);
+  conBarraHoy.chart.result[0].indicators.quote[0].close.push(null);
+  assert.equal(mercados.interpretarGrafica(conBarraHoy).cambio_dia_pct, -5);
 });
 
 test("mercados: lista de seguimiento editable", () => {
