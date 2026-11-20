@@ -826,6 +826,50 @@ function hablarNavegador(texto, { alEmpezar, alTerminar, voz = vozEspanol, rate 
 // Si está configurada, DELTA habla con esa voz; si falla, usa la del navegador sin que se note.
 let vozNatural = { disponible: false, activa: false, voz: null };
 const reproductor = new Audio();
+const ecoActivo = () => guardado.get("delta_voz_eco") !== "0";
+
+// Eco muy suave: la voz pasa por una "sala" pequeña hecha en el navegador (10 % de eco, 90 % voz limpia).
+let sala = null;
+function salaDeEco() {
+  if (sala) return sala;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  try {
+    const ctx = new Ctx();
+    const fuente = ctx.createMediaElementSource(reproductor);
+    const seco = ctx.createGain();
+    const humedo = ctx.createGain();
+    const eco = ctx.createConvolver();
+    const filtro = ctx.createBiquadFilter(); // el eco sin agudos suena más cálido y no ensucia
+    filtro.type = "lowpass";
+    filtro.frequency.value = 4500;
+    // Respuesta de una sala pequeña: ruido que se apaga en ~0.9 s, con un pequeño retraso inicial.
+    const dur = 0.9, retraso = 0.025, n = Math.floor(ctx.sampleRate * dur);
+    const ir = ctx.createBuffer(2, n, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      for (let i = 0; i < n; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = t < retraso ? 0 : (Math.random() * 2 - 1) * Math.pow(1 - (t - retraso) / (dur - retraso), 3.2);
+      }
+    }
+    eco.buffer = ir;
+    fuente.connect(seco).connect(ctx.destination);
+    fuente.connect(filtro).connect(eco).connect(humedo).connect(ctx.destination);
+    sala = { ctx, seco, humedo };
+    ajustarEco();
+    return sala;
+  } catch (e) {
+    console.warn("[eco]", e.message);
+    return null;
+  }
+}
+function ajustarEco() {
+  if (!sala) return;
+  const on = ecoActivo();
+  sala.seco.gain.value = on ? 0.92 : 1;
+  sala.humedo.gain.value = on ? 0.1 : 0;
+}
 let urlAudio = null;
 let turnoVoz = 0;
 const SILENCIO = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAAAAA//NwwAAAAAAAAAAAAEluZm8AAAAPAAAABgAAAykAWlpaWlpaWlpaWlpaWlpaWnt7e3t7e3t7e3t7e3t7e3t7nJycnJycnJycnJycnJycnL29vb29vb29vb29vb29vb293t7e3t7e3t7e3t7e3t7e3t7/////////////////////AAAAAExhdmM2MC4zMQAAAAAAAAAAAAAAACQCowAAAAAAAAMpso+sIAAAAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQsRbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NCxKMAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NAxKQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80LEowAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=";
@@ -834,6 +878,7 @@ function despertarReproductor() {
   removeEventListener("pointerdown", despertarReproductor, true);
   removeEventListener("keydown", despertarReproductor, true);
   if (!reproductor.src || reproductor.src === SILENCIO) { reproductor.src = SILENCIO; reproductor.play().catch(() => {}); }
+  if (vozNatural.activa && ecoActivo()) salaDeEco()?.ctx.resume().catch(() => {});
 }
 addEventListener("pointerdown", despertarReproductor, true);
 addEventListener("keydown", despertarReproductor, true);
@@ -865,6 +910,10 @@ async function decir(texto, opciones = {}) {
       if (urlAudio) URL.revokeObjectURL(urlAudio);
       urlAudio = URL.createObjectURL(audio);
       reproductor.src = urlAudio;
+      if (ecoActivo() || sala) {
+        const s = salaDeEco();
+        if (s && s.ctx.state !== "running") await s.ctx.resume().catch(() => {});
+      }
       reproductor.onplaying = () => opciones.alEmpezar?.();
       reproductor.onended = () => opciones.alTerminar?.();
       await reproductor.play();
@@ -1166,6 +1215,8 @@ function pintarVoz() {
       ? "Todavía no hay una voz natural. Créela aquí abajo con grabaciones de la persona."
       : `Voz actual: ${v.voz.nombre}.`;
   $("#voz-fila-natural").hidden = !v.voz || !v.disponible;
+  $("#voz-fila-eco").hidden = !v.voz || !v.disponible;
+  $("#aj-voz-eco").checked = ecoActivo();
   $("#voz-botones").hidden = !v.voz || !v.disponible;
   $("#btn-voz-borrar").hidden = v.voz?.desde !== "app";
   $("#aj-voz-natural").checked = v.encendida;
@@ -1178,6 +1229,12 @@ function pintarVoz() {
 $("#aj-voz-natural").addEventListener("change", async (e) => {
   try { vozNatural = await api("/voz/encender", { method: "POST", body: { activa: e.target.checked } }); pintarVoz(); }
   catch (err) { $("#voz-msg").textContent = err.message; }
+});
+
+$("#aj-voz-eco").addEventListener("change", (e) => {
+  guardado.set("delta_voz_eco", e.target.checked ? "1" : "0");
+  ajustarEco();
+  $("#voz-msg").textContent = e.target.checked ? "Eco suave activado. Toque Probar voz para oírlo." : "Eco quitado.";
 });
 
 $("#btn-voz-probar").addEventListener("click", async () => {
