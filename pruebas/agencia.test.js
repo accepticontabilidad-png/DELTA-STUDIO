@@ -45,9 +45,10 @@ test("aprobaciones: pendiente → aprobada una sola vez", () => {
   assert.throws(() => agencia.pedirAprobacion({ departamento: "x", tipo: "otro", titulo: "", contenido: "" }), /título/);
 });
 
-test("departamentos: son 10, incluye edición de video", () => {
-  assert.equal(deptos.DEPARTAMENTOS.length, 10);
+test("departamentos: son 11, incluye edición de video y diseño", () => {
+  assert.equal(deptos.DEPARTAMENTOS.length, 11);
   assert.ok(deptos.deptoPorId("video"));
+  assert.ok(deptos.deptoPorId("diseno"));
   assert.throws(() => deptos.encargar({ departamento: "magia", encargo: "x" }), /No existe el departamento/);
   assert.throws(() => deptos.encargar({ departamento: "video", encargo: "x", cliente: "Nadie" }), /No encuentro/);
 });

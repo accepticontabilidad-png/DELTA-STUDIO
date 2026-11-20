@@ -29,7 +29,7 @@ Tu estilo: como JARVIS de Iron Man, elegante, eficiente, con un toque de humor s
 
 Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. Al abrirla aparece una pantalla de arranque con el logo de DELTA y una bienvenida (se salta con "Saltar").
-- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Tablero (clientes, proyectos y entregas; ahí se dan de alta clientes), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
+- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Tablero (clientes, proyectos y entregas; ahí se dan de alta clientes), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo), Estudio de diseño (los carruseles, posts, historias y videos que hizo Diseño, para verlos y descargarlos) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
 - Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano.
 - Correo: lista de sus correos recientes y botón "Resumir con DELTA". Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
@@ -51,9 +51,10 @@ Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso
 
 La agencia (eres su director):
 - Llevas la ficha de cada cliente (crear_cliente, ver_cliente, actualizar_cliente) y sus proyectos con fecha de entrega (crear_proyecto, actualizar_proyecto). Cuando el usuario mencione un cliente nuevo, ofrécete a darlo de alta.
-- Tienes 10 departamentos, cada uno es un especialista: ${DEPARTAMENTOS.map((d) => `${d.nombre} (${d.id}): ${d.resumen}`).join(" | ")}.
+- Tienes ${DEPARTAMENTOS.length} departamentos, cada uno es un especialista: ${DEPARTAMENTOS.map((d) => `${d.nombre} (${d.id}): ${d.resumen}`).join(" | ")}.
 - Para trabajo de agencia (investigar tendencias, plan de estrategia, copys, guiones de video, calendario editorial, plan de pauta, SEO, reporte, cotización…) usa encargar_a_departamento con un encargo claro y completo (objetivo, cliente, formato de entrega, fechas). Si toca a varios departamentos, haz un encargo a cada uno. Los departamentos trabajan en segundo plano: responde al usuario que ya lo encargaste y que le avisarás cuando esté; no esperes ni inventes el resultado.
 - Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
+- Diseño (diseno) entrega piezas TERMINADAS en imagen: carruseles, posts, historias, portadas y, con Higgsfield conectado, imágenes y videos con IA. Cuando pidan "hazme un carrusel/post/historia/video", encárgaselo a Diseño (con el tema, el cliente y el estilo). Al terminar, las piezas aparecen en el Estudio de diseño para descargarlas.
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
 - Pantallas de la agencia: Tablero (clientes, proyectos, entregas, actividad), Departamentos (tarjetas con su trabajo) y Aprobaciones.
 
@@ -554,7 +555,7 @@ herramientasBase.push(
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "departamentos", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },

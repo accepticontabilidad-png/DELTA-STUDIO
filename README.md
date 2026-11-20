@@ -32,6 +32,19 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 - **Rutina:** cada lunes a las 9:00, Tendencias prepara el reporte semanal para sus clientes activos.
 - Los departamentos usan un modelo más económico que el director (`DELTA_MODELO_DEPTOS`, por defecto `claude-sonnet-5-5`). Con `DELTA_BUSQUEDA_WEB=no` se apaga la búsqueda en internet.
 
+## Diseño: carruseles, posts, historias y videos
+
+- **Departamento de Diseño:** "Delta, que Diseño me haga un carrusel de 7 slides sobre los mitos del blanqueamiento para Clínica Sonrisa". Escribe el copy, diseña cada slide, revisa su propio trabajo (ve una hoja con todas las slides y corrige lo que se vea mal) y entrega **PNG listos para subir**: carrusel y post 1080×1350, post cuadrado 1080×1080, historias y portadas de reel 1080×1920. Además deja el texto para publicar con hashtags.
+- **Estudio de diseño** (menú Agencia): todas las piezas, con visor para pasar slides, **descargar una** o **descargar todo en .zip**.
+- **Imágenes y videos con IA (Higgsfield):** con la llave puesta, Diseño crea fotos o ilustraciones y las usa dentro de sus diseños, y Diseño o Video crean clips de 3 a 15 segundos (desde texto, desde una imagen o animando una slide). Hay un tope diario para cuidar el gasto (`HIGGSFIELD_IMAGENES_DIA`, `HIGGSFIELD_VIDEOS_DIA`).
+- **Habilidades:** en ⚙ Ajustes → Habilidades de DELTA se suben las mismas *skills* que usas con Claude (un .zip con una o varias carpetas que tengan `SKILL.md`, un `.skill` o un `SKILL.md` suelto). Se guardan en privado en la base de datos de DELTA (no en este repositorio, que es público) y todos los departamentos las leen y siguen cuando aplican.
+
+### Conectar Higgsfield
+
+1. Entra a [console.higgsfield.ai](https://console.higgsfield.ai), crea una API key y copia los dos datos (Key ID y Secret; el Secret solo se muestra una vez). Recarga saldo: se cobra por imagen o video generado (lo que falla no se cobra).
+2. En Railway → servicio DELTA-STUDIO → Variables: `HIGGSFIELD_API_KEY` = el Key ID y `HIGGSFIELD_API_SECRET` = el Secret.
+3. Railway reinicia solo. En el Estudio de diseño debe decir "Higgsfield conectado".
+
 ## Próximas fases
 
 - Conectar las cuentas de tus clientes (Meta Ads, Instagram, TikTok, Google) y ver sus estadísticas.

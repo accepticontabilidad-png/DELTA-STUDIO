@@ -1,10 +1,14 @@
 // Los departamentos de la agencia: cada uno es un agente Claude especialista.
 // DELTA (el director) les encarga trabajo; corren en segundo plano para que el chat nunca espere,
 // y lo que haya que enviar, publicar, gastar o facturar lo dejan en la bandeja de Aprobaciones.
+import fs from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import * as agencia from "./agencia.js";
 import * as noticias from "./noticias.js";
+import * as habilidades from "./habilidades.js";
+import * as diseno from "./diseno.js";
+import * as higgsfield from "./higgsfield.js";
 import { avisar, avisarPantalla } from "./avisos.js";
 import { db, getAjuste, setAjuste } from "./db.js";
 import { ahoraLocalISO, utcALocal } from "./tiempo.js";
@@ -41,10 +45,23 @@ export const DEPARTAMENTOS = [
     funcion: "Desarrollas conceptos creativos, ideas de piezas gráficas (con descripción visual precisa y textos), identidad de marca y copywriting persuasivo. Das varias opciones y recomiendas una. Cuando algo sea para entregar al cliente, pides aprobación.",
   },
   {
+    id: "diseno",
+    nombre: "Diseño",
+    resumen: "Tu diseñadora: carruseles, posts, historias y videos terminados, listos para descargar y subir.",
+    funcion: `Eres la diseñadora gráfica y directora de arte de la agencia. No solo propones: ENTREGAS las piezas terminadas como imágenes listas para subir (carruseles, posts, historias, portadas de reel) y, si Higgsfield está conectado, imágenes y videos hechos con IA.
+Cómo trabajas:
+1. Entiende el objetivo, el público y la marca del cliente (ver_cliente). Si una habilidad aplica (carruseles, ganchos, guiones, prompts de Higgsfield…), léela y síguela.
+2. Escribe el copy: gancho fuerte en la primera slide, una idea por slide, textos cortos y legibles en el celular, cierre con llamada a la acción.
+3. Diseña cada slide en HTML y CSS y llama a crear_pieza. Te devuelve una hoja de contacto con todas las slides en chico: revísala con ojo de directora de arte (legibilidad, jerarquía, contraste, que nada se corte ni se encime, consistencia entre slides) y corrige con reemplaza_id hasta que quede profesional. Máximo 3 rondas.
+4. Si conviene una foto o ilustración, créala con generar_imagen_ia y úsala dentro del diseño con src="medio:ID". Para un video, usa generar_video_ia (puede animar una slide o una imagen).
+5. Termina con: qué entregaste (con el número de cada pieza), el texto para publicar (caption con hashtags) y recomendaciones de publicación.
+Reglas de diseño en HTML: cada slide es un fragmento HTML dentro de un <section class="slide"> del tamaño exacto (carrusel y post 1080x1350, cuadrado 1080x1080, historia y portada 1080x1920); usa posiciones y tamaños en px; textos de mínimo 34px (títulos de 80 a 130px); deja márgenes de al menos 80px (en historias, 250px arriba y abajo libres para la interfaz de Instagram); puedes usar Google Fonts con @import en el css; nada de JavaScript ni imágenes de internet (solo medio:ID, SVG en línea, degradados y CSS). Numera las slides del carrusel de forma discreta si ayuda. Cuida la marca del cliente: colores, tono y la regulación de salud.`,
+  },
+  {
     id: "video",
     nombre: "Edición de video",
     resumen: "Guiones, ganchos, storyboards y videos con IA.",
-    funcion: "Escribes guiones de video (reels, TikTok, anuncios, YouTube) con gancho en los primeros 3 segundos, storyboard por escenas, texto en pantalla, subtítulos, música sugerida e indicaciones de edición. Propones prompts para generar video con IA (Higgsfield). Aún no generas el video tú mismo: dejas todo listo para producirlo.",
+    funcion: "Escribes guiones de video (reels, TikTok, anuncios, YouTube) con gancho en los primeros 3 segundos, storyboard por escenas, texto en pantalla, subtítulos, música sugerida e indicaciones de edición. Escribes prompts de video para IA y, si Higgsfield está conectado, generas clips cortos con generar_video_ia (de 3 a 15 segundos; para un reel largo, genera las tomas clave y explica cómo unirlas). Si no está conectado, dejas los prompts listos para producirlo.",
   },
   {
     id: "contenido",
@@ -96,7 +113,7 @@ Reglas:
 - Marketing de salud: respeta la regulación de publicidad sanitaria (en México, COFEPRIS): nada de prometer curas ni resultados garantizados, ni testimonios engañosos ni antes/después sin cuidado.
 - Puedes investigar, analizar, proponer y escribir borradores por tu cuenta. Todo lo que tenga que salir de la agencia o costar dinero (publicar, mandar un mensaje o correo a un cliente, entregar una pieza, gastar en anuncios, facturar o cobrar) NO lo haces: lo dejas listo y lo mandas a la bandeja del dueño con pedir_aprobacion, con el contenido final completo.
 - Todavía no hay cuentas de Meta, Google, TikTok ni WhatsApp conectadas (se conectan al final del plan). No digas que publicaste, enviaste o gastaste nada.
-${d.web ? "- Puedes buscar en internet (web_search) y en noticias para investigar. Cita las fuentes con su nombre." : ""}
+${habilidades.resumenParaAgente()}${["diseno", "video"].includes(d.id) ? (higgsfield.higgsfieldDisponible() ? "- Higgsfield está conectado: puedes generar imágenes y videos con IA (cuestan dinero; solo los que se van a usar).\n" : "- Higgsfield todavía no está conectado: no puedes generar imágenes ni videos con IA. Diseña con tipografía, formas, degradados y SVG, y deja los prompts de IA escritos al final por si el dueño los quiere hacer.\n") : ""}${d.web ? "- Puedes buscar en internet (web_search) y en noticias para investigar. Cita las fuentes con su nombre." : ""}
 Fecha y hora actuales: ${ahoraLocalISO()} (${utcALocal(new Date().toISOString())}).`;
 }
 
@@ -141,7 +158,9 @@ function herramientasDe(d, ctx) {
       },
     }),
   ];
-  if (["tendencias", "estrategia", "contenido", "seo", "creatividad", "video"].includes(d.id)) {
+  lista.push(...herramientasDeHabilidades());
+  if (["diseno", "video"].includes(d.id)) lista.push(...herramientasDeDiseno(d, ctx));
+  if (["tendencias", "estrategia", "contenido", "seo", "creatividad", "video", "diseno"].includes(d.id)) {
     lista.push(betaTool({
       name: "buscar_noticias",
       description: "Noticias recientes sobre un tema (Google Noticias).",
@@ -179,16 +198,139 @@ function herramientasDe(d, ctx) {
   return lista;
 }
 
+function herramientasDeHabilidades() {
+  if (!habilidades.activas().length) return [];
+  return [
+    betaTool({
+      name: "usar_habilidad",
+      description: "Lee una habilidad (skill) por su nombre: su SKILL.md con las instrucciones y la lista de archivos de apoyo. Si el texto es largo, vuelve a llamarla con 'desde'.",
+      inputSchema: { type: "object", properties: { nombre: { type: "string" }, desde: { type: "integer" } }, required: ["nombre"], additionalProperties: false },
+      run: ({ nombre, desde }) => habilidades.leer(nombre, desde || 0),
+    }),
+    betaTool({
+      name: "leer_archivo_habilidad",
+      description: "Lee un archivo de apoyo de una habilidad (por ejemplo references/ejemplos.md o brandkit.md).",
+      inputSchema: { type: "object", properties: { nombre: { type: "string", description: "La habilidad" }, ruta: { type: "string" }, desde: { type: "integer" } }, required: ["nombre", "ruta"], additionalProperties: false },
+      run: ({ nombre, ruta, desde }) => habilidades.leerArchivo(nombre, ruta, desde || 0),
+    }),
+  ];
+}
+
+const imagenParaClaude = (datos, tipo = "image/jpeg") => ({ type: "image", source: { type: "base64", media_type: tipo, data: datos.toString("base64") } });
+
+function herramientasDeDiseno(d, ctx) {
+  const lista = [];
+  if (d.id === "diseno") {
+    lista.push(betaTool({
+      name: "crear_pieza",
+      description: "Convierte tu diseño (HTML y CSS por slide) en imágenes PNG del tamaño exacto, listas para descargar. Devuelve el número de pieza y una hoja de contacto para revisarla. Para corregir una pieza, vuelve a llamar con reemplaza_id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          titulo: { type: "string", description: "Nombre corto de la pieza" },
+          tipo: { type: "string", enum: Object.keys(diseno.FORMATOS), description: "carrusel y post 1080x1350, cuadrado 1080x1080, historia y portada 1080x1920" },
+          css: { type: "string", description: "Estilos compartidos por todas las slides (puede empezar con @import de Google Fonts)" },
+          slides: { type: "array", items: { type: "string" }, description: "Un fragmento HTML por slide, en orden" },
+          texto: { type: "string", description: "Caption o texto para publicar, con hashtags" },
+          reemplaza_id: { type: "integer", description: "Número de una pieza tuya que quieres corregir" },
+        },
+        required: ["titulo", "tipo", "slides"],
+        additionalProperties: false,
+      },
+      run: async (i) => {
+        const { pieza, hoja } = await diseno.crearPieza({ ...i, trabajo_id: ctx.trabajo_id, cliente_id: ctx.cliente_id });
+        ctx.piezas.add(pieza.id);
+        return [
+          { type: "text", text: JSON.stringify({ ok: true, pieza: pieza.id, slides: pieza.archivos.length, tamano: `${pieza.ancho}x${pieza.alto}`, nota: "Ya se ve en el Estudio de diseño. Revisa la hoja de contacto y corrige si hace falta." }) },
+          imagenParaClaude(hoja),
+        ];
+      },
+    }));
+    lista.push(betaTool({
+      name: "ver_pieza",
+      description: "Recupera el HTML y CSS de una pieza anterior (para corregirla o hacer una versión nueva).",
+      inputSchema: { type: "object", properties: { id: { type: "integer" } }, required: ["id"], additionalProperties: false },
+      run: ({ id }) => {
+        const p = diseno.obtenerPieza(id);
+        return JSON.stringify(p ? { id: p.id, titulo: p.titulo, tipo: p.tipo, texto: p.texto, ...p.diseno } : { error: "No existe" });
+      },
+    }));
+  }
+  if (!higgsfield.higgsfieldDisponible()) return lista;
+  if (d.id === "diseno") {
+    lista.push(betaTool({
+      name: "generar_imagen_ia",
+      description: "Crea una imagen con IA (Higgsfield): foto, ilustración o fondo. Escribe el prompt en inglés, muy descriptivo (sujeto, estilo, luz, encuadre, colores) y sin texto dentro de la imagen (el texto va en el diseño). Devuelve el número de medio para usarlo en crear_pieza como src=\"medio:ID\". Cuesta dinero: genera solo las que vas a usar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          formato: { type: "string", enum: ["post", "historia", "cuadrado", "horizontal"], description: "post sale 3:4 (se recorta a 4:5 en el diseño), historia 9:16" },
+          referencia_medio: { type: "integer", description: "Opcional: una imagen anterior (medio) como referencia de estilo" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+      run: async ({ prompt, formato, referencia_medio }) => {
+        let referencia_url;
+        if (referencia_medio) {
+          const m = diseno.archivoDeMedio(referencia_medio);
+          if (m?.medio.tipo === "imagen") referencia_url = await higgsfield.subirImagen(fs.readFileSync(m.ruta), m.tipo);
+        }
+        const r = await higgsfield.generarImagen({ prompt, formato, referencia_url });
+        const m = diseno.guardarMedio({ tipo: "imagen", prompt, modelo: r.modelo, datos: r.datos, tipoContenido: r.tipo, trabajo_id: ctx.trabajo_id });
+        const salida = [{ type: "text", text: JSON.stringify({ ok: true, medio: m.id, usar_como: `medio:${m.id}` }) }];
+        if (r.datos.length < 3_500_000 && /png|jpe?g|webp|gif/.test(r.tipo)) salida.push(imagenParaClaude(r.datos, r.tipo.split(";")[0]));
+        return salida;
+      },
+    }));
+  }
+  lista.push(betaTool({
+    name: "generar_video_ia",
+    description: "Crea un video corto con IA (Higgsfield, de 3 a 15 segundos). Puede animar una slide tuya (pieza + slide) o una imagen IA (medio), o crearlo solo con el texto. Prompt en inglés: acción, movimiento de cámara, ambiente. Tarda unos minutos y cuesta dinero: hazlo solo cuando el encargo lo pida.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string" },
+        titulo: { type: "string" },
+        formato: { type: "string", enum: ["reel", "cuadrado", "horizontal"], description: "reel 9:16 (default)" },
+        duracion: { type: "integer", description: "Segundos, de 3 a 15 (5 por defecto)" },
+        desde_medio: { type: "integer", description: "Opcional: animar esta imagen IA" },
+        desde_pieza: { type: "integer", description: "Opcional: animar una slide de esta pieza" },
+        slide: { type: "integer", description: "Con desde_pieza: qué slide (1 por defecto)" },
+        sonido: { type: "boolean", description: "Con audio generado (sí por defecto)" },
+        texto: { type: "string", description: "Caption para publicar" },
+      },
+      required: ["prompt"],
+      additionalProperties: false,
+    },
+    run: async ({ prompt, titulo, formato = "reel", duracion, desde_medio, desde_pieza, slide, sonido, texto }) => {
+      let imagen_url;
+      const fuente = desde_pieza
+        ? diseno.archivoDePieza(desde_pieza, `${String(slide || 1).padStart(2, "0")}.png`)
+        : desde_medio ? diseno.archivoDeMedio(desde_medio) : null;
+      if ((desde_pieza || desde_medio) && (!fuente || !fuente.tipo.startsWith("image/"))) throw new Error("No encontré esa imagen para animar");
+      if (fuente) imagen_url = await higgsfield.subirImagen(fs.readFileSync(fuente.ruta), fuente.tipo);
+      const r = await higgsfield.generarVideo({ prompt, formato, duracion, imagen_url, sonido: sonido !== false });
+      const m = diseno.guardarMedio({ tipo: "video", prompt, modelo: r.modelo, datos: r.datos, tipoContenido: "video/mp4", trabajo_id: ctx.trabajo_id });
+      const p = diseno.piezaDeVideo({ medio: m, titulo: titulo || prompt.slice(0, 60), texto, trabajo_id: ctx.trabajo_id, cliente_id: ctx.cliente_id, formato });
+      ctx.piezas.add(p.id);
+      return JSON.stringify({ ok: true, pieza: p.id, nota: "El video ya está en el Estudio de diseño, listo para descargar." });
+    },
+  }));
+  return lista;
+}
+
 async function correrAgente(d, ctx, encargo) {
   const contexto = ctx.cliente_id ? `\n\n[Cliente del encargo: ${agencia.obtenerCliente(ctx.cliente_id)?.nombre} (id ${ctx.cliente_id})]` : "";
   const final = await claude().beta.messages.toolRunner({
     model: MODELO,
-    max_tokens: 12000,
+    max_tokens: d.id === "diseno" ? 20000 : 12000,
     system: [{ type: "text", text: sistema(d) }],
     output_config: { effort: "medium" },
     tools: herramientasDe(d, ctx),
     messages: [{ role: "user", content: encargo + contexto }],
-    max_iterations: 15,
+    max_iterations: d.id === "diseno" ? 30 : 15,
   });
   if (final.stop_reason === "refusal") throw new Error("El modelo no quiso hacer este encargo");
   return final.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -220,7 +362,7 @@ function siguiente() {
 }
 
 async function ejecutar({ id, d, encargo, cliente_id, origen }) {
-  const ctx = { trabajo_id: id, cliente_id, aprobaciones: [] };
+  const ctx = { trabajo_id: id, cliente_id, aprobaciones: [], piezas: new Set() };
   try {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("Falta la clave de Claude");
     let resultado;
@@ -234,7 +376,8 @@ async function ejecutar({ id, d, encargo, cliente_id, origen }) {
     }
     agencia.terminarTrabajo(id, { resultado: resultado || "(sin contenido)" });
     const titulo = (resultado.split("\n").find((l) => l.trim()) || encargo).replace(/^[#*\s]+|[*]+$/g, "").slice(0, 120);
-    const extra = ctx.aprobaciones.length ? ` Dejó ${ctx.aprobaciones.length} cosa(s) en Aprobaciones.` : "";
+    let extra = ctx.aprobaciones.length ? ` Dejó ${ctx.aprobaciones.length} cosa(s) en Aprobaciones.` : "";
+    if (ctx.piezas.size) extra += ` ${ctx.piezas.size === 1 ? "La pieza ya está" : `Las ${ctx.piezas.size} piezas ya están`} en el Estudio de diseño.`;
     await avisar(`${d.nombre} terminó: ${titulo}.${extra}`, `Agencia · ${d.nombre}`);
   } catch (e) {
     console.error(`[${d.id}]`, e);

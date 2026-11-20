@@ -91,7 +91,7 @@ async function cargarPanel() {
   const filas = [
     ["Cerebro (Claude)", c.cerebro], ["Calendario de DELTA", c.calendario],
     [c.gmail ? `Gmail${c.gmail_cuenta ? ` (${c.gmail_cuenta})` : ""}` : "Gmail: conéctelo en ⚙ Ajustes", c.gmail],
-    ["Bolsa y noticias", true], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
+    ["Bolsa y noticias", true], [c.higgsfield ? "Higgsfield (imágenes y video con IA)" : "Higgsfield: falta su llave en Railway", c.higgsfield], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
   ].map(([n, on]) => `<li class="${on ? "on" : ""}"><span class="punto"></span>${n}</li>`);
   filas.push(`<li class="pronto"><span class="punto"></span>Cuentas de clientes (Meta, Instagram, TikTok): próximamente</li>`);
   $("#lista-conexiones").innerHTML = filas.join("");
@@ -256,6 +256,13 @@ async function abrirTrabajo(id) {
   $("#tr-cuerpo").innerHTML = t.estado === "en_proceso"
     ? `<p class="tenue">Trabajando en: ${esc(t.encargo)}</p>`
     : `<p class="tenue"><b>Encargo:</b> ${esc(t.encargo)}</p><hr />${md(t.resultado || "")}`;
+  if (t.departamento === "diseno" || t.departamento === "video") {
+    const { piezas } = await api(`/diseno?trabajo=${t.id}`).catch(() => ({ piezas: [] }));
+    if (piezas.length) {
+      piezasCache = [...piezas, ...piezasCache.filter((x) => !piezas.some((p) => p.id === x.id))];
+      $("#tr-cuerpo").insertAdjacentHTML("afterbegin", `<div class="trabajo-piezas">${piezas.map((p) => `<button type="button" data-pieza="${p.id}" title="${esc(p.titulo)}">${miniPieza(p)}</button>`).join("")}</div><p class="tenue">Toca un diseño para verlo y descargarlo.</p>`);
+    }
+  }
   $("#tr-copiar").onclick = () => navigator.clipboard?.writeText(t.resultado || "").then(() => { $("#tr-copiar").textContent = "Copiado ✓"; setTimeout(() => ($("#tr-copiar").textContent = "Copiar"), 1500); });
   $("#dlg-trabajo").showModal();
 }
@@ -356,6 +363,87 @@ document.addEventListener("submit", async (e) => {
   finally { boton.disabled = false; }
 });
 
+// ---------------- Estudio de diseño ----------------
+const TIPO_PIEZA = { carrusel: "Carrusel", post: "Post", cuadrado: "Post cuadrado", historia: "Historia", portada: "Portada de reel", video: "Video" };
+const urlPieza = (p, archivo, descargar) => `/api/diseno/piezas/${p.id}/${archivo}${descargar ? "?descargar=1" : ""}`;
+const miniPieza = (p) => p.tipo === "video"
+  ? `<video src="${urlPieza(p, p.archivos[0])}#t=0.5" muted playsinline preload="metadata"></video>`
+  : `<img src="${urlPieza(p, p.archivos[0])}" alt="" loading="lazy" />`;
+let piezasCache = [];
+
+async function cargarEstudio() {
+  const d = await api("/diseno");
+  piezasCache = d.piezas;
+  const h = d.higgsfield;
+  $("#estudio-estado").innerHTML = [
+    `<span class="chip ${d.puede_renderizar ? "activo" : "fallo"}">${d.puede_renderizar ? "Diseños en imagen: listos" : "Diseños en imagen: falta el navegador del servidor"}</span>`,
+    h.conectado
+      ? `<span class="chip activo">Higgsfield conectado · hoy ${h.imagenes_hoy}/${h.limite_imagenes} imágenes y ${h.videos_hoy}/${h.limite_videos} videos</span>`
+      : `<span class="chip pausado">${h.falta_secreto ? "Higgsfield: falta HIGGSFIELD_API_SECRET en Railway" : "Higgsfield sin conectar: imágenes y videos con IA apagados"}</span>`,
+    `<span class="chip ${d.habilidades ? "activo" : "pausado"}">${d.habilidades ? `${d.habilidades} habilidades cargadas` : "Sin habilidades: súbelas en ⚙ Ajustes"}</span>`,
+  ].join("");
+  $("#estudio-piezas").innerHTML = d.piezas.length
+    ? d.piezas.map((p) => `<button type="button" class="pieza" data-pieza="${p.id}">
+        <div class="pieza-img">${miniPieza(p)}${p.archivos.length > 1 ? `<span class="cuenta">${p.archivos.length} slides</span>` : ""}</div>
+        <div class="pieza-info"><b>${esc(p.titulo)}</b><span>${[TIPO_PIEZA[p.tipo] || p.tipo, p.cliente, fmtDia(p.creada)].filter(Boolean).map(esc).join(" · ")}</span></div>
+      </button>`).join("")
+    : `<p class="vacio tenue">Todavía no hay diseños. Pídele uno a DELTA o encárgaselo a Diseño en Departamentos.</p>`;
+}
+
+let visor = { pieza: null, i: 0 };
+async function abrirPieza(id, i = 0) {
+  const p = piezasCache.find((x) => x.id === Number(id)) || (await api("/diseno")).piezas.find((x) => x.id === Number(id));
+  if (!p) return burbuja("aviso", "Ese diseño ya no existe.");
+  visor = { pieza: p, i };
+  $("#pz-titulo").textContent = p.titulo;
+  $("#pz-meta").textContent = [TIPO_PIEZA[p.tipo] || p.tipo, `${p.ancho}×${p.alto}`, p.cliente, fmtDia(p.creada)].filter(Boolean).join(" · ");
+  $("#pz-texto-caja").hidden = !p.texto;
+  $("#pz-texto").textContent = p.texto || "";
+  $("#pz-copiar").hidden = !p.texto;
+  $("#pz-copiar").textContent = "Copiar texto";
+  $("#pz-bajar-todo").href = `/api/diseno/piezas/${p.id}/zip`;
+  $("#pz-bajar-todo").hidden = p.tipo === "video";
+  $("#pz-miniaturas").innerHTML = p.archivos.length > 1 ? p.archivos.map((a, n) => `<button type="button" data-ir-slide="${n}"><img src="${urlPieza(p, a)}" alt="Slide ${n + 1}" loading="lazy" /></button>`).join("") : "";
+  pintarVisor();
+  if (!$("#dlg-pieza").open) $("#dlg-pieza").showModal();
+}
+function pintarVisor() {
+  const { pieza: p, i } = visor;
+  const a = p.archivos[i];
+  $("#pz-vista").innerHTML = p.tipo === "video"
+    ? `<video src="${urlPieza(p, a)}" controls playsinline autoplay loop></video>`
+    : `<img src="${urlPieza(p, a)}" alt="${esc(p.titulo)} · ${i + 1}" />`;
+  $("#pz-ant").disabled = i === 0;
+  $("#pz-sig").disabled = i >= p.archivos.length - 1;
+  $("#pz-ant").hidden = $("#pz-sig").hidden = p.archivos.length < 2;
+  $("#pz-bajar-una").href = urlPieza(p, a, true);
+  $("#pz-bajar-una").textContent = p.tipo === "video" ? "Descargar video" : p.archivos.length > 1 ? `Descargar slide ${i + 1}` : "Descargar";
+  document.querySelectorAll("[data-ir-slide]").forEach((b) => b.classList.toggle("activa", Number(b.dataset.irSlide) === i));
+}
+const moverVisor = (paso) => { const n = visor.i + paso; if (visor.pieza && n >= 0 && n < visor.pieza.archivos.length) { visor.i = n; pintarVisor(); } };
+$("#pz-ant").addEventListener("click", () => moverVisor(-1));
+$("#pz-sig").addEventListener("click", () => moverVisor(1));
+$("#pz-cerrar").addEventListener("click", () => $("#dlg-pieza").close());
+$("#dlg-pieza").addEventListener("keydown", (e) => { if (e.key === "ArrowLeft") moverVisor(-1); if (e.key === "ArrowRight") moverVisor(1); });
+let toqueX = null;
+$("#pz-vista").addEventListener("touchstart", (e) => { toqueX = e.touches[0].clientX; }, { passive: true });
+$("#pz-vista").addEventListener("touchend", (e) => { if (toqueX === null) return; const dx = e.changedTouches[0].clientX - toqueX; if (Math.abs(dx) > 40) moverVisor(dx < 0 ? 1 : -1); toqueX = null; });
+$("#pz-miniaturas").addEventListener("click", (e) => { const b = e.target.closest("[data-ir-slide]"); if (b) { visor.i = Number(b.dataset.irSlide); pintarVisor(); } });
+$("#pz-copiar").addEventListener("click", () => navigator.clipboard?.writeText(visor.pieza?.texto || "").then(() => { $("#pz-copiar").textContent = "Copiado ✓"; }));
+$("#pz-borrar").addEventListener("click", async () => {
+  const b = $("#pz-borrar");
+  if (b.dataset.seguro !== "1") { b.dataset.seguro = "1"; b.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { b.dataset.seguro = ""; b.textContent = "Borrar"; }, 3000); return; }
+  b.dataset.seguro = ""; b.textContent = "Borrar";
+  await api(`/diseno/piezas/${visor.pieza.id}`, { method: "DELETE" }).catch((err) => burbuja("aviso", err.message));
+  $("#dlg-pieza").close();
+  refrescar("estudio", true);
+});
+document.addEventListener("click", (e) => {
+  const p = e.target.closest("[data-pieza]");
+  if (p) abrirPieza(p.dataset.pieza).catch((err) => burbuja("aviso", err.message));
+});
+$("#btn-pedir-diseno").addEventListener("click", () => setTimeout(() => document.querySelector('[data-encargo="diseno"] textarea')?.focus(), 400));
+
 // ---------------- Secciones ----------------
 // Cada sección carga sus datos solo cuando se abre (y se refresca si ya pasó un rato).
 const SECCIONES = {
@@ -367,6 +455,7 @@ const SECCIONES = {
   agencia: { cargar: () => cargarTablero(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
   aprobaciones: { cargar: () => cargarAprobaciones(), cada: 30e3 },
+  estudio: { cargar: () => cargarEstudio(), cada: 30e3 },
 };
 let seccionActual = "inicio";
 const cargadaEn = {};
@@ -1132,8 +1221,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
-    if (d.tipo === "agencia" && ["agencia", "departamentos", "aprobaciones"].includes(seccionActual)) refrescar(seccionActual, true);
-    if (d.tipo === "aviso" && ["agencia", "departamentos", "aprobaciones"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "agencia" && ["agencia", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "aviso" && ["agencia", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
   };
 }
 
@@ -1170,9 +1259,48 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#aj-manos").checked = manosLibres;
   $("#aj-msg").textContent = "";
   $("#voz-msg").textContent = "";
+  $("#hab-msg").textContent = "";
+  cargarHabilidades();
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
+
+// Habilidades (las skills del dueño)
+async function cargarHabilidades() {
+  const lista = await api("/habilidades").catch(() => []);
+  $("#hab-lista").innerHTML = lista.length
+    ? lista.map((h) => `<li><input type="checkbox" data-hab-activa="${esc(h.nombre)}" ${h.activa ? "checked" : ""} title="Activa" /><div class="cuerpo">${esc(h.nombre)}<span class="sub" title="${esc(h.descripcion)}">${esc(h.descripcion)}</span></div><button type="button" data-hab-borrar="${esc(h.nombre)}">Quitar</button></li>`).join("")
+    : `<li class="vacio">Todavía no hay habilidades.</li>`;
+}
+$("#hab-archivo").addEventListener("change", async (e) => {
+  const archivos = [...e.target.files];
+  if (!archivos.length) return;
+  $("#hab-msg").textContent = "Subiendo…";
+  const nuevas = [];
+  try {
+    for (const f of archivos) {
+      const r = await fetch("/api/habilidades", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Delta": "1", "X-Nombre": encodeURIComponent(f.name) }, body: f });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${f.name}: ${d.error || "no se pudo subir"}`);
+      nuevas.push(...d.guardadas);
+    }
+    $("#hab-msg").textContent = `Listo: ${nuevas.length} habilidad${nuevas.length === 1 ? "" : "es"} (${nuevas.join(", ")}).`;
+    sonar("accion");
+  } catch (err) { $("#hab-msg").textContent = err.message; }
+  e.target.value = "";
+  cargarHabilidades();
+});
+$("#hab-lista").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-hab-borrar]");
+  if (!b) return;
+  if (b.dataset.seguro !== "1") { b.dataset.seguro = "1"; b.textContent = "¿Seguro?"; return; }
+  await api(`/habilidades/${encodeURIComponent(b.dataset.habBorrar)}`, { method: "DELETE" }).catch((err) => { $("#hab-msg").textContent = err.message; });
+  cargarHabilidades();
+});
+$("#hab-lista").addEventListener("change", (e) => {
+  const c = e.target.closest("[data-hab-activa]");
+  if (c) api(`/habilidades/${encodeURIComponent(c.dataset.habActiva)}`, { method: "PATCH", body: { activa: c.checked } }).catch((err) => { $("#hab-msg").textContent = err.message; });
+});
 $("#aj-sonidos").addEventListener("change", (e) => { activarSonidos(e.target.checked); if (e.target.checked) sonar("accion"); });
 $("#btn-nueva-conv").addEventListener("click", async () => {
   await api("/conversacion/nueva", { method: "POST" });
