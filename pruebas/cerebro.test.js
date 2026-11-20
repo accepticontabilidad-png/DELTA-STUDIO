@@ -31,7 +31,7 @@ await new Promise((r) => servidor.listen(0, r));
 process.env.ANTHROPIC_BASE_URL = `http://localhost:${servidor.address().port}`;
 after(() => servidor.close());
 
-const { hablarConDelta, afirmaAccion, nuevaConversacion } = await import("../server/cerebro.js");
+const { hablarConDelta, afirmaAccion, nuevaConversacion, quitarDisculpas } = await import("../server/cerebro.js");
 const agenda = await import("../server/agenda.js");
 const { db } = await import("../server/db.js");
 
@@ -88,4 +88,27 @@ test("conversación nueva: DELTA olvida la plática anterior", async () => {
   guion = [texto("Hola, señor.")];
   await hablarConDelta("Hola");
   assert.equal(recibidas[0].messages.length, 1); // solo el mensaje nuevo, sin historial viejo
+});
+
+test("no arrastra disculpas por respuestas pasadas", async () => {
+  const r = quitarDisculpas(
+    "Listo, señor. Agendé la ceremonia para el sábado 28 a las 10:00.\n\n" +
+      "Le debo la verdad: es la primera vez en esta conversación que uso de verdad su agenda. Le pido una disculpa.",
+  );
+  assert.equal(r, "Listo, señor. Agendé la ceremonia para el sábado 28 a las 10:00.");
+  assert.equal(quitarDisculpas("Lo siento, no puedo apagar su laptop todavía."), "Lo siento, no puedo apagar su laptop todavía.");
+
+  nuevaConversacion();
+  guion = [usar("crear_tarea", { titulo: "Revisar bandera" }), texto("Listo, señor.\n\nLe debo la verdad: en mis mensajes anteriores no lo hice.")];
+  const respuesta = await hablarConDelta("Agrega la tarea revisar bandera");
+  assert.equal(respuesta, "Listo, señor.");
+  // Un turno sin herramientas no se anota con "ninguna" en el historial.
+  guion = [texto("Buenas tardes, señor.")];
+  await hablarConDelta("Hola");
+  recibidas.length = 0;
+  guion = [texto("Aquí sigo.")];
+  await hablarConDelta("¿Sigues ahí?");
+  const hist = recibidas[0].messages.map((m) => m.content).join("\n");
+  assert.doesNotMatch(hist, /ninguna\]/);
+  assert.doesNotMatch(hist, /Le debo la verdad/);
 });
