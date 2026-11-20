@@ -1,6 +1,7 @@
 // Bolsa y mercados: cotizaciones gratuitas (Yahoo Finance, sin clave) y lista de seguimiento.
 // DELTA solo informa: nunca compra ni vende.
 import { getAjuste, setAjuste } from "./db.js";
+import { conCache } from "./cache.js";
 
 const UA = { "User-Agent": "Mozilla/5.0 (DELTA asistente)" };
 
@@ -83,7 +84,12 @@ export function interpretarGrafica(json, nombre) {
 
 const RANGOS = { dia: "5d", semana: "5d", mes: "1mo", "3meses": "3mo", anio: "1y", "5anios": "5y" };
 
-export async function cotizacion(simbolo, periodo = "mes", nombre) {
+export function cotizacion(simbolo, periodo = "mes", nombre) {
+  // Un minuto de memoria: varias pantallas y la alerta de bolsa comparten la misma consulta.
+  return conCache(`bolsa:${limpiar(simbolo)}:${periodo}:${nombre || ""}`, 60e3, () => cotizacionDirecta(simbolo, periodo, nombre));
+}
+
+async function cotizacionDirecta(simbolo, periodo, nombre) {
   const rango = RANGOS[periodo] || "1mo";
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(limpiar(simbolo))}?range=${rango}&interval=1d`;
   const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(10000) });

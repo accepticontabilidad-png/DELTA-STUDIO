@@ -37,7 +37,7 @@ $("#form-entrada").addEventListener("submit", async (e) => {
     if (!r.ok) throw new Error(d.error);
     $("#clave").value = "";
     $("#error-entrada").hidden = true;
-    iniciar();
+    iniciar(true); // el toque de "Entrar" ya permite el sonido de arranque
   } catch (err) {
     $("#error-entrada").textContent = err.message;
     $("#error-entrada").hidden = false;
@@ -62,21 +62,30 @@ async function cargarPanel() {
   const p = await api("/panel");
   zona = p.zona_horaria || zona;
 
-  $("#resumen-hoy").innerHTML = `
+  const resumen = `
     <div><b>${p.hoy.eventos}</b><span>citas hoy</span></div>
     <div><b>${p.hoy.pendientes}</b><span>pendientes</span></div>
     <div><b class="${p.hoy.vencidas ? "alerta" : ""}">${p.hoy.vencidas}</b><span>atrasadas</span></div>`;
+  $("#resumen-hoy").innerHTML = resumen;
+  $("#hoy-mini").innerHTML = resumen;
 
-  cargarAgenda().catch(() => {});
+  if (seccionActual === "agenda") cargarAgenda().catch(() => {});
+
+  $("#hoy-citas").innerHTML = p.eventos.length
+    ? p.eventos.slice(0, 4).map((e) => `<li><div class="cuerpo">${esc(e.titulo)}<span class="sub">${fmtDia(e.inicio)} ${fmtHora(e.inicio)}${e.lugar ? " · " + esc(e.lugar) : ""}</span></div></li>`).join("")
+    : `<li class="vacio">Sin citas en los próximos 7 días.</li>`;
 
   const ahora = new Date().toISOString();
-  $("#lista-tareas").innerHTML = p.tareas.length
-    ? p.tareas.map((t) => {
+  const filaTarea = (t) => {
         const vencida = t.fecha_limite && t.fecha_limite < ahora;
         const sub = [t.cliente, t.fecha_limite ? `${fmtDia(t.fecha_limite)} ${fmtHora(t.fecha_limite)}` : null].filter(Boolean).map(esc).join(" · ");
         return `<li class="${t.prioridad === "alta" ? "alta" : ""} ${vencida ? "vencida" : ""}"><input type="checkbox" data-hecha="${t.id}" aria-label="Marcar como hecha" /><div class="cuerpo">${esc(t.titulo)}${sub ? `<span class="sub">${sub}</span>` : ""}</div></li>`;
-      }).join("")
-    : `<li class="vacio">Nada pendiente. Impecable, señor.</li>`;
+  };
+  const sinTareas = `<li class="vacio">Nada pendiente. Impecable, señor.</li>`;
+  $("#lista-tareas").innerHTML = p.tareas.length ? p.tareas.map(filaTarea).join("") : sinTareas;
+  $("#hoy-tareas").innerHTML = p.tareas.length
+    ? p.tareas.slice(0, 5).map(filaTarea).join("") + (p.tareas.length > 5 ? `<li class="vacio"><a href="#/tareas" class="ver-mas">y ${p.tareas.length - 5} más ›</a></li>` : "")
+    : sinTareas;
 
   const c = p.conexiones;
   const filas = [
@@ -88,33 +97,103 @@ async function cargarPanel() {
   $("#lista-conexiones").innerHTML = filas.join("");
 
   $("#lista-avisos").innerHTML = p.avisos.length
-    ? p.avisos.map((a) => `<li><div class="cuerpo">${esc(a.texto)}<span class="sub">${fmtDia(a.fecha)} ${fmtHora(a.fecha)}</span></div></li>`).join("")
+    ? p.avisos.slice(0, 4).map((a) => `<li><div class="cuerpo">${esc(a.texto)}<span class="sub">${fmtDia(a.fecha)} ${fmtHora(a.fecha)}</span></div></li>`).join("")
     : `<li class="vacio">Sin avisos todavía.</li>`;
 
   gmailConectado = c.gmail;
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
   $("#btn-gmail").hidden = !c.gmail_disponible && !c.gmail;
-  cargarMercados().catch(() => {});
 
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
 }
 
 let gmailConectado = false;
-let mercadosCargados = 0;
-async function cargarMercados() {
-  if (Date.now() - mercadosCargados < 5 * 60000) return; // cada 5 min basta
-  mercadosCargados = Date.now();
-  const datos = await api("/mercados");
-  const ok = datos.filter((d) => !d.error);
-  $("#lista-mercados").innerHTML = ok.length
-    ? ok.map((d) => {
+const filaMercado = (d) => {
         const c = d.cambio_dia_pct;
         const clase = c > 0 ? "sube" : c < 0 ? "baja" : "";
         return `<li><div class="cuerpo">${esc(d.nombre)}<span class="sub">${esc(d.precio?.toLocaleString("es-MX") ?? "")} ${esc(d.moneda)}</span></div><b class="${clase}">${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%</b></li>`;
-      }).join("")
-    : `<li class="vacio">Sin datos de bolsa por ahora.</li>`;
+};
+const sinBolsa = `<li class="vacio">Sin datos de bolsa por ahora.</li>`;
+
+async function cargarMercadosMini() {
+  const ok = (await api("/mercados")).filter((d) => !d.error);
+  $("#lista-mercados").innerHTML = ok.length ? ok.slice(0, 5).map(filaMercado).join("") : sinBolsa;
 }
+
+async function cargarMercadosYNoticias() {
+  const [bolsa, notas] = await Promise.allSettled([api("/mercados"), api("/noticias")]);
+  const ok = bolsa.status === "fulfilled" ? bolsa.value.filter((d) => !d.error) : [];
+  $("#tabla-mercados").innerHTML = ok.length ? ok.map(filaMercado).join("") : sinBolsa;
+  $("#noticias").innerHTML = notas.status === "fulfilled"
+    ? notas.value.map((t) => `<h3>${esc(t.tema)}</h3><ul class="lista noticias">${
+        t.noticias?.length
+          ? t.noticias.map((n) => `<li><div class="cuerpo"><a href="${esc(/^https:\/\//.test(n.enlace) ? n.enlace : "#")}" target="_blank" rel="noopener noreferrer">${esc(n.titulo)}</a><span class="sub">${esc(n.fuente)}${n.fecha ? " · " + fmtDia(n.fecha) + " " + fmtHora(n.fecha) : ""}</span></div></li>`).join("")
+          : `<li class="vacio">${t.error ? "No se pudo cargar." : "Sin noticias hoy."}</li>`
+      }</ul>`).join("")
+    : `<p class="tenue">No se pudieron cargar las noticias.</p>`;
+}
+
+async function cargarCorreo() {
+  const d = await api("/correo");
+  if (!d.conectado) {
+    $("#correo-estado").textContent = "Gmail no está conectado todavía. Conéctelo en ⚙ Ajustes → Conectar Gmail.";
+    $("#lista-correos").innerHTML = "";
+    return;
+  }
+  $("#correo-estado").textContent = `${d.cuenta || "Gmail"} · bandeja de entrada, últimos 2 días`;
+  $("#lista-correos").innerHTML = d.correos.length
+    ? d.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de)}</b> · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
+    : `<li class="vacio">Sin correos recientes.</li>`;
+}
+
+// ---------------- Secciones ----------------
+// Cada sección carga sus datos solo cuando se abre (y se refresca si ya pasó un rato).
+const SECCIONES = {
+  inicio: { cargar: () => Promise.all([cargarPanel(), cargarMercadosMini()]), cada: 60e3 },
+  agenda: { cargar: () => cargarAgenda(), cada: 60e3 },
+  tareas: { cargar: () => cargarPanel(), cada: 60e3 },
+  correo: { cargar: () => cargarCorreo(), cada: 120e3 },
+  mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
+  agencia: {}, departamentos: {}, aprobaciones: {},
+};
+let seccionActual = "inicio";
+const cargadaEn = {};
+
+function refrescar(nombre, forzar = false) {
+  const s = SECCIONES[nombre];
+  if (!s?.cargar) return;
+  if (!forzar && Date.now() - (cargadaEn[nombre] || 0) < s.cada) return;
+  cargadaEn[nombre] = Date.now();
+  s.cargar().catch(() => { cargadaEn[nombre] = 0; });
+}
+
+function mostrarSeccion(nombre) {
+  if (!SECCIONES[nombre]) nombre = "inicio";
+  seccionActual = nombre;
+  document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === nombre));
+  document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("activa", x.dataset.ir === nombre));
+  $("#mini-orbe").hidden = nombre === "inicio";
+  cerrarMenu();
+  refrescar(nombre);
+  if (nombre === "inicio") $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
+}
+
+const seccionDeLaDireccion = () => (location.hash.match(/^#\/(\w+)/) || [])[1] || "inicio";
+addEventListener("hashchange", () => mostrarSeccion(seccionDeLaDireccion()));
+
+// Menú en el celular: se abre con "Más"
+function cerrarMenu() { $("#menu").classList.remove("abierto"); $("#menu-fondo").hidden = true; }
+$("#btn-mas").addEventListener("click", () => { $("#menu").classList.add("abierto"); $("#menu-fondo").hidden = false; });
+$("#menu-fondo").addEventListener("click", cerrarMenu);
+
+// Botones "Resumir con DELTA" / "Analizar con DELTA": llevan la pregunta al chat.
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pedir]");
+  if (!b) return;
+  location.hash = "#/inicio";
+  enviar(b.dataset.pedir);
+});
 
 $("#btn-gmail").addEventListener("click", async () => {
   try {
@@ -345,14 +424,8 @@ $("#ag-ant").addEventListener("click", () => mover(-1));
 $("#ag-sig").addEventListener("click", () => mover(1));
 $("#ag-hoy").addEventListener("click", () => { agendaEstado.dia = claveDia(new Date()); cargarAgenda(); });
 
-// En la computadora, el calendario se puede ampliar a toda la pantalla.
-function ampliar(si) {
-  document.body.classList.toggle("cal-amplio", si);
-  $("#ag-ampliar").textContent = si ? "⤡ Reducir" : "⤢ Ampliar";
-  guardado.set("delta_cal_amplio", si ? "1" : "");
-}
-$("#ag-ampliar").addEventListener("click", () => { ampliar(!document.body.classList.contains("cal-amplio")); cargarAgenda(); });
-ampliar(guardado.get("delta_cal_amplio") === "1");
+// La Agenda tiene su propia sección a pantalla completa.
+document.body.classList.add("cal-amplio");
 
 // Agregar cita, tarea o recordatorio a mano
 let tipoNuevo = "cita";
@@ -420,13 +493,15 @@ async function enviar(texto, canal = "app") {
   const espera = burbuja("assistant pensando", "Procesando…");
   orbe.estado("pensando");
   try {
-    const { respuesta, hizo_cambio } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
+    const { respuesta, hizo_cambio, abrir } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
+    if (abrir && SECCIONES[abrir]) setTimeout(() => { location.hash = "#/" + abrir; }, 900);
     sonar(hizo_cambio || archivos.length ? "accion" : "respuesta");
     espera.className = "burbuja assistant";
     espera.textContent = respuesta;
     if (canal === "voz" || guardado.get("delta_voz") === "1") hablar(respuesta);
     else orbe.estado("reposo");
     cargarPanel();
+    if (seccionActual === "agenda") cargarAgenda().catch(() => {});
   } catch (err) {
     sonar("error");
     espera.className = "burbuja aviso";
@@ -721,13 +796,6 @@ async function clima() {
   }, () => {}, { maximumAge: 3600e3 });
 }
 
-// ---------------- Pestañas (celular) ----------------
-function irA(tab) {
-  document.querySelectorAll(".rejilla > [data-tab]").forEach((s) => s.classList.toggle("visible", s.dataset.tab === tab));
-  document.querySelectorAll(".pestanas button").forEach((b) => b.classList.toggle("activa", b.dataset.ir === tab));
-}
-document.querySelectorAll(".pestanas button").forEach((b) => b.addEventListener("click", () => irA(b.dataset.ir)));
-irA("hablar");
 
 // ---------------- Avisos en vivo ----------------
 function conectarVivo() {
@@ -804,8 +872,77 @@ $("#aj-guardar").addEventListener("click", async () => {
   if (manosLibres && !escuchando) escuchar();
 });
 
+// ---------------- Arranque: DELTA en grande, sonido y bienvenida ----------------
+function vozMujer() {
+  const voces = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("es"));
+  const mujeres = /paulina|m[oó]nica|dalia|elvira|sabina|helena|laura|lupe|marisol|elena|isabela|camila|valentina|ximena|renata|francisca|sofia|luc[ií]a|google espa[nñ]ol/i;
+  return voces.find((v) => mujeres.test(v.name) && /mx|419|us/i.test(v.lang))
+    || voces.find((v) => mujeres.test(v.name))
+    || vozEspanol();
+}
+
+function bienvenida() {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance("Bienvenido, señor.");
+  const v = vozMujer();
+  if (v) u.voice = v;
+  u.lang = v?.lang || "es-MX";
+  u.rate = 0.9;
+  u.pitch = 1.05;
+  speechSynthesis.speak(u);
+}
+
+function arranque(conToque) {
+  return new Promise((listo) => {
+    let visto = false;
+    try { visto = sessionStorage.getItem("delta_arranque") === "1"; } catch {}
+    if (visto) return listo();
+    try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
+    const el = $("#arranque");
+    const conSonido = sonidosActivos();
+    const reloj = [];
+    let terminado = false;
+    const terminar = () => {
+      if (terminado) return;
+      terminado = true;
+      reloj.forEach(clearTimeout);
+      el.classList.add("saliendo");
+      setTimeout(() => { el.hidden = true; el.className = "arranque"; }, 700);
+      removeEventListener("keydown", tecla);
+      listo();
+    };
+    const empezar = () => {
+      el.classList.remove("esperando");
+      el.classList.add("animando");
+      if (conSonido) {
+        sonar("arranque");
+        reloj.push(setTimeout(bienvenida, 1900));
+      }
+      reloj.push(setTimeout(terminar, conSonido ? 4300 : 2700));
+    };
+    const tecla = (e) => {
+      if (e.key === "Escape") { speechSynthesis?.cancel(); terminar(); }
+      else if (el.classList.contains("esperando")) empezar();
+    };
+    addEventListener("keydown", tecla);
+    $("#arr-saltar").onclick = (e) => { e.stopPropagation(); if ("speechSynthesis" in window) speechSynthesis.cancel(); terminar(); };
+    el.hidden = false;
+    // Los navegadores no dejan sonar nada hasta que la persona toca la pantalla.
+    if (conSonido && !conToque) {
+      el.classList.add("esperando");
+      el.onclick = () => { if (el.classList.contains("esperando")) empezar(); };
+    } else {
+      el.onclick = null;
+      empezar();
+    }
+  });
+}
+// Las voces del navegador llegan un momento después de abrir la app.
+if ("speechSynthesis" in window) speechSynthesis.getVoices();
+
 // ---------------- Inicio ----------------
-async function iniciar() {
+async function iniciar(conToque = false) {
   try {
     await cargarPanel();
   } catch {
@@ -813,6 +950,7 @@ async function iniciar() {
   }
   $("#entrada").hidden = true;
   $("#app").hidden = false;
+  arranque(conToque);
   // La primera vez, DELTA adopta la zona horaria de este equipo.
   if (!guardado.get("delta_zona_enviada")) {
     const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -822,7 +960,11 @@ async function iniciar() {
   clima();
   cargarHistorial();
   conectarVivo();
-  setInterval(() => cargarPanel().catch(() => {}), 60_000);
+  cargadaEn.inicio = cargadaEn.tareas = Date.now(); // el panel ya se cargó arriba
+  cargarMercadosMini().catch(() => {});
+  mostrarSeccion(seccionDeLaDireccion());
+  // Cada minuto se refresca solo lo que está a la vista.
+  setInterval(() => { cargarPanel().catch(() => {}); refrescar(seccionActual); }, 60_000);
 }
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

@@ -26,11 +26,13 @@ const SISTEMA = `Eres DELTA, el asistente personal del dueño de la agencia de m
 Tu estilo: como JARVIS de Iron Man, elegante, eficiente, con un toque de humor sutil, pero siempre en español neutro y cálido. Te diriges al usuario como "señor" o por su nombre si lo conoces.
 
 Tu propia app (para que puedas guiar al usuario):
-- Es una app que se abre en el navegador o se instala en la PC y el celular. En la PC se ven tres columnas: Agenda a la izquierda, tú (el orbe y la conversación) al centro y Tareas a la derecha. En el celular son tres pestañas abajo: Agenda, DELTA y Tareas.
-- Pantalla Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano. En la PC, el botón "Ampliar" pone el calendario en toda la pantalla.
+- Es una app que se abre en el navegador o se instala en la PC y el celular. Al abrirla aparece una pantalla de arranque con el logo de DELTA y una bienvenida (se salta con "Saltar").
+- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia (Tablero, Departamentos y Aprobaciones, que llegan en la siguiente fase). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
+- Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano.
+- Correo: lista de sus correos recientes y botón "Resumir con DELTA". Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
-- Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba. Debajo está la lista de Mercados (su lista de seguimiento de bolsa, con el cambio del día) y las Conexiones.
-- Botón de engranaje ⚙ (arriba a la derecha): zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail, empezar conversación nueva y cerrar sesión.
+- Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
+- Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail, empezar conversación nueva y cerrar sesión.
 - Para hablar contigo: tocar el orbe o el micrófono.
 
 Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
@@ -52,6 +54,7 @@ Reglas:
 - Las notas entre corchetes como [Herramientas usadas en ese turno: ...] las pone el sistema para que sepas qué se hizo de verdad antes; nunca las escribas tú.
 - No te disculpes por respuestas anteriores ni hables de errores pasados a menos que el usuario lo pida. Responde solo a lo que te pregunta ahora, breve y directo.
 - Nunca agregues confesiones del tipo "le debo la verdad" o "en mis mensajes anteriores...". Lo pasado ya está resuelto; no lo vuelvas a mencionar.
+- Si te piden abrir o ver una sección de la app (agenda, calendario, tareas, correo, bolsa, noticias), ábrela con abrir_seccion y responde en una frase.
 - No inventes datos ni capacidades. Si te piden algo que no puedes hacer (por ejemplo controlar la computadora, la casa o cuentas de clientes), di claramente que aún no puedes.
 - Las fechas que pases a las herramientas van en hora local del usuario con formato AAAA-MM-DDTHH:MM. Calcula fechas relativas ("mañana", "el viernes") a partir de la fecha y hora actuales que se te dan en cada mensaje.
 - Si falta un dato imprescindible (por ejemplo la hora de una cita), pregúntalo en una sola frase. Si un dato es razonable suponerlo, supónlo y dilo.
@@ -393,6 +396,23 @@ herramientasBase.push(
     run: ({ accion, tema }) => json(accion === "agregar" ? noticias.agregarTema(tema) : accion === "quitar" ? noticias.quitarTema(tema) : noticias.temas()),
   }),
 );
+herramientasBase.push(
+  betaTool({
+    name: "abrir_seccion",
+    description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
+    inputSchema: {
+      type: "object",
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "departamentos", "aprobaciones"] } },
+      required: ["seccion"],
+      additionalProperties: false,
+    },
+    run: ({ seccion }) => {
+      const r = registro.getStore();
+      if (r) r.abrir = seccion;
+      return json({ ok: true, nota: "Se abrirá al mostrar tu respuesta." });
+    },
+  }),
+);
 const herramientas = herramientasBase.map(conRegistro);
 
 const ACCIONES_QUE_CAMBIAN = new Set([
@@ -552,6 +572,7 @@ export async function hablarConDelta(texto, canal = "app", archivos = [], info =
   respuesta = quitarDisculpas(respuesta);
   // Para la app: si cambió algo de verdad, suena el tono de "acción hecha".
   info.hizoCambio = acciones.some((a) => ACCIONES_QUE_CAMBIAN.has(a.nombre) && a.ok);
+  if (acciones.abrir) info.abrir = acciones.abrir;
   guardar.run("assistant", respuesta, canal, resumirAcciones(acciones), null);
   return respuesta;
 }

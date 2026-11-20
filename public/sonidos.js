@@ -87,6 +87,16 @@ const SONIDOS = {
       tono(c, { frec: 1760, inicio: i * 0.32 + 0.11, dur: 0.16, vol: 0.5 });
     }
   },
+  // Arranque de DELTA: un grave que crece, un barrido que sube, destellos y un acorde de impacto.
+  arranque: (c) => {
+    tono(c, { frec: 45, hasta: 98, dur: 1.5, vol: 0.9 });
+    tono(c, { frec: 160, hasta: 1500, dur: 1.15, tipo: "triangle", vol: 0.22 });
+    tono(c, { frec: 240, hasta: 2200, inicio: 0.15, dur: 1.0, tipo: "sawtooth", vol: 0.05 });
+    [1318.5, 1568, 1975.5, 2637].forEach((f, i) => tono(c, { frec: f, inicio: 0.6 + i * 0.07, dur: 0.45, vol: 0.16 }));
+    [130.8, 196, 261.6, 329.6, 392, 523.3, 784].forEach((f, i) => tono(c, { frec: f, inicio: 1.12, dur: 2.6, tipo: i % 2 ? "sine" : "triangle", vol: 0.26 }));
+    tono(c, { frec: 65.4, inicio: 1.12, dur: 2.8, vol: 1 });
+    tono(c, { frec: 3136, inicio: 1.12, dur: 0.9, vol: 0.08 });
+  },
   // Algo falló: tono grave corto.
   error: (c) => {
     tono(c, { frec: 330, hasta: 220, dur: 0.22, tipo: "sawtooth", vol: 0.18 });
