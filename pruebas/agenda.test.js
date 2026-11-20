@@ -60,3 +60,15 @@ test("textos legibles para el asistente", () => {
   assert.match(l.inicio, /20 de noviembre/);
   assert.match(l.inicio, /10:00/);
 });
+
+test("agenda por rango: citas, tareas con fecha y recordatorios repetidos en cada día", () => {
+  agenda.crearEvento({ titulo: "Cita rango", inicio: "2026-12-07T10:00" });
+  agenda.crearTarea({ titulo: "Tarea rango", fecha_limite: "2026-12-08T12:00" });
+  agenda.crearRecordatorio({ mensaje: "Tomar agua", cuando: "2026-12-05T09:00", repetir: "diario" });
+  const r = agenda.agendaRango("2026-12-07", "2026-12-09");
+  assert.ok(r.eventos.some((e) => e.titulo === "Cita rango"));
+  assert.ok(r.tareas.some((t) => t.titulo === "Tarea rango"));
+  assert.equal(r.recordatorios.filter((x) => x.mensaje === "Tomar agua").length, 3);
+  assert.throws(() => agenda.agendaRango("2026-01-01", "2026-12-31"));
+  assert.throws(() => agenda.agendaRango("ayer", "hoy"));
+});

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
-import { hablarConDelta } from "./cerebro.js";
+import { hablarConDelta, inicioConversacion, nuevaConversacion } from "./cerebro.js";
 import { iniciarVigilante, suscribirPantalla, avisar } from "./avisos.js";
 import { whatsappConfigurado, verificarWebhook, crearReceptorWebhook } from "./whatsapp.js";
 import { llavesPush, guardarSuscripcion } from "./push.js";
@@ -82,8 +82,13 @@ api.post("/chat", envolver(async (req) => {
 }));
 
 api.get("/historial", envolver(() =>
-  db.prepare("SELECT rol, texto, canal, fecha FROM conversacion ORDER BY id DESC LIMIT 40").all().reverse(),
+  db.prepare("SELECT rol, texto, canal, fecha FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT 40").all(inicioConversacion()).reverse(),
 ));
+
+// Empieza una conversación nueva: DELTA olvida la plática anterior (no la agenda ni su memoria).
+api.post("/conversacion/nueva", envolver(() => { nuevaConversacion(); return { ok: true }; }));
+
+api.get("/agenda", envolver((req) => agenda.agendaRango(String(req.query.desde || ""), String(req.query.hasta || ""))));
 
 api.get("/panel", envolver(() => {
   const hoy = agenda.resumenDelDia();

@@ -1,7 +1,7 @@
 // Lógica de tareas, calendario, recordatorios y memoria.
 // La usan tanto el cerebro de DELTA (herramientas) como el panel de la app.
 import { db } from "./db.js";
-import { localAUTC, utcALocal, rangoDelDia, ahoraLocalISO } from "./tiempo.js";
+import { localAUTC, utcALocal, rangoDelDia, ahoraLocalISO, siguiente } from "./tiempo.js";
 
 const PRIORIDADES = ["baja", "normal", "alta"];
 const REPETIR = ["no", "diario", "semanal", "mensual"];
@@ -120,6 +120,31 @@ export function listarMemorias() {
 export function olvidarMemoria(id) {
   db.prepare("DELETE FROM memorias WHERE id = ?").run(id);
   return { id };
+}
+
+// ---------- Vista de agenda por rango (para la pantalla de Agenda) ----------
+export function agendaRango(desdeDia, hastaDia) {
+  const formato = /^\d{4}-\d{2}-\d{2}$/;
+  if (!formato.test(desdeDia) || !formato.test(hastaDia)) throw new Error("Fechas no válidas (AAAA-MM-DD)");
+  const desde = rangoDelDia(desdeDia).desde;
+  const hasta = rangoDelDia(hastaDia).hasta;
+  if (new Date(hasta) - new Date(desde) > 62 * 864e5) throw new Error("Rango demasiado grande");
+  const eventos = db.prepare("SELECT * FROM eventos WHERE inicio >= ? AND inicio <= ? ORDER BY inicio").all(desde, hasta);
+  const tareas = db
+    .prepare("SELECT * FROM tareas WHERE fecha_limite IS NOT NULL AND fecha_limite >= ? AND fecha_limite <= ? ORDER BY fecha_limite")
+    .all(desde, hasta);
+  // Los recordatorios repetidos se muestran en cada día que tocan.
+  const recordatorios = [];
+  for (const r of db.prepare("SELECT * FROM recordatorios WHERE activo = 1 AND cuando <= ?").all(hasta)) {
+    let cuando = r.cuando;
+    let vueltas = 0;
+    while (cuando && cuando <= hasta && vueltas++ < 400) {
+      if (cuando >= desde) recordatorios.push({ ...r, cuando });
+      cuando = siguiente(cuando, r.repetir);
+    }
+  }
+  recordatorios.sort((a, b) => a.cuando.localeCompare(b.cuando));
+  return { desde: desdeDia, hasta: hastaDia, eventos, tareas, recordatorios };
 }
 
 // ---------- Resumen ----------

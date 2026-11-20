@@ -66,13 +66,7 @@ async function cargarPanel() {
     <div><b>${p.hoy.pendientes}</b><span>pendientes</span></div>
     <div><b class="${p.hoy.vencidas ? "alerta" : ""}">${p.hoy.vencidas}</b><span>atrasadas</span></div>`;
 
-  $("#lista-eventos").innerHTML = p.eventos.length
-    ? p.eventos.map((e) => `<li><div class="cuerpo">${esc(e.titulo)}<span class="sub">${fmtDia(e.inicio)} · ${fmtHora(e.inicio)}${e.lugar ? " · " + esc(e.lugar) : ""}</span></div><button class="x" data-borrar-evento="${e.id}" title="Borrar">✕</button></li>`).join("")
-    : `<li class="vacio">Sin citas en los próximos 7 días.</li>`;
-
-  $("#lista-recordatorios").innerHTML = p.recordatorios.length
-    ? p.recordatorios.map((r) => `<li><div class="cuerpo">${esc(r.mensaje)}<span class="sub">${fmtDia(r.cuando)} · ${fmtHora(r.cuando)}${r.repetir !== "no" ? " · " + r.repetir : ""}</span></div><button class="x" data-borrar-recordatorio="${r.id}" title="Cancelar">✕</button></li>`).join("")
-    : `<li class="vacio">Sin recordatorios.</li>`;
+  cargarAgenda().catch(() => {});
 
   const ahora = new Date().toISOString();
   $("#lista-tareas").innerHTML = p.tareas.length
@@ -114,6 +108,95 @@ $("#form-tarea").addEventListener("submit", async (e) => {
   $("#nueva-tarea").value = "";
   await api("/tareas", { method: "POST", body: { titulo } });
   cargarPanel();
+});
+
+// ---------------- Pantalla de Agenda ----------------
+const agendaEstado = { vista: "dia", dia: null }; // dia = AAAA-MM-DD (día local de referencia)
+const claveDia = (fecha) => new Intl.DateTimeFormat("en-CA", { timeZone: zona }).format(fecha);
+const sumarDias = (dia, n) => {
+  const [a, m, d] = dia.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+};
+const diaSemana = (dia) => new Date(dia + "T12:00:00Z").getUTCDay(); // 0 = domingo
+const nombreDia = (dia, opciones) => new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", ...opciones }).format(new Date(dia + "T12:00:00Z"));
+
+function rangoVisible() {
+  const hoy = agendaEstado.dia || claveDia(new Date());
+  if (agendaEstado.vista === "dia") return [hoy, hoy];
+  const lunes = sumarDias(hoy, -((diaSemana(hoy) + 6) % 7));
+  return [lunes, sumarDias(lunes, 6)];
+}
+
+async function cargarAgenda() {
+  if (!agendaEstado.dia) agendaEstado.dia = claveDia(new Date());
+  const [desde, hasta] = rangoVisible();
+  const datos = await api(`/agenda?desde=${desde}&hasta=${hasta}`);
+  const hoy = claveDia(new Date());
+
+  const titulo = agendaEstado.vista === "dia"
+    ? (desde === hoy ? "Hoy, " : "") + nombreDia(desde, { weekday: "long", day: "numeric", month: "long" })
+    : `${nombreDia(desde, { day: "numeric", month: "short" })} – ${nombreDia(hasta, { day: "numeric", month: "short", year: "numeric" })}`;
+  $("#ag-titulo").textContent = titulo.charAt(0).toUpperCase() + titulo.slice(1);
+
+  const items = [
+    ...datos.eventos.map((e) => ({ tipo: "evento", cuando: e.inicio, titulo: e.titulo, sub: [e.lugar, e.cliente].filter(Boolean).join(" · "), borrar: `data-borrar-evento="${e.id}"` })),
+    ...datos.tareas.map((t) => ({ tipo: "tarea", cuando: t.fecha_limite, titulo: t.titulo, sub: [t.cliente, t.prioridad === "alta" ? "prioridad alta" : ""].filter(Boolean).join(" · "), hecha: t.estado === "hecha" })),
+    ...datos.recordatorios.map((r) => ({ tipo: "recordatorio", cuando: r.cuando, titulo: r.mensaje, sub: r.repetir !== "no" ? `se repite: ${r.repetir}` : "", borrar: `data-borrar-recordatorio="${r.id}"` })),
+  ].sort((a, b) => a.cuando.localeCompare(b.cuando));
+
+  const dias = [];
+  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) dias.push(d);
+  $("#ag-contenido").innerHTML = dias.map((d) => {
+    const delDia = items.filter((i) => claveDia(new Date(i.cuando)) === d);
+    const cabeza = agendaEstado.vista === "semana"
+      ? `<h4><span>${esc(nombreDia(d, { weekday: "long", day: "numeric" }))}</span>${d === hoy ? "<span>hoy</span>" : ""}</h4>` : "";
+    const lista = delDia.length
+      ? `<ul>${delDia.map((i) => `<li class="ag-item ${i.tipo}${i.hecha ? " hecha" : ""}"><span class="ag-hora">${fmtHora(i.cuando)}</span><span class="ag-texto">${esc(i.titulo)}${i.sub ? `<span class="sub">${esc(i.sub)}</span>` : ""}</span>${i.borrar ? `<button class="x" ${i.borrar} title="Borrar" aria-label="Borrar">✕</button>` : "<span></span>"}</li>`).join("")}</ul>`
+      : `<div class="ag-vacio">${agendaEstado.vista === "dia" ? "Nada agendado este día." : "Libre"}</div>`;
+    return `<div class="ag-dia${d === hoy ? " hoy" : ""}">${cabeza}${lista}</div>`;
+  }).join("");
+}
+
+document.querySelectorAll("[data-vista]").forEach((b) => b.addEventListener("click", () => {
+  agendaEstado.vista = b.dataset.vista;
+  document.querySelectorAll("[data-vista]").forEach((x) => x.classList.toggle("activa", x === b));
+  cargarAgenda();
+}));
+$("#ag-ant").addEventListener("click", () => { agendaEstado.dia = sumarDias(agendaEstado.dia, agendaEstado.vista === "dia" ? -1 : -7); cargarAgenda(); });
+$("#ag-sig").addEventListener("click", () => { agendaEstado.dia = sumarDias(agendaEstado.dia, agendaEstado.vista === "dia" ? 1 : 7); cargarAgenda(); });
+$("#ag-hoy").addEventListener("click", () => { agendaEstado.dia = claveDia(new Date()); cargarAgenda(); });
+
+// Agregar cita, tarea o recordatorio a mano
+let tipoNuevo = "cita";
+function elegirTipo(tipo) {
+  tipoNuevo = tipo;
+  document.querySelectorAll("[data-tipo]").forEach((b) => b.classList.toggle("activa", b.dataset.tipo === tipo));
+  $("#agregar").className = `dialogo tipo-${tipo}`;
+}
+document.querySelectorAll("[data-tipo]").forEach((b) => b.addEventListener("click", () => elegirTipo(b.dataset.tipo)));
+$("#ag-agregar").addEventListener("click", () => {
+  $("#form-agregar").reset();
+  $("#ag-f-dia").value = agendaEstado.dia || claveDia(new Date());
+  $("#ag-f-msg").hidden = true;
+  elegirTipo("cita");
+  $("#agregar").showModal();
+});
+$("#ag-f-cancelar").addEventListener("click", () => $("#agregar").close());
+$("#form-agregar").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const titulo = $("#ag-f-titulo").value.trim();
+  const cuando = `${$("#ag-f-dia").value}T${$("#ag-f-hora").value || "09:00"}`;
+  try {
+    if (tipoNuevo === "cita") await api("/eventos", { method: "POST", body: { titulo, inicio: cuando, lugar: $("#ag-f-lugar").value.trim() || undefined } });
+    else if (tipoNuevo === "tarea") await api("/tareas", { method: "POST", body: { titulo, fecha_limite: cuando } });
+    else await api("/recordatorios", { method: "POST", body: { mensaje: titulo, cuando, repetir: $("#ag-f-repetir").value } });
+    $("#agregar").close();
+    agendaEstado.dia = $("#ag-f-dia").value;
+    await cargarPanel();
+  } catch (err) {
+    $("#ag-f-msg").textContent = err.message;
+    $("#ag-f-msg").hidden = false;
+  }
 });
 
 // ---------------- Conversación ----------------
@@ -429,6 +512,11 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
+$("#btn-nueva-conv").addEventListener("click", async () => {
+  await api("/conversacion/nueva", { method: "POST" });
+  $("#ajustes").close();
+  cargarHistorial();
+});
 $("#btn-salir").addEventListener("click", async () => {
   await fetch("/api/salir", { method: "POST", credentials: "same-origin" });
   location.reload();
