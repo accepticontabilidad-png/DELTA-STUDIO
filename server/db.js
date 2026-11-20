@@ -76,6 +76,13 @@ CREATE TABLE IF NOT EXISTS suscripciones_push (
 );
 `);
 
+// Columna añadida después: qué herramientas usó DELTA en cada respuesta.
+try {
+  db.exec("ALTER TABLE conversacion ADD COLUMN acciones TEXT");
+} catch {
+  /* ya existe */
+}
+
 export function getAjuste(clave, porDefecto = null) {
   const fila = db.prepare("SELECT valor FROM ajustes WHERE clave = ?").get(clave);
   return fila ? fila.valor : porDefecto;
