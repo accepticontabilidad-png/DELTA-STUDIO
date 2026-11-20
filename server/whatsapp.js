@@ -107,7 +107,7 @@ export function crearReceptorWebhook(responder) {
           setAjuste("whatsapp_ultimo_mensaje", Date.now());
           let texto = m.text?.body;
           if (!texto && m.type === "audio") {
-            await enviarWhatsApp("Por ahora solo entiendo mensajes de texto aquí, señor. Las notas de voz llegarán pronto; mientras, puede hablarme en la app.");
+            await enviarWhatsApp("Por aquí todavía solo te entiendo por texto. Las notas de voz ya vienen; mientras, escríbeme o háblame en la app.");
             continue;
           }
           if (!texto) continue;

@@ -70,7 +70,7 @@ app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta));
 app.get("/oauth/google", async (req, res) => {
   try {
     const cuenta = await correo.terminarConexion(req);
-    avisar(`Gmail conectado${cuenta ? ` (${cuenta})` : ""}. Ya puedo leer y ordenar su correo, señor.`, "Correo").catch(() => {});
+    avisar(`Gmail conectado${cuenta ? ` (${cuenta})` : ""}. Ya puedo leer y ordenar tu correo.`, "Correo").catch(() => {});
     res.redirect("/?gmail=ok");
   } catch (e) {
     console.error("[gmail]", e.message);
@@ -242,7 +242,7 @@ api.post("/salir-de-todo", (_req, res) => {
   seg.borrarCookie(res);
   res.json({ ok: true });
 });
-api.post("/push/prueba", envolver(async () => { await avisar("Prueba de aviso. Todo en orden, señor."); return { ok: true }; }));
+api.post("/push/prueba", envolver(async () => { await avisar("Prueba de aviso. Si ves esto, todo funciona perfecto."); return { ok: true }; }));
 
 // Avisos en tiempo real para la pantalla abierta
 api.get("/vivo", (req, res) => {
