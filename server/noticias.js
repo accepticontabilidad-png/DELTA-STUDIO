@@ -1,5 +1,6 @@
 // Noticias por tema: Google Noticias (RSS gratuito, sin clave).
 import { getAjuste, setAjuste } from "./db.js";
+import { conCache } from "./cache.js";
 
 export const TEMAS_INICIALES = [
   "marketing digital",
@@ -58,7 +59,12 @@ export function leerRSS(xml) {
   });
 }
 
-export async function noticias(tema, max = 6, dias = 1) {
+export function noticias(tema, max = 6, dias = 1) {
+  // Diez minutos de memoria por tema.
+  return conCache(`noticias:${String(tema).toLowerCase()}:${max}:${dias}`, 10 * 60e3, () => noticiasDirecto(tema, max, dias));
+}
+
+async function noticiasDirecto(tema, max, dias) {
   const q = `${tema} when:${Math.max(1, Math.min(7, dias))}d`;
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=es-419&gl=MX&ceid=MX:es-419`;
   const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (DELTA asistente)" }, signal: AbortSignal.timeout(10000) });

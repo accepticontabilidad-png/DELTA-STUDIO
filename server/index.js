@@ -14,6 +14,7 @@ import { guardarArchivo, infoArchivo, MAX_BYTES, MAX_POR_MENSAJE } from "./archi
 import * as seg from "./seguridad.js";
 import * as correo from "./gmail.js";
 import * as mercados from "./mercados.js";
+import * as noticias from "./noticias.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -99,7 +100,7 @@ api.post("/chat", envolver(async (req) => {
   if (texto.length > 4000) throw new Error("Mensaje demasiado largo");
   const info = {};
   const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app", archivos, info);
-  return { respuesta, hizo_cambio: Boolean(info.hizoCambio) };
+  return { respuesta, hizo_cambio: Boolean(info.hizoCambio), abrir: info.abrir || null };
 }));
 
 api.get("/historial", envolver(() =>
@@ -168,6 +169,12 @@ api.post("/ajustes", envolver((req) => {
 api.get("/gmail/conectar", envolver((req) => ({ url: correo.urlConexion(req) })));
 api.post("/gmail/desconectar", envolver(() => { correo.desconectar(); return { ok: true }; }));
 api.get("/mercados", envolver(() => mercados.verMercados(null, "dia")));
+api.get("/noticias", envolver(() => noticias.titulares(4)));
+api.get("/correo", envolver(async () => {
+  if (!correo.gmailConectado()) return { conectado: false };
+  const { correos } = await correo.buscarCorreos({ consulta: "in:inbox newer_than:2d", max: 20 });
+  return { conectado: true, cuenta: correo.cuentaGmail(), correos };
+}));
 
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));

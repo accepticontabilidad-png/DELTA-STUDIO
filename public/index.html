@@ -17,6 +17,15 @@
 </head>
 <body>
   <canvas id="estrellas" aria-hidden="true"></canvas>
+  <!-- Arranque: DELTA en grande, sonido y bienvenida -->
+  <div id="arranque" class="arranque" hidden>
+    <div class="arr-halo"></div>
+    <img class="arr-logo" src="/icons/logo.svg" alt="" />
+    <div class="arr-nombre">DELTA</div>
+    <div class="arr-linea"></div>
+    <button type="button" id="arr-tocar" class="arr-tocar">Toque para iniciar</button>
+    <button type="button" id="arr-saltar" class="arr-saltar">Saltar</button>
+  </div>
   <!-- Pantalla de entrada -->
   <section id="entrada" class="entrada" hidden>
     <div class="entrada-caja">
@@ -42,17 +51,62 @@
       <button id="btn-ajustes" class="icono" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </header>
 
-    <div class="rejilla">
-      <!-- Columna izquierda: hoy y calendario -->
-      <section class="panel" id="panel-agenda" data-tab="agenda">
+    <div class="cuerpo-app">
+      <nav id="menu" class="menu" aria-label="Secciones">
+        <span class="menu-grupo">Personal</span>
+        <a href="#/inicio" class="menu-item" data-ir="inicio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Inicio</span></a>
+        <a href="#/agenda" class="menu-item" data-ir="agenda"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Agenda</span></a>
+        <a href="#/tareas" class="menu-item" data-ir="tareas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg><span>Tareas</span></a>
+        <a href="#/correo" class="menu-item" data-ir="correo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Correo</span></a>
+        <a href="#/mercados" class="menu-item" data-ir="mercados"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Mercados y noticias</span></a>
+        <span class="menu-grupo">Agencia</span>
+        <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Tablero</span><small class="pronto-tag">Pronto</small></a>
+        <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span><small class="pronto-tag">Pronto</small></a>
+        <a href="#/aprobaciones" class="menu-item" data-ir="aprobaciones"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Aprobaciones</span><small class="pronto-tag">Pronto</small></a>
+      </nav>
+      <div id="menu-fondo" class="menu-fondo" hidden></div>
+      <div class="secciones">
+      <!-- Inicio: DELTA y el resumen del día -->
+      <section class="seccion inicio" data-seccion="inicio">
+      <section class="centro">
+        <div id="hoy-mini" class="resumen hoy-mini"></div>
+        <button id="orbe" class="orbe" aria-label="Tocar para hablar">
+          <canvas id="lienzo" width="600" height="600"></canvas>
+          <img class="logo-orbe" src="/icons/logo.svg" alt="" />
+          <span id="estado-orbe" class="estado-orbe">Toque para hablar</span>
+        </button>
+        <div id="conversacion" class="conversacion" aria-live="polite"></div>
+        <div id="adjuntos" class="adjuntos" hidden></div>
+        <form id="form-chat" class="form-chat">
+          <input id="archivo" type="file" multiple hidden accept="image/*,.pdf,.docx,.xlsx,.csv,.txt,.md,application/pdf,text/csv,text/plain" />
+          <button id="btn-clip" type="button" class="icono clip" aria-label="Adjuntar archivo" title="Adjuntar foto o archivo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 19.9a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg></button>
+          <input id="texto" type="text" placeholder="Escríbale a DELTA…" autocomplete="off" />
+          <button id="btn-mic" type="button" class="icono mic" aria-label="Hablar" title="Hablar"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <button type="submit" class="enviar" aria-label="Enviar">➤</button>
+        </form>
+      </section>
+
+        <aside class="panel" id="panel-hoy">
+          <h2>Hoy</h2>
+          <div id="resumen-hoy" class="resumen"></div>
+          <h3><a href="#/agenda" class="ver-mas">Próximas citas ›</a></h3>
+          <ul id="hoy-citas" class="lista"></ul>
+          <h3><a href="#/tareas" class="ver-mas">Pendientes ›</a></h3>
+          <ul id="hoy-tareas" class="lista"></ul>
+          <h3><a href="#/mercados" class="ver-mas">Mercados ›</a></h3>
+          <ul id="lista-mercados" class="lista mercados"></ul>
+          <h3>Avisos recientes</h3>
+          <ul id="lista-avisos" class="lista tenue"></ul>
+        </aside>
+      </section>
+
+      <section class="seccion panel" id="panel-agenda" data-seccion="agenda">
         <div class="ag-cabeza">
           <h2>Agenda</h2>
           <div class="ag-botones">
-            <button id="ag-ampliar" class="ag-ampliar" type="button" title="Ver el calendario en grande">⤢ Ampliar</button>
             <button id="ag-agregar" class="ag-agregar" type="button">+ Agregar</button>
           </div>
         </div>
-        <div id="resumen-hoy" class="resumen"></div>
         <div class="ag-control">
           <div class="segmento" role="tablist" aria-label="Vista">
             <button type="button" data-vista="dia" class="activa">Día</button>
@@ -70,46 +124,82 @@
         <p class="ag-leyenda"><span class="ag-tipo evento"></span>Cita <span class="ag-tipo tarea"></span>Tarea <span class="ag-tipo recordatorio"></span>Recordatorio</p>
       </section>
 
-      <!-- Centro: orbe y conversación -->
-      <section class="centro" data-tab="hablar">
-        <button id="orbe" class="orbe" aria-label="Tocar para hablar">
-          <canvas id="lienzo" width="600" height="600"></canvas>
-          <img class="logo-orbe" src="/icons/logo.svg" alt="" />
-          <span id="estado-orbe" class="estado-orbe">Toque para hablar</span>
-        </button>
-        <div id="conversacion" class="conversacion" aria-live="polite"></div>
-        <div id="adjuntos" class="adjuntos" hidden></div>
-        <form id="form-chat" class="form-chat">
-          <input id="archivo" type="file" multiple hidden accept="image/*,.pdf,.docx,.xlsx,.csv,.txt,.md,application/pdf,text/csv,text/plain" />
-          <button id="btn-clip" type="button" class="icono clip" aria-label="Adjuntar archivo" title="Adjuntar foto o archivo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 19.9a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg></button>
-          <input id="texto" type="text" placeholder="Escríbale a DELTA…" autocomplete="off" />
-          <button id="btn-mic" type="button" class="icono mic" aria-label="Hablar" title="Hablar"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-          <button type="submit" class="enviar" aria-label="Enviar">➤</button>
-        </form>
-      </section>
-
-      <!-- Derecha: tareas y conexiones -->
-      <section class="panel" id="panel-tareas" data-tab="tareas">
+      <section class="seccion panel" data-seccion="tareas">
         <h2>Tareas</h2>
         <form id="form-tarea" class="form-mini">
           <input id="nueva-tarea" type="text" placeholder="Nueva tarea…" />
           <button type="submit">+</button>
         </form>
         <ul id="lista-tareas" class="lista"></ul>
-        <h3>Mercados</h3>
-        <ul id="lista-mercados" class="lista mercados"></ul>
-        <h3>Conexiones</h3>
-        <ul id="lista-conexiones" class="conexiones"></ul>
-        <h3>Avisos recientes</h3>
-        <ul id="lista-avisos" class="lista tenue"></ul>
       </section>
+
+      <section class="seccion panel" data-seccion="correo">
+        <div class="ag-cabeza">
+          <h2>Correo</h2>
+          <div class="ag-botones">
+            <button type="button" class="ag-agregar" data-pedir="Resúmeme mi correo de hoy: qué es importante y qué necesita respuesta.">Resumir con DELTA</button>
+          </div>
+        </div>
+        <p id="correo-estado" class="tenue"></p>
+        <ul id="lista-correos" class="lista correos"></ul>
+      </section>
+
+      <section class="seccion mercados-noticias" data-seccion="mercados">
+        <div class="panel">
+          <div class="ag-cabeza">
+            <h2>Mercados</h2>
+            <div class="ag-botones"><button type="button" class="ag-agregar" data-pedir="¿Cómo va la bolsa hoy y qué ideas de inversión ves? Incluye los riesgos.">Analizar con DELTA</button></div>
+          </div>
+          <ul id="tabla-mercados" class="lista mercados"></ul>
+          <p class="tenue">Para agregar o quitar: "Delta, agrega Tesla a mi lista". Solo información, no asesoría financiera.</p>
+        </div>
+        <div class="panel">
+          <h2>Noticias</h2>
+          <div id="noticias"></div>
+          <p class="tenue">Para cambiar temas: "Delta, agrega fútbol a mis noticias".</p>
+        </div>
+      </section>
+
+      <section class="seccion panel" data-seccion="agencia">
+        <h2>Tablero de la agencia</h2>
+        <div class="pronto-caja">
+          <p>Aquí verá de un vistazo cómo va su agencia:</p>
+          <ul><li>Clientes activos y sus proyectos</li><li>Entregas de la semana</li><li>Alertas de cada departamento</li><li>Quién le debe y cuánto</li></ul>
+          <p class="tenue">Llega en la siguiente fase del plan.</p>
+        </div>
+      </section>
+
+      <section class="seccion panel" data-seccion="departamentos">
+        <h2>Departamentos</h2>
+        <div class="pronto-caja">
+          <p>Una tarjeta por departamento con lo que hizo hoy y sus reportes:</p>
+          <ul><li>Tendencias</li><li>Cuentas y clientes</li><li>Estrategia</li><li>Creatividad y diseño</li><li>Edición de video</li><li>Contenido y redes</li><li>Medios pagados</li><li>SEO y web</li><li>Analítica</li><li>Administración y finanzas</li></ul>
+          <p class="tenue">Llega en la siguiente fase del plan.</p>
+        </div>
+      </section>
+
+      <section class="seccion panel" data-seccion="aprobaciones">
+        <h2>Aprobaciones</h2>
+        <div class="pronto-caja">
+          <p>Lo que espera su sí o no, con un toque:</p>
+          <ul><li>Publicaciones listas para salir</li><li>Correos y mensajes a clientes</li><li>Cambios de presupuesto en anuncios</li><li>Facturas por emitir</li></ul>
+          <p class="tenue">Llega en la siguiente fase del plan.</p>
+        </div>
+      </section>
+
+      </div>
     </div>
 
-    <!-- Pestañas para el celular -->
+    <!-- Acceso rápido a DELTA desde otras secciones -->
+    <a href="#/inicio" id="mini-orbe" class="mini-orbe" aria-label="Hablar con DELTA" hidden><img src="/icons/logo.svg" alt="" /></a>
+
+    <!-- Barra inferior del celular -->
     <nav class="pestanas">
-      <button data-ir="agenda">Agenda</button>
-      <button data-ir="hablar" class="activa">DELTA</button>
-      <button data-ir="tareas">Tareas</button>
+      <a href="#/inicio" data-ir="inicio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Inicio</span></a>
+      <a href="#/agenda" data-ir="agenda"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Agenda</span></a>
+      <a href="#/tareas" data-ir="tareas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg><span>Tareas</span></a>
+      <a href="#/correo" data-ir="correo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Correo</span></a>
+      <button type="button" id="btn-mas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Más</span></button>
     </nav>
   </main>
 
@@ -160,6 +250,8 @@
         <button type="button" id="btn-prueba">Enviar aviso de prueba</button>
         <button type="button" id="btn-instalar" hidden>Instalar app</button>
       </div>
+      <h3 class="aj-sub">Conexiones</h3>
+      <ul id="lista-conexiones" class="conexiones"></ul>
       <div class="botones">
         <button type="button" id="btn-gmail">Conectar Gmail</button>
       </div>
