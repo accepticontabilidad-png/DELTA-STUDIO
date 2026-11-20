@@ -102,7 +102,7 @@ let cliente = null;
 const claude = () => (cliente ||= new Anthropic());
 
 function sistema(d) {
-  return `Eres el departamento de ${d.nombre} de DELTA Marketing, una agencia boutique de marketing médico (clínicas, doctores, salud y bienestar). Trabajas para el dueño de la agencia; DELTA, su asistente, es el director que te encarga el trabajo.
+  return `Eres el departamento de ${d.nombre} de DELTA Marketing, una agencia boutique de marketing médico (clínicas, doctores, salud y bienestar). Trabajas para el dueño de la agencia; DELTA, su asistente, es la directora que te encarga el trabajo.
 
 Tu función: ${d.funcion}
 
@@ -382,7 +382,7 @@ async function ejecutar({ id, d, encargo, cliente_id, origen }) {
   } catch (e) {
     console.error(`[${d.id}]`, e);
     agencia.terminarTrabajo(id, { resultado: "No se pudo completar: " + (e.message || e), estado: "fallo" });
-    await avisar(`${d.nombre} no pudo terminar el encargo #${id}. Puede pedírselo de nuevo.`, `Agencia · ${d.nombre}`).catch(() => {});
+    await avisar(`${d.nombre} no pudo terminar el encargo #${id}. Si quieres, se lo pido otra vez.`, `Agencia · ${d.nombre}`).catch(() => {});
   } finally {
     avisarPantalla({ tipo: "agencia" });
   }

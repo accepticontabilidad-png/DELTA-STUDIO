@@ -36,7 +36,7 @@ async function revisar() {
   // Recordatorios vencidos
   const pendientes = db.prepare("SELECT * FROM recordatorios WHERE activo = 1 AND cuando <= ?").all(ahora);
   for (const r of pendientes) {
-    await avisar(`Recordatorio: ${r.mensaje}`);
+    await avisar(`Oye, te recuerdo: ${r.mensaje}`);
     let prox = siguiente(r.cuando, r.repetir);
     while (prox && prox <= ahora) prox = siguiente(prox, r.repetir);
     if (prox) db.prepare("UPDATE recordatorios SET cuando = ? WHERE id = ?").run(prox, r.id);
@@ -48,7 +48,7 @@ async function revisar() {
   for (const e of eventos) {
     const avisarDesde = new Date(new Date(e.inicio).getTime() - (e.aviso_min ?? 15) * 60000).toISOString();
     if (avisarDesde <= ahora) {
-      await avisar(`En ${e.aviso_min ?? 15} min: ${e.titulo} a las ${hora(e.inicio)}${e.lugar ? ` en ${e.lugar}` : ""}.`);
+      await avisar(`En ${e.aviso_min ?? 15} minutos tienes ${e.titulo}, a las ${hora(e.inicio)}${e.lugar ? ` en ${e.lugar}` : ""}.`);
       db.prepare("UPDATE eventos SET avisado = 1 WHERE id = ?").run(e.id);
     }
   }
@@ -63,7 +63,7 @@ async function revisar() {
   if (horaResumen && tras >= 0 && tras < 180 && getAjuste("ultimo_resumen") !== hoy) {
     setAjuste("ultimo_resumen", hoy);
     const r = legible(resumenDelDia(hoy));
-    const partes = [`Buenos días, señor. Hoy tiene ${r.eventos.length} cita(s) y ${r.total_pendientes} tarea(s) pendiente(s).`];
+    const partes = [`¡Buenos días! Hoy tienes ${r.eventos.length} cita(s) y ${r.total_pendientes} tarea(s) pendiente(s). Aquí va tu día:`];
     for (const e of r.eventos) partes.push(`• ${e.inicio.split(", ").slice(-1)[0]} ${e.titulo}`);
     if (r.tareas_vencidas.length) partes.push(`Atrasadas: ${r.tareas_vencidas.map((t) => t.titulo).join(", ")}.`);
     partes.push(...(await extrasDelResumen()));
@@ -114,7 +114,7 @@ async function revisarBolsa(local) {
   if (!fuertes.length) return;
   avisados.simbolos.push(...fuertes.map((d) => d.simbolo));
   setAjuste("alertas_bolsa_hoy", JSON.stringify(avisados));
-  await avisar("Movimiento fuerte en la bolsa:\n" + fuertes.map((d) => "• " + mercados.lineaCorta(d)).join("\n"), "Bolsa");
+  await avisar("Ojo, la bolsa se movió fuerte:\n" + fuertes.map((d) => "• " + mercados.lineaCorta(d)).join("\n"), "Bolsa");
 }
 
 export function iniciarVigilante() {

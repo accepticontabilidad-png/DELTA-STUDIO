@@ -81,7 +81,7 @@ async function cargarPanel() {
         const sub = [t.cliente, t.fecha_limite ? `${fmtDia(t.fecha_limite)} ${fmtHora(t.fecha_limite)}` : null].filter(Boolean).map(esc).join(" · ");
         return `<li class="${t.prioridad === "alta" ? "alta" : ""} ${vencida ? "vencida" : ""}"><input type="checkbox" data-hecha="${t.id}" aria-label="Marcar como hecha" /><div class="cuerpo">${esc(t.titulo)}${sub ? `<span class="sub">${sub}</span>` : ""}</div></li>`;
   };
-  const sinTareas = `<li class="vacio">Nada pendiente. Impecable, señor.</li>`;
+  const sinTareas = `<li class="vacio">Nada pendiente. ¡Vas impecable!</li>`;
   $("#lista-tareas").innerHTML = p.tareas.length ? p.tareas.map(filaTarea).join("") : sinTareas;
   $("#hoy-tareas").innerHTML = p.tareas.length
     ? p.tareas.slice(0, 5).map(filaTarea).join("") + (p.tareas.length > 5 ? `<li class="vacio"><a href="#/tareas" class="ver-mas">y ${p.tareas.length - 5} más ›</a></li>` : "")
@@ -241,7 +241,7 @@ async function cargarAprobaciones() {
             ? `<div class="form-mini aprob-acciones"><input type="text" placeholder="Comentario (opcional)" maxlength="500" /><button type="button" data-resolver="${a.id}" data-decision="rechazada" class="rechazar">Rechazar</button><button type="button" data-resolver="${a.id}" data-decision="aprobada" class="aprobar">Aprobar</button></div>`
             : `<span class="chip ${a.estado}">${esc(a.estado)}</span>${a.comentario ? ` <span class="tenue">“${esc(a.comentario)}”</span>` : ""}`}
         </div></li>`).join("")
-    : `<li class="vacio">${filtroAprob === "pendiente" ? "Nada pendiente de aprobar. Todo en orden, señor." : "Sin historial todavía."}</li>`;
+    : `<li class="vacio">${filtroAprob === "pendiente" ? "Nada pendiente de aprobar. Todo en orden." : "Sin historial todavía."}</li>`;
 }
 
 document.querySelectorAll("[data-aprob]").forEach((b) => b.addEventListener("click", () => {
@@ -775,7 +775,7 @@ function burbuja(rol, texto, archivos = []) {
 async function cargarHistorial() {
   const h = await api("/historial");
   $("#conversacion").innerHTML = "";
-  if (!h.length) burbuja("assistant", "A sus órdenes, señor. Puede pedirme que agende una cita, anote una tarea o le recuerde algo.");
+  if (!h.length) burbuja("assistant", "¡Hola! Aquí estoy. Pídeme lo que quieras: agendar una cita, anotar una tarea o recordarte algo.");
   h.forEach((m) => burbuja(m.rol, m.texto, m.archivos || []));
 }
 
@@ -790,7 +790,7 @@ async function enviar(texto, canal = "app") {
   sonar("enviar");
   adjuntos = adjuntos.filter((a) => !a.id && !a.error);
   pintarAdjuntos();
-  const espera = burbuja("assistant pensando", "Procesando…");
+  const espera = burbuja("assistant pensando", "Déjame ver…");
   orbe.estado("pensando");
   try {
     const { respuesta, hizo_cambio, abrir } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
@@ -805,7 +805,7 @@ async function enviar(texto, canal = "app") {
   } catch (err) {
     sonar("error");
     espera.className = "burbuja aviso";
-    espera.textContent = "No pude completar eso: " + err.message;
+    espera.textContent = "Uy, no pude con eso: " + err.message;
     orbe.estado("reposo");
   } finally {
     ocupado = false;
@@ -1070,7 +1070,7 @@ const orbe = (() => {
   const ctx = lienzo.getContext("2d");
   let estado = "reposo";
   let energia = 0.2;
-  const textos = { reposo: "Toque para hablar", escuchando: "Escuchando", pensando: "Pensando", hablando: "Hablando" };
+  const textos = { reposo: "Toque para hablar", escuchando: "Escuchando", pensando: "Pensando…", hablando: "Hablando" };
   const colores = { reposo: [139, 115, 255], escuchando: [255, 158, 232], pensando: [183, 166, 255], hablando: [160, 135, 255] };
   let color = [...colores.reposo];
   const chispas = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
@@ -1368,7 +1368,7 @@ $("#aj-voz-eco").addEventListener("change", (e) => {
 $("#btn-voz-probar").addEventListener("click", async () => {
   const msg = $("#voz-msg");
   msg.textContent = "Probando la voz…";
-  const r = await decir("Hola, señor. Soy DELTA. Así sueno ahora.");
+  const r = await decir("¡Hola! Soy DELTA. Así sueno ahora, ¿qué te parece?");
   msg.textContent = r.natural ? "Así suena la voz natural. Si no oye nada, suba el volumen del equipo." : `No se pudo usar la voz natural${r.motivo ? ": " + r.motivo : ""}. Sonó la voz del equipo.`;
 });
 
@@ -1414,7 +1414,7 @@ $("#btn-voz-crear").addEventListener("click", async () => {
     $("#voz-crear").open = false;
     pintarVoz();
     msg.textContent = "¡Listo! Esta es la voz nueva de DELTA.";
-    decir("Hola, señor. Desde ahora le hablaré con esta voz.");
+    decir("¡Hola! Desde ahora te voy a hablar con esta voz.");
   } catch (err) {
     msg.textContent = err.message;
   } finally {
