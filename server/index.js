@@ -18,6 +18,9 @@ import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
+import * as diseno from "./diseno.js";
+import * as habilidades from "./habilidades.js";
+import * as higgsfield from "./higgsfield.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -145,6 +148,7 @@ api.get("/panel", envolver(() => {
       gmail: correo.gmailConectado(),
       gmail_disponible: correo.gmailDisponible(),
       gmail_cuenta: correo.cuentaGmail(),
+      higgsfield: higgsfield.higgsfieldDisponible(),
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
   };
@@ -235,6 +239,42 @@ api.get("/trabajos/:id", envolver((req) => {
 api.get("/aprobaciones", envolver((req) => agencia.listarAprobaciones({ estado: String(req.query.estado || "pendiente") })));
 api.post("/aprobaciones/:id", envolver((req) => agencia.resolverAprobacion(Number(req.params.id), req.body?.decision, req.body?.comentario)));
 
+// ---------- Estudio de diseño ----------
+api.get("/diseno", envolver((req) => ({
+  piezas: diseno.listarPiezas({ trabajo_id: req.query.trabajo || undefined }),
+  higgsfield: higgsfield.estado(),
+  puede_renderizar: diseno.puedeRenderizar(),
+  habilidades: habilidades.activas().length,
+})));
+api.delete("/diseno/piezas/:id", envolver((req) => diseno.borrarPieza(req.params.id)));
+api.get("/diseno/piezas/:id/zip", (req, res) => {
+  try {
+    const z = diseno.zipDePieza(req.params.id);
+    res.set({ "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${z.nombre}"`, "Cache-Control": "private, no-store" }).send(z.datos);
+  } catch (e) { res.status(404).json({ error: e.message }); }
+});
+api.get("/diseno/piezas/:id/:archivo", (req, res) => {
+  const a = diseno.archivoDePieza(req.params.id, req.params.archivo);
+  if (!a) return res.status(404).json({ error: "No existe" });
+  if (req.query.descargar) res.attachment(`${a.pieza.titulo.replace(/[^\w\sáéíóúñü-]/gi, "").trim() || "diseno"}-${req.params.archivo}`);
+  res.set({ "Content-Type": a.tipo, "Cache-Control": "private, max-age=300" }).sendFile(path.resolve(a.ruta));
+});
+api.get("/diseno/medios/:id", (req, res) => {
+  const a = diseno.archivoDeMedio(req.params.id);
+  if (!a) return res.status(404).json({ error: "No existe" });
+  res.set({ "Content-Type": a.tipo, "Cache-Control": "private, max-age=3600" }).sendFile(path.resolve(a.ruta));
+});
+
+// ---------- Habilidades (las skills del dueño) ----------
+api.get("/habilidades", envolver(() => habilidades.listar()));
+api.post(
+  "/habilidades",
+  express.raw({ type: () => true, limit: 15 * 1024 * 1024 }),
+  envolver((req) => habilidades.importar(req.body, decodeURIComponent(String(req.get("x-nombre") || "")))),
+);
+api.patch("/habilidades/:nombre", envolver((req) => habilidades.cambiar(req.params.nombre, Boolean(req.body?.activa))));
+api.delete("/habilidades/:nombre", envolver((req) => habilidades.borrar(req.params.nombre)));
+
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));
 api.post("/salir-de-todo", (_req, res) => {
@@ -256,7 +296,7 @@ api.get("/vivo", (req, res) => {
 // Errores al recibir datos (por ejemplo, un archivo demasiado grande).
 api.use((err, _req, res, _next) => {
   const grande = err?.type === "entity.too.large";
-  res.status(grande ? 413 : 400).json({ error: grande ? "El archivo pesa más de 10 MB." : "No se pudo recibir eso." });
+  res.status(grande ? 413 : 400).json({ error: grande ? "El archivo es demasiado grande." : "No se pudo recibir eso." });
 });
 
 app.use("/api", api);
