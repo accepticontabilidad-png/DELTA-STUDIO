@@ -12,6 +12,8 @@ import { llavesPush, guardarSuscripcion } from "./push.js";
 import { zonaHoraria } from "./tiempo.js";
 import { guardarArchivo, infoArchivo, MAX_BYTES, MAX_POR_MENSAJE } from "./archivos.js";
 import * as seg from "./seguridad.js";
+import * as correo from "./gmail.js";
+import * as mercados from "./mercados.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -58,6 +60,19 @@ app.post("/api/salir", (req, res) => {
 // ---------- WhatsApp ----------
 app.get("/webhook/whatsapp", verificarWebhook);
 app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta));
+
+// ---------- Gmail: Google regresa aquí después de que el usuario da permiso ----------
+// (Llega desde Google, así que no trae la cookie; se valida con el "estado" de un solo uso.)
+app.get("/oauth/google", async (req, res) => {
+  try {
+    const cuenta = await correo.terminarConexion(req);
+    avisar(`Gmail conectado${cuenta ? ` (${cuenta})` : ""}. Ya puedo leer y ordenar su correo, señor.`, "Correo").catch(() => {});
+    res.redirect("/?gmail=ok");
+  } catch (e) {
+    console.error("[gmail]", e.message);
+    res.redirect("/?gmail=error&motivo=" + encodeURIComponent(e.message.slice(0, 200)));
+  }
+});
 
 // ---------- API del panel ----------
 const api = express.Router();
@@ -121,6 +136,9 @@ api.get("/panel", envolver(() => {
       whatsapp: whatsappConfigurado(),
       push: db.prepare("SELECT COUNT(*) n FROM suscripciones_push").get().n > 0,
       calendario: true,
+      gmail: correo.gmailConectado(),
+      gmail_disponible: correo.gmailDisponible(),
+      gmail_cuenta: correo.cuentaGmail(),
     },
   };
 }));
@@ -145,6 +163,10 @@ api.post("/ajustes", envolver((req) => {
   }
   return { ok: true };
 }));
+
+api.get("/gmail/conectar", envolver((req) => ({ url: correo.urlConexion(req) })));
+api.post("/gmail/desconectar", envolver(() => { correo.desconectar(); return { ok: true }; }));
+api.get("/mercados", envolver(() => mercados.verMercados(null, "dia")));
 
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));

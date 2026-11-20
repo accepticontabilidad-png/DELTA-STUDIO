@@ -6,6 +6,9 @@ import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
 import { bloquesDeArchivo, infoArchivo, listarArchivos } from "./archivos.js";
 import { ahoraLocalISO, zonaHoraria, utcALocal } from "./tiempo.js";
+import * as correo from "./gmail.js";
+import * as mercados from "./mercados.js";
+import * as noticias from "./noticias.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
 const ESFUERZO = process.env.DELTA_ESFUERZO || "medium";
@@ -26,16 +29,21 @@ Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. En la PC se ven tres columnas: Agenda a la izquierda, tú (el orbe y la conversación) al centro y Tareas a la derecha. En el celular son tres pestañas abajo: Agenda, DELTA y Tareas.
 - Pantalla Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano. En la PC, el botón "Ampliar" pone el calendario en toda la pantalla.
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
-- Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
-- Botón de engranaje ⚙ (arriba a la derecha): zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, empezar conversación nueva y cerrar sesión.
+- Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba. Debajo está la lista de Mercados (su lista de seguimiento de bolsa, con el cambio del día) y las Conexiones.
+- Botón de engranaje ⚙ (arriba a la derecha): zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail, empezar conversación nueva y cerrar sesión.
 - Para hablar contigo: tocar el orbe o el micrófono.
 
-Lo que puedes hacer hoy (fase 1, sus actividades). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
+Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
 - Tareas: crear, listar, completar, cambiar y borrar.
 - Calendario: agendar citas y reuniones, moverlas, consultarlas.
 - Recordatorios y avisos: programar avisos a una hora concreta, únicos o repetidos.
 - Archivos: cuando el usuario adjunte algo, léelo con cuidado y responde a lo que pide (resumir, analizar números, revisar un contrato, describir una foto, sacar fechas para agendar…). Si no dice qué quiere, da un resumen breve y pregunta qué necesita. Si te pregunta por un archivo anterior que ya no tienes a la vista, usa leer_archivo con el id que aparece en "[Adjuntó: …]".
 - Memoria: cuando el usuario te cuente algo que valga la pena recordar a futuro (nombres de clientes, preferencias, datos de su negocio), guárdalo con guardar_memoria.
+- Correo (Gmail): buscar y leer sus correos, resumirlos, separar lo urgente, sacar citas y tareas de ellos, y escribir borradores de respuesta. Para buscar usa la sintaxis de Gmail (is:unread, from:, newer_than:2d, has:attachment…). Si Gmail no está conectado, dile que lo conecte en Ajustes ⚙ → "Conectar Gmail".
+- Enviar correos: NUNCA envíes sin permiso. Primero crea el borrador con crear_borrador y muéstrale al usuario a quién va, el asunto y el texto. Solo usa enviar_borrador cuando, en un mensaje posterior, el usuario diga claramente que lo envíes. El sistema bloquea enviar un borrador creado en el mismo turno.
+- Bolsa y mercados: cotizaciones de su lista de seguimiento (índices, acciones, dólar, cripto), cómo van en el día, el mes o el año, y alertas cuando algo se mueve fuerte. Puede agregar o quitar símbolos de su lista; si no sabes el símbolo, búscalo con buscar_simbolo. Las acciones de la Bolsa Mexicana terminan en .MX (ej. WALMEX.MX).
+- Ideas de inversión: cuando pida ideas, usa analizar_accion y noticias para dar un análisis informativo (tendencia, rango del año, noticias que la mueven, riesgos). Presenta siempre ventajas y riesgos, recuerda en una frase corta que es información y no asesoría financiera, y sugiere diversificar. Nunca prometas rendimientos. No puedes comprar ni vender nada.
+- Noticias: titulares del día por tema (sus temas guardados o cualquier otro). Puede agregar o quitar temas. Al resumir noticias, menciona la fuente.
 
 Reglas:
 - Honestidad ante todo. Solo puedes decir que hiciste algo (agendar, anotar, programar, mover, completar, borrar, guardar) si llamaste la herramienta en ESTE turno y respondió bien. Si una herramienta falla, dilo tal cual.
@@ -254,11 +262,143 @@ herramientasBase.push(
     run: async () => JSON.stringify(listarArchivos(20)),
   }),
 );
+
+// ---------- Correo, bolsa y noticias ----------
+const json = (x) => JSON.stringify(x);
+herramientasBase.push(
+  betaTool({
+    name: "buscar_correos",
+    description: "Busca correos en Gmail con la sintaxis de búsqueda de Gmail. Devuelve remitente, asunto, fecha, vista previa y si está sin leer. Por defecto: bandeja de entrada de los últimos 2 días.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        consulta: { type: "string", description: "Ej. 'is:unread newer_than:1d', 'from:cliente@acme.com', 'subject:factura'" },
+        max: { type: "integer", description: "Máximo de correos (1 a 25, por defecto 10)" },
+      },
+      additionalProperties: false,
+    },
+    run: async (i) => json(await correo.buscarCorreos(i)),
+  }),
+  betaTool({
+    name: "leer_correo",
+    description: "Abre un correo completo por su id (texto y nombres de adjuntos).",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
+    run: async ({ id }) => json(await correo.leerCorreo(id)),
+  }),
+  betaTool({
+    name: "crear_borrador",
+    description: "Guarda un borrador en Gmail (NO lo envía). Para responder un correo pasa responder_a con su id: se toma el destinatario y el asunto del original si no los das.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        para: { type: "string", description: "Correo(s) del destinatario, separados por coma" },
+        cc: { type: "string" },
+        asunto: { type: "string" },
+        cuerpo: { type: "string", description: "Texto del correo, ya firmado" },
+        responder_a: { type: "string", description: "Id del correo que se responde" },
+      },
+      required: ["cuerpo"],
+      additionalProperties: false,
+    },
+    run: async (i) => {
+      const r = await correo.crearBorrador(i);
+      registro.getStore()?.borradores?.add(r.borrador_id);
+      return json(r);
+    },
+  }),
+  betaTool({
+    name: "enviar_borrador",
+    description: "Envía un borrador de Gmail. Solo cuando el usuario ya vio el borrador y pidió enviarlo de forma explícita.",
+    inputSchema: { type: "object", properties: { borrador_id: { type: "string" } }, required: ["borrador_id"], additionalProperties: false },
+    run: async ({ borrador_id }) => {
+      if (registro.getStore()?.borradores?.has(borrador_id)) {
+        throw new Error("Bloqueado: este borrador se creó en este mismo turno. Muéstreselo al usuario y espere a que confirme el envío.");
+      }
+      return json(await correo.enviarBorrador(borrador_id));
+    },
+  }),
+  betaTool({
+    name: "ver_mercados",
+    description: "Cotizaciones actuales. Sin símbolos: toda su lista de seguimiento. Periodo para el cambio: dia, semana, mes, 3meses, anio o 5anios.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        simbolos: { type: "array", items: { type: "string" } },
+        periodo: { type: "string", enum: ["dia", "semana", "mes", "3meses", "anio", "5anios"] },
+      },
+      additionalProperties: false,
+    },
+    run: async ({ simbolos, periodo }) => json(await mercados.verMercados(simbolos, periodo)),
+  }),
+  betaTool({
+    name: "analizar_accion",
+    description: "Datos para analizar una acción o activo: precio, cambio en el año y en 3 meses, rango de 52 semanas y noticias de la última semana.",
+    inputSchema: {
+      type: "object",
+      properties: { simbolo: { type: "string" }, nombre: { type: "string", description: "Nombre de la empresa, para buscar noticias" } },
+      required: ["simbolo"],
+      additionalProperties: false,
+    },
+    run: async ({ simbolo, nombre }) => {
+      const [anio, tres] = await Promise.all([mercados.cotizacion(simbolo, "anio"), mercados.cotizacion(simbolo, "3meses")]);
+      const titulares = await noticias.noticias(`${nombre || anio.nombre} acciones`, 6, 7).catch((e) => [{ error: e.message }]);
+      return json({ ...anio, cambio_3meses_pct: tres.cambio_periodo_pct, cambio_anio_pct: anio.cambio_periodo_pct, noticias: titulares });
+    },
+  }),
+  betaTool({
+    name: "buscar_simbolo",
+    description: "Busca el símbolo bursátil de una empresa, índice o moneda por su nombre.",
+    inputSchema: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"], additionalProperties: false },
+    run: async ({ texto }) => json(await mercados.buscarSimbolo(texto)),
+  }),
+  betaTool({
+    name: "lista_mercados",
+    description: "Ve, agrega o quita símbolos de la lista de seguimiento de bolsa del usuario.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accion: { type: "string", enum: ["ver", "agregar", "quitar"] },
+        simbolo: { type: "string" },
+        nombre: { type: "string" },
+      },
+      required: ["accion"],
+      additionalProperties: false,
+    },
+    run: ({ accion, simbolo, nombre }) =>
+      json(accion === "agregar" ? mercados.agregar(simbolo, nombre) : accion === "quitar" ? mercados.quitar(simbolo) : mercados.lista()),
+  }),
+  betaTool({
+    name: "noticias",
+    description: "Titulares recientes. Con tema: de ese tema. Sin tema: de todos sus temas guardados.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tema: { type: "string" },
+        max: { type: "integer", description: "Noticias por tema (por defecto 5)" },
+        dias: { type: "integer", description: "Antigüedad máxima en días (1 a 7, por defecto 1)" },
+      },
+      additionalProperties: false,
+    },
+    run: async ({ tema, max, dias }) => json(tema ? await noticias.noticias(tema, max || 5, dias || 1) : await noticias.titulares(max || 3)),
+  }),
+  betaTool({
+    name: "temas_noticias",
+    description: "Ve, agrega o quita temas de noticias que le interesan al usuario.",
+    inputSchema: {
+      type: "object",
+      properties: { accion: { type: "string", enum: ["ver", "agregar", "quitar"] }, tema: { type: "string" } },
+      required: ["accion"],
+      additionalProperties: false,
+    },
+    run: ({ accion, tema }) => json(accion === "agregar" ? noticias.agregarTema(tema) : accion === "quitar" ? noticias.quitarTema(tema) : noticias.temas()),
+  }),
+);
 const herramientas = herramientasBase.map(conRegistro);
 
 const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_tarea", "actualizar_tarea", "borrar_tarea", "crear_evento", "mover_evento", "borrar_evento",
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
+  "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
 ]);
 
 /**
@@ -266,7 +406,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
  * Se usa para detectar cuando el modelo dice "listo, agendé..." sin haber llamado ninguna herramienta.
  */
 export function afirmaAccion(texto) {
-  return /\b(agend[ée]|anot[ée]|apunt[ée]|cre[ée]|program[ée]|cancel[ée]|borr[ée]|elimin[ée]|mov[íi]|reprogram[ée]|marqu[ée]|complet[ée]|guard[ée]|actualic[ée]|cambi[ée]|registr[ée]|qued[óo] (agendad|anotad|programad|guardad|registrad|cancelad|movid)|ya (est[áa]|qued[óo]) (agendad|anotad|programad|guardad|registrad|cancelad|movid))/i.test(texto);
+  return /\b(agend[ée]|envi[ée]|anot[ée]|apunt[ée]|cre[ée]|program[ée]|cancel[ée]|borr[ée]|elimin[ée]|mov[íi]|reprogram[ée]|marqu[ée]|complet[ée]|guard[ée]|actualic[ée]|cambi[ée]|registr[ée]|qued[óo] (agendad|anotad|programad|guardad|registrad|cancelad|movid)|ya (est[áa]|qued[óo]) (agendad|anotad|programad|guardad|registrad|cancelad|movid))/i.test(texto);
 }
 
 function resumirAcciones(lista) {
@@ -386,6 +526,7 @@ export async function hablarConDelta(texto, canal = "app", archivos = []) {
   ];
 
   const acciones = [];
+  acciones.borradores = new Set(); // borradores creados en este turno: no se pueden enviar todavía
   let respuesta = await registro.run(acciones, () => pensar(mensajes));
 
   // Verificación: si afirma haber cambiado algo pero no llamó ninguna herramienta que cambie datos,

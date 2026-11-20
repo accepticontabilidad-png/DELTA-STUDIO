@@ -279,3 +279,9 @@ input[type=date], select { width: 100%; padding: 11px 14px; border-radius: 10px;
 .burbuja-archivos { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .burbuja-archivos span { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(8,5,24,.45); border: 1px solid var(--borde); }
 .form-chat .clip { flex-shrink: 0; }
+
+/* Mercados */
+.mercados li { align-items: center; padding: 7px 10px; }
+.mercados b { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--tenue); }
+.mercados b.sube { color: var(--verde); }
+.mercados b.baja { color: var(--rojo); }

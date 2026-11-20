@@ -79,7 +79,9 @@ async function cargarPanel() {
 
   const c = p.conexiones;
   const filas = [
-    ["Cerebro (Claude)", c.cerebro], ["Calendario de DELTA", c.calendario], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
+    ["Cerebro (Claude)", c.cerebro], ["Calendario de DELTA", c.calendario],
+    [c.gmail ? `Gmail${c.gmail_cuenta ? ` (${c.gmail_cuenta})` : ""}` : "Gmail: conéctelo en ⚙ Ajustes", c.gmail],
+    ["Bolsa y noticias", true], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
   ].map(([n, on]) => `<li class="${on ? "on" : ""}"><span class="punto"></span>${n}</li>`);
   filas.push(`<li class="pronto"><span class="punto"></span>Cuentas de clientes (Meta, Instagram, TikTok): próximamente</li>`);
   $("#lista-conexiones").innerHTML = filas.join("");
@@ -88,8 +90,50 @@ async function cargarPanel() {
     ? p.avisos.map((a) => `<li><div class="cuerpo">${esc(a.texto)}<span class="sub">${fmtDia(a.fecha)} ${fmtHora(a.fecha)}</span></div></li>`).join("")
     : `<li class="vacio">Sin avisos todavía.</li>`;
 
+  gmailConectado = c.gmail;
+  $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
+  $("#btn-gmail").hidden = !c.gmail_disponible && !c.gmail;
+  cargarMercados().catch(() => {});
+
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
+}
+
+let gmailConectado = false;
+let mercadosCargados = 0;
+async function cargarMercados() {
+  if (Date.now() - mercadosCargados < 5 * 60000) return; // cada 5 min basta
+  mercadosCargados = Date.now();
+  const datos = await api("/mercados");
+  const ok = datos.filter((d) => !d.error);
+  $("#lista-mercados").innerHTML = ok.length
+    ? ok.map((d) => {
+        const c = d.cambio_dia_pct;
+        const clase = c > 0 ? "sube" : c < 0 ? "baja" : "";
+        return `<li><div class="cuerpo">${esc(d.nombre)}<span class="sub">${esc(d.precio?.toLocaleString("es-MX") ?? "")} ${esc(d.moneda)}</span></div><b class="${clase}">${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%</b></li>`;
+      }).join("")
+    : `<li class="vacio">Sin datos de bolsa por ahora.</li>`;
+}
+
+$("#btn-gmail").addEventListener("click", async () => {
+  try {
+    if (gmailConectado) {
+      await api("/gmail/desconectar", { method: "POST" });
+      $("#aj-msg").textContent = "Gmail desconectado.";
+      return cargarPanel();
+    }
+    const { url } = await api("/gmail/conectar");
+    location.href = url;
+  } catch (err) { $("#aj-msg").textContent = err.message; }
+});
+
+// Regreso de Google después de conectar Gmail
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get("gmail")) {
+    history.replaceState(null, "", "/");
+    setTimeout(() => burbuja("aviso", q.get("gmail") === "ok" ? "Gmail conectado. Pregúnteme por su correo cuando guste." : `No se pudo conectar Gmail: ${q.get("motivo") || "intente de nuevo"}`), 800);
+  }
 }
 
 document.addEventListener("click", async (e) => {
