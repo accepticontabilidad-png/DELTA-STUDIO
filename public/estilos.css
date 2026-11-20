@@ -346,6 +346,10 @@ input[type=date], select { width: 100%; padding: 11px 14px; border-radius: 10px;
 @keyframes arr-linea { to { width: min(60vw, 520px); } }
 @media (prefers-reduced-motion: reduce) { .arranque.animando * { animation-duration: .01s !important; animation-delay: 0s !important; } }
 
+/* Voz de DELTA (Ajustes) */
+.voz-crear { margin: 8px 0 4px; border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; }
+.voz-crear summary { cursor: pointer; font-size: 13px; color: var(--texto); }
+.voz-crear p { font-size: 12px; margin: 8px 0; }
 /* ---------- Agencia ---------- */
 .badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--dorado); color: #1a0b24; font-size: 11px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 10px rgba(255,158,232,.6); }
 textarea { width: 100%; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--borde); background: rgba(6, 4, 20, .7); color: var(--texto); font: inherit; resize: vertical; outline: none; }

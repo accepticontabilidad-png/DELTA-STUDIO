@@ -301,6 +301,21 @@
       <label class="fila"><input id="aj-voz" type="checkbox" /> Responder en voz alta</label>
       <label class="fila"><input id="aj-sonidos" type="checkbox" /> Sonidos de DELTA (al escuchar, responder, agendar y avisar)</label>
       <label class="fila"><input id="aj-manos" type="checkbox" /> Manos libres (diga "Delta…")</label>
+      <h3 class="aj-sub">Voz de DELTA</h3>
+      <p id="voz-estado" class="tenue"></p>
+      <label class="fila" id="voz-fila-natural" hidden><input id="aj-voz-natural" type="checkbox" /> Usar la voz natural (si se apaga, usa la voz del equipo)</label>
+      <div class="botones" id="voz-botones" hidden>
+        <button type="button" id="btn-voz-probar">Probar voz</button>
+        <button type="button" id="btn-voz-borrar">Borrar esta voz</button>
+      </div>
+      <details id="voz-crear" class="voz-crear" hidden>
+        <summary>Crear o cambiar la voz</summary>
+        <p class="tenue">Suba de 1 a 8 grabaciones de la persona (sirven las notas de voz de WhatsApp). Lo ideal es de 1 a 3 minutos en total, hablando claro, sin música ni ruido.</p>
+        <label>Grabaciones <input id="voz-archivos" type="file" accept="audio/*,.ogg,.opus,.m4a,.mp3,.wav" multiple /></label>
+        <label>Nombre de la voz <input id="voz-nombre" type="text" maxlength="60" placeholder="Ej. Voz de Ana" /></label>
+        <label class="fila"><input id="voz-permiso" type="checkbox" /> La dueña de esta voz me dio su permiso para usarla</label>
+        <div class="botones"><button type="button" id="btn-voz-crear" class="primario">Crear voz</button></div>
+      </details>
       <div class="botones">
         <button type="button" id="btn-push">Activar avisos en este equipo</button>
         <button type="button" id="btn-prueba">Enviar aviso de prueba</button>

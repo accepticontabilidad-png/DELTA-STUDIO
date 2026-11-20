@@ -107,6 +107,7 @@ async function cargarPanel() {
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
   $("#btn-gmail").hidden = !c.gmail_disponible && !c.gmail;
 
+  if (p.voz) { vozNatural = p.voz; pintarVoz(); }
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
 }
@@ -807,18 +808,79 @@ function vozEspanol() {
     || voces.find((v) => /natural|neural|google/i.test(v.name)) || voces[0];
 }
 
-function hablar(texto) {
-  if (!("speechSynthesis" in window)) return orbe.estado("reposo");
+function hablarNavegador(texto, { alEmpezar, alTerminar, voz = vozEspanol, rate = 1.03, pitch = 0.95 } = {}) {
+  if (!("speechSynthesis" in window)) return alTerminar?.();
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(texto.replace(/[•*_#]/g, ""));
-  const v = vozEspanol();
+  const v = voz();
   if (v) u.voice = v;
   u.lang = v?.lang || "es-MX";
-  u.rate = 1.03;
-  u.pitch = 0.95;
-  u.onstart = () => orbe.estado("hablando");
-  u.onend = () => { orbe.estado("reposo"); if (manosLibres) escuchar(); };
+  u.rate = rate;
+  u.pitch = pitch;
+  u.onstart = () => alEmpezar?.();
+  u.onend = () => alTerminar?.();
   speechSynthesis.speak(u);
+}
+
+// ---------------- Voz natural (voz clonada en el servidor) ----------------
+// Si está configurada, DELTA habla con esa voz; si falla, usa la del navegador sin que se note.
+let vozNatural = { disponible: false, activa: false, voz: null };
+const reproductor = new Audio();
+let urlAudio = null;
+let turnoVoz = 0;
+const SILENCIO = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAAAAA//NwwAAAAAAAAAAAAEluZm8AAAAPAAAABgAAAykAWlpaWlpaWlpaWlpaWlpaWnt7e3t7e3t7e3t7e3t7e3t7nJycnJycnJycnJycnJycnL29vb29vb29vb29vb29vb293t7e3t7e3t7e3t7e3t7e3t7/////////////////////AAAAAExhdmM2MC4zMQAAAAAAAAAAAAAAACQCowAAAAAAAAMpso+sIAAAAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQsRbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NCxKMAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NAxKQAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80LEowAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=";
+// iPhone y Safari solo dejan sonar audio después de un toque: en el primero se "despierta" el reproductor.
+function despertarReproductor() {
+  removeEventListener("pointerdown", despertarReproductor, true);
+  removeEventListener("keydown", despertarReproductor, true);
+  if (!reproductor.src || reproductor.src === SILENCIO) { reproductor.src = SILENCIO; reproductor.play().catch(() => {}); }
+}
+addEventListener("pointerdown", despertarReproductor, true);
+addEventListener("keydown", despertarReproductor, true);
+
+const usarVozNatural = () => vozNatural.activa;
+
+function callarVoz() {
+  turnoVoz++;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  reproductor.onended = reproductor.onplaying = null;
+  reproductor.pause();
+}
+
+async function decir(texto, opciones = {}) {
+  callarVoz();
+  const turno = turnoVoz;
+  if (usarVozNatural()) {
+    try {
+      const r = await fetch("/api/voz/hablar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Delta": "1" },
+        body: JSON.stringify({ texto }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "sin voz");
+      const audio = await r.blob();
+      if (turno !== turnoVoz) return; // mientras tanto se pidió callar o decir otra cosa
+      if (urlAudio) URL.revokeObjectURL(urlAudio);
+      urlAudio = URL.createObjectURL(audio);
+      reproductor.src = urlAudio;
+      reproductor.onplaying = () => opciones.alEmpezar?.();
+      reproductor.onended = () => opciones.alTerminar?.();
+      await reproductor.play();
+      return;
+    } catch (e) {
+      console.warn("[voz natural]", e.message);
+      if (turno !== turnoVoz) return;
+    }
+  }
+  hablarNavegador(texto, opciones);
+}
+
+function hablar(texto) {
+  decir(texto, {
+    alEmpezar: () => orbe.estado("hablando"),
+    alTerminar: () => { orbe.estado("reposo"); if (manosLibres) escuchar(); },
+  });
 }
 
 function escuchar() {
@@ -827,7 +889,7 @@ function escuchar() {
     return;
   }
   if (escuchando) { reconocedor?.stop(); return; }
-  speechSynthesis?.cancel();
+  callarVoz();
   reconocedor = new Reconocimiento();
   reconocedor.lang = "es-MX";
   reconocedor.interimResults = true;
@@ -1084,6 +1146,82 @@ $("#aj-guardar").addEventListener("click", async () => {
   if (manosLibres && !escuchando) escuchar();
 });
 
+// ---------------- Ajustes: voz de DELTA ----------------
+let borrarVozPendiente = false;
+function pintarVoz() {
+  const v = vozNatural;
+  $("#voz-estado").textContent = !v.disponible
+    ? "Ahora DELTA usa la voz del equipo. Para una voz natural falta poner la clave de ElevenLabs en Railway."
+    : !v.voz
+      ? "Todavía no hay una voz natural. Créela aquí abajo con grabaciones de la persona."
+      : `Voz actual: ${v.voz.nombre}.`;
+  $("#voz-fila-natural").hidden = !v.voz || !v.disponible;
+  $("#voz-botones").hidden = !v.voz || !v.disponible;
+  $("#btn-voz-borrar").hidden = v.voz?.desde !== "app";
+  $("#aj-voz-natural").checked = v.encendida;
+  $("#voz-crear").hidden = !v.disponible;
+  if (v.disponible && !v.voz) $("#voz-crear").open = true;
+  borrarVozPendiente = false;
+  $("#btn-voz-borrar").textContent = "Borrar esta voz";
+}
+
+$("#aj-voz-natural").addEventListener("change", async (e) => {
+  try { vozNatural = await api("/voz/encender", { method: "POST", body: { activa: e.target.checked } }); pintarVoz(); }
+  catch (err) { $("#aj-msg").textContent = err.message; }
+});
+
+$("#btn-voz-probar").addEventListener("click", () => decir("Hola, señor. Soy DELTA. Así sueno ahora."));
+
+$("#btn-voz-borrar").addEventListener("click", async () => {
+  if (!borrarVozPendiente) {
+    borrarVozPendiente = true;
+    $("#btn-voz-borrar").textContent = "¿Seguro? Toque otra vez para borrarla";
+    return;
+  }
+  $("#aj-msg").textContent = "Borrando la voz…";
+  try {
+    vozNatural = await api("/voz", { method: "DELETE" });
+    pintarVoz();
+    $("#aj-msg").textContent = "Voz borrada. DELTA vuelve a la voz del equipo.";
+  } catch (err) { $("#aj-msg").textContent = err.message; }
+});
+
+$("#btn-voz-crear").addEventListener("click", async () => {
+  const msg = $("#aj-msg");
+  const archivos = [...$("#voz-archivos").files];
+  if (!archivos.length) { msg.textContent = "Elija al menos una grabación."; return; }
+  if (archivos.length > 8) { msg.textContent = "Máximo 8 grabaciones."; return; }
+  if (!$("#voz-permiso").checked) { msg.textContent = "Confirme que la dueña de la voz dio su permiso."; return; }
+  const boton = $("#btn-voz-crear");
+  boton.disabled = true;
+  try {
+    await api("/voz/muestras", { method: "DELETE" });
+    for (const [i, a] of archivos.entries()) {
+      msg.textContent = `Subiendo grabación ${i + 1} de ${archivos.length}…`;
+      const r = await fetch("/api/voz/muestras", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/octet-stream", "X-Delta": "1" },
+        body: a,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${a.name}: ${d.error || "no se pudo subir"}`);
+    }
+    msg.textContent = "Creando la voz… (tarda unos segundos)";
+    vozNatural = await api("/voz/crear", { method: "POST", body: { nombre: $("#voz-nombre").value, permiso: true } });
+    $("#voz-archivos").value = "";
+    $("#voz-permiso").checked = false;
+    $("#voz-crear").open = false;
+    pintarVoz();
+    msg.textContent = "¡Listo! Esta es la voz nueva de DELTA.";
+    decir("Hola, señor. Desde ahora le hablaré con esta voz.");
+  } catch (err) {
+    msg.textContent = err.message;
+  } finally {
+    boton.disabled = false;
+  }
+});
+
 // ---------------- Arranque: DELTA en grande, sonido y bienvenida ----------------
 function vozMujer() {
   const voces = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("es"));
@@ -1094,15 +1232,7 @@ function vozMujer() {
 }
 
 function bienvenida() {
-  if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance("Bienvenido, señor.");
-  const v = vozMujer();
-  if (v) u.voice = v;
-  u.lang = v?.lang || "es-MX";
-  u.rate = 0.9;
-  u.pitch = 1.05;
-  speechSynthesis.speak(u);
+  decir("Bienvenido, señor.", { voz: vozMujer, rate: 0.9, pitch: 1.05 });
 }
 
 function arranque(conToque) {
@@ -1134,11 +1264,11 @@ function arranque(conToque) {
       reloj.push(setTimeout(terminar, conSonido ? 4300 : 2700));
     };
     const tecla = (e) => {
-      if (e.key === "Escape") { speechSynthesis?.cancel(); terminar(); }
+      if (e.key === "Escape") { callarVoz(); terminar(); }
       else if (el.classList.contains("esperando")) empezar();
     };
     addEventListener("keydown", tecla);
-    $("#arr-saltar").onclick = (e) => { e.stopPropagation(); if ("speechSynthesis" in window) speechSynthesis.cancel(); terminar(); };
+    $("#arr-saltar").onclick = (e) => { e.stopPropagation(); callarVoz(); terminar(); };
     el.hidden = false;
     // Los navegadores no dejan sonar nada hasta que la persona toca la pantalla.
     if (conSonido && !conToque) {
