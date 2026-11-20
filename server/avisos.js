@@ -9,6 +9,11 @@ import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 
 const oyentes = new Set(); // pantallas abiertas de la app (tiempo real)
+/** Manda un evento a las pantallas abiertas (sin notificación), p. ej. para refrescar la agencia. */
+export function avisarPantalla(evento) {
+  for (const fn of oyentes) try { fn(evento); } catch {}
+}
+
 export function suscribirPantalla(fn) {
   oyentes.add(fn);
   return () => oyentes.delete(fn);

@@ -60,9 +60,9 @@
         <a href="#/correo" class="menu-item" data-ir="correo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Correo</span></a>
         <a href="#/mercados" class="menu-item" data-ir="mercados"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Mercados y noticias</span></a>
         <span class="menu-grupo">Agencia</span>
-        <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Tablero</span><small class="pronto-tag">Pronto</small></a>
-        <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span><small class="pronto-tag">Pronto</small></a>
-        <a href="#/aprobaciones" class="menu-item" data-ir="aprobaciones"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Aprobaciones</span><small class="pronto-tag">Pronto</small></a>
+        <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Tablero</span></a>
+        <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
+        <a href="#/aprobaciones" class="menu-item" data-ir="aprobaciones"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Aprobaciones</span><small id="badge-aprob" class="badge" hidden></small></a>
       </nav>
       <div id="menu-fondo" class="menu-fondo" hidden></div>
       <div class="secciones">
@@ -160,33 +160,44 @@
         </div>
       </section>
 
-      <section class="seccion panel" data-seccion="agencia">
-        <h2>Tablero de la agencia</h2>
-        <div class="pronto-caja">
-          <p>Aquí verá de un vistazo cómo va su agencia:</p>
-          <ul><li>Clientes activos y sus proyectos</li><li>Entregas de la semana</li><li>Alertas de cada departamento</li><li>Quién le debe y cuánto</li></ul>
-          <p class="tenue">Llega en la siguiente fase del plan.</p>
+      <section class="seccion agencia" data-seccion="agencia">
+        <div class="kpis" id="ag-kpis"></div>
+        <div class="dos-col">
+          <div class="panel">
+            <div class="ag-cabeza">
+              <h2>Clientes</h2>
+              <div class="ag-botones"><button type="button" class="ag-agregar" id="btn-nuevo-cliente">+ Cliente</button></div>
+            </div>
+            <ul id="ag-clientes" class="lista clickable"></ul>
+          </div>
+          <div class="panel">
+            <h2>Próximas entregas</h2>
+            <ul id="ag-entregas" class="lista"></ul>
+            <h3>Actividad de los departamentos</h3>
+            <ul id="ag-actividad" class="lista clickable"></ul>
+          </div>
         </div>
       </section>
 
-      <section class="seccion panel" data-seccion="departamentos">
-        <h2>Departamentos</h2>
-        <div class="pronto-caja">
-          <p>Una tarjeta por departamento con lo que hizo hoy y sus reportes:</p>
-          <ul><li>Tendencias</li><li>Cuentas y clientes</li><li>Estrategia</li><li>Creatividad y diseño</li><li>Edición de video</li><li>Contenido y redes</li><li>Medios pagados</li><li>SEO y web</li><li>Analítica</li><li>Administración y finanzas</li></ul>
-          <p class="tenue">Llega en la siguiente fase del plan.</p>
+      <section class="seccion" data-seccion="departamentos">
+        <div class="panel cabeza-seccion">
+          <h2>Departamentos</h2>
+          <p class="tenue">Cada departamento es un especialista con IA. Encárgueles algo aquí o pídaselo a DELTA de viva voz; trabajan en segundo plano y le avisan al terminar. Lo que tenga que salir de la agencia o cueste dinero llega a Aprobaciones.</p>
         </div>
+        <div id="deptos" class="deptos"></div>
       </section>
 
       <section class="seccion panel" data-seccion="aprobaciones">
-        <h2>Aprobaciones</h2>
-        <div class="pronto-caja">
-          <p>Lo que espera su sí o no, con un toque:</p>
-          <ul><li>Publicaciones listas para salir</li><li>Correos y mensajes a clientes</li><li>Cambios de presupuesto en anuncios</li><li>Facturas por emitir</li></ul>
-          <p class="tenue">Llega en la siguiente fase del plan.</p>
+        <div class="ag-cabeza">
+          <h2>Aprobaciones</h2>
+          <div class="segmento" role="tablist">
+            <button type="button" data-aprob="pendiente" class="activa">Pendientes</button>
+            <button type="button" data-aprob="todas">Historial</button>
+          </div>
         </div>
+        <p class="tenue">Aprobar deja la pieza lista para usarse. Todavía no se publica ni se envía sola: eso llega cuando se conecten Meta y WhatsApp.</p>
+        <ul id="lista-aprob" class="lista aprob"></ul>
       </section>
-
       </div>
     </div>
 
@@ -235,6 +246,51 @@
     <p id="det-lugar" class="det-linea" hidden></p>
     <p id="det-sub" class="det-linea tenue" hidden></p>
     <div id="det-acciones" class="botones"></div>
+  </dialog>
+
+  <dialog id="dlg-cliente" class="dialogo">
+    <form id="form-cliente" method="dialog">
+      <h2 id="cl-titulo">Nuevo cliente</h2>
+      <input type="hidden" id="cl-id" />
+      <label>Nombre <input id="cl-nombre" type="text" required maxlength="120" placeholder="Ej. Clínica Dental Sonrisa" /></label>
+      <div class="fila-2">
+        <label>Especialidad / industria <input id="cl-industria" type="text" maxlength="120" placeholder="Ej. odontología" /></label>
+        <label>Estado <select id="cl-estado"><option value="activo">Activo</option><option value="prospecto">Prospecto</option><option value="pausado">Pausado</option><option value="terminado">Terminado</option></select></label>
+      </div>
+      <div class="fila-2">
+        <label>Contacto <input id="cl-contacto" type="text" maxlength="120" /></label>
+        <label>Teléfono <input id="cl-telefono" type="text" maxlength="40" /></label>
+      </div>
+      <div class="fila-2">
+        <label>Correo <input id="cl-correo" type="text" maxlength="160" /></label>
+        <label>Pago mensual <input id="cl-presupuesto" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 15000" /></label>
+      </div>
+      <label>Servicios que le damos <input id="cl-servicios" type="text" maxlength="300" placeholder="Ej. redes, pauta en Meta, SEO" /></label>
+      <label>Sitio web y redes <input id="cl-redes" type="text" maxlength="300" /></label>
+      <label>Notas <textarea id="cl-notas" rows="3" maxlength="2000"></textarea></label>
+      <p id="cl-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="cl-cancelar">Cancelar</button>
+        <button type="submit" class="primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-ficha" class="dialogo ancho">
+    <div class="ag-cabeza"><h2 id="fi-nombre"></h2><button type="button" class="ag-agregar" id="fi-editar">Editar</button></div>
+    <div id="fi-cuerpo"></div>
+    <form class="form-mini" id="form-proyecto">
+      <input id="pr-titulo" type="text" placeholder="Nuevo proyecto o entregable…" maxlength="200" />
+      <input id="pr-entrega" type="date" title="Fecha de entrega" />
+      <button type="submit">+</button>
+    </form>
+    <div class="botones"><button type="button" id="fi-cerrar">Cerrar</button></div>
+  </dialog>
+
+  <dialog id="dlg-trabajo" class="dialogo ancho">
+    <span id="tr-meta" class="det-tipo"></span>
+    <div id="tr-cuerpo" class="md"></div>
+    <div class="botones"><button type="button" id="tr-copiar">Copiar</button><button type="button" id="tr-cerrar">Cerrar</button></div>
   </dialog>
 
   <dialog id="ajustes" class="dialogo">

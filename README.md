@@ -23,6 +23,15 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 - **Resumen de la mañana** ahora incluye correos sin leer, mercados y un titular por tema.
 - En el panel derecho hay una lista de **Mercados** que se actualiza sola.
 
+## Fase 3: la agencia
+
+- **Clientes y proyectos:** ficha de cada cliente (especialidad, contacto, servicios, pago mensual, notas) y sus proyectos con fecha de entrega. Se dan de alta en **Tablero → + Cliente** o diciéndole a DELTA "da de alta a la Clínica Sonrisa, dermatología, nos paga 15 mil al mes".
+- **10 departamentos con IA:** Tendencias, Cuentas y clientes, Estrategia, Creatividad y diseño, Edición de video, Contenido y redes, Medios pagados, SEO y web, Analítica, y Administración y finanzas. Cada uno es un agente especialista (marketing médico, cuidando la regulación de publicidad en salud). Tendencias, Estrategia, Contenido y SEO pueden investigar en internet.
+- **DELTA es el director:** "Delta, que Video me haga 3 guiones de reels para Dermatología Luz". Encarga el trabajo y sigue platicando; el departamento trabaja en segundo plano y avisa al terminar.
+- **Aprobaciones:** todo lo que tenga que salir de la agencia o cueste dinero (publicar, mandar algo a un cliente, gastar en anuncios, facturar) llega a la bandeja para aprobar o rechazar con un toque. Aprobar todavía no publica ni envía nada solo: eso llega al conectar Meta y WhatsApp.
+- **Rutina:** cada lunes a las 9:00, Tendencias prepara el reporte semanal para sus clientes activos.
+- Los departamentos usan un modelo más económico que el director (`DELTA_MODELO_DEPTOS`, por defecto `claude-sonnet-5-5`). Con `DELTA_BUSQUEDA_WEB=no` se apaga la búsqueda en internet.
+
 ## Próximas fases
 
 - Conectar las cuentas de tus clientes (Meta Ads, Instagram, TikTok, Google) y ver sus estadísticas.

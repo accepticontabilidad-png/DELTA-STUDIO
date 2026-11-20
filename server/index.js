@@ -16,6 +16,8 @@ import * as correo from "./gmail.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
+import * as agencia from "./agencia.js";
+import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -144,6 +146,7 @@ api.get("/panel", envolver(() => {
       gmail_disponible: correo.gmailDisponible(),
       gmail_cuenta: correo.cuentaGmail(),
     },
+    aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
   };
 }));
 
@@ -199,6 +202,39 @@ api.delete("/voz/muestras", envolver(() => { voz.borrarMuestras(); return voz.es
 api.post("/voz/crear", envolver((req) => voz.crearVoz({ nombre: req.body?.nombre, permiso: req.body?.permiso })));
 api.delete("/voz", envolver(() => voz.borrarVoz()));
 
+// ---------- Agencia ----------
+api.get("/agencia", envolver(() => agencia.tablero()));
+api.post("/clientes", envolver((req) => agencia.crearCliente(req.body || {})));
+api.get("/clientes/:id", envolver((req) => agencia.fichaCliente(req.params.id)));
+api.patch("/clientes/:id", envolver((req) => agencia.actualizarCliente(req.params.id, req.body || {})));
+api.post("/proyectos", envolver((req) => agencia.crearProyecto(req.body || {})));
+api.patch("/proyectos/:id", envolver((req) => agencia.actualizarProyecto(Number(req.params.id), req.body || {})));
+api.get("/departamentos", envolver(() => {
+  const trabajos = agencia.listarTrabajos({ limite: 100 });
+  return DEPARTAMENTOS.map(({ id, nombre, resumen }) => {
+    const suyos = trabajos.filter((t) => t.departamento === id);
+    return {
+      id, nombre, resumen,
+      trabajando: suyos.filter((t) => t.estado === "en_proceso").length,
+      ultimo: suyos[0] ? { fecha: suyos[0].terminado || suyos[0].creado, estado: suyos[0].estado } : null,
+      trabajos: suyos.slice(0, 6).map(({ resultado, ...t }) => ({ ...t, extracto: (resultado || "").slice(0, 200) })),
+    };
+  });
+}));
+api.post("/departamentos/:id/encargo", envolver((req) => encargar({
+  departamento: req.params.id,
+  encargo: String(req.body?.encargo || "").slice(0, 4000),
+  cliente: req.body?.cliente || undefined,
+  origen: "app",
+})));
+api.get("/trabajos/:id", envolver((req) => {
+  const t = agencia.obtenerTrabajo(req.params.id);
+  if (!t) throw new Error("No existe ese trabajo");
+  return t;
+}));
+api.get("/aprobaciones", envolver((req) => agencia.listarAprobaciones({ estado: String(req.query.estado || "pendiente") })));
+api.post("/aprobaciones/:id", envolver((req) => agencia.resolverAprobacion(Number(req.params.id), req.body?.decision, req.body?.comentario)));
+
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));
 api.post("/salir-de-todo", (_req, res) => {
@@ -233,4 +269,5 @@ const PUERTO = Number(process.env.PORT || 3000);
 app.listen(PUERTO, () => {
   console.log(`DELTA en línea: http://localhost:${PUERTO}`);
   iniciarVigilante();
+  iniciarRutinas();
 });

@@ -100,6 +100,9 @@ async function cargarPanel() {
     ? p.avisos.slice(0, 4).map((a) => `<li><div class="cuerpo">${esc(a.texto)}<span class="sub">${fmtDia(a.fecha)} ${fmtHora(a.fecha)}</span></div></li>`).join("")
     : `<li class="vacio">Sin avisos todavía.</li>`;
 
+  const n = p.aprobaciones_pendientes || 0;
+  $("#badge-aprob").hidden = !n;
+  $("#badge-aprob").textContent = n;
   gmailConectado = c.gmail;
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
   $("#btn-gmail").hidden = !c.gmail_disponible && !c.gmail;
@@ -148,6 +151,211 @@ async function cargarCorreo() {
     : `<li class="vacio">Sin correos recientes.</li>`;
 }
 
+
+// ---------------- Agencia ----------------
+const dinero = (n) => (n ? "$" + Number(n).toLocaleString("es-MX", { maximumFractionDigits: 0 }) : "–");
+const ESTADO_PROY = { pendiente: "Pendiente", en_proceso: "En proceso", revision: "En revisión", entregado: "Entregado", cancelado: "Cancelado" };
+const TIPO_APROB = { publicacion: "Publicación", mensaje_cliente: "Mensaje a cliente", correo: "Correo", presupuesto: "Gasto en anuncios", entrega: "Entrega", factura: "Factura", otro: "Otro" };
+let deptosCache = [];
+const nombreDepto = (id) => deptosCache.find((d) => d.id === id)?.nombre || id;
+
+/** Markdown sencillo (títulos, negritas, viñetas, enlaces) sobre texto ya escapado. */
+function md(texto) {
+  const lineas = esc(texto).split("\n");
+  let html = "", enLista = false;
+  for (const l of lineas) {
+    const vi = l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
+    if (vi && !enLista) { html += "<ul>"; enLista = true; }
+    if (!vi && enLista) { html += "</ul>"; enLista = false; }
+    let t = (vi ? vi[1] : l)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    const h = t.match(/^(#{1,4})\s+(.*)/);
+    if (vi) html += `<li>${t}</li>`;
+    else if (h) html += `<h4>${h[2]}</h4>`;
+    else if (/^\s*(-{3,}|_{3,})\s*$/.test(t)) html += "<hr />";
+    else if (t.trim()) html += `<p>${t}</p>`;
+  }
+  return html + (enLista ? "</ul>" : "");
+}
+
+async function cargarTablero() {
+  const t = await api("/agencia");
+  $("#ag-kpis").innerHTML = [
+    [t.clientes_activos, "clientes activos"],
+    [t.proyectos_abiertos, "proyectos abiertos"],
+    [t.entregas_semana, "entregas en 7 días", t.atrasados ? `${t.atrasados} atrasada(s)` : ""],
+    [t.aprobaciones_pendientes, "por aprobar", "", "#/aprobaciones"],
+    [dinero(t.presupuesto_mensual), "ingreso mensual"],
+  ].map(([n, l, extra, href]) => `<${href ? `a href="${href}"` : "div"} class="kpi"><b>${esc(n)}</b><span>${l}</span>${extra ? `<small class="alerta">${esc(extra)}</small>` : ""}</${href ? "a" : "div"}>`).join("");
+  $("#ag-clientes").innerHTML = t.clientes.length
+    ? t.clientes.map((c) => `<li data-ficha="${c.id}"><div class="cuerpo">${esc(c.nombre)}<span class="sub">${[c.industria, c.servicios].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</span></div><span class="chip ${c.estado}">${esc(c.estado)}</span><span class="tenue num">${c.proyectos_abiertos} proy.</span></li>`).join("")
+    : `<li class="vacio">Aún no hay clientes. Toque "+ Cliente" o dígale a DELTA: "da de alta a la Clínica Sonrisa".</li>`;
+  $("#ag-entregas").innerHTML = t.proximas_entregas.length
+    ? t.proximas_entregas.map((p) => {
+        const tarde = p.entrega && p.entrega < new Date().toISOString();
+        return `<li class="${tarde ? "vencida" : ""}"><div class="cuerpo">${esc(p.titulo)}<span class="sub">${[p.cliente, ESTADO_PROY[p.estado], p.entrega ? fmtDia(p.entrega) : "sin fecha"].filter(Boolean).map(esc).join(" · ")}</span></div></li>`;
+      }).join("")
+    : `<li class="vacio">Sin proyectos abiertos.</li>`;
+  if (!deptosCache.length) deptosCache = await api("/departamentos").catch(() => []);
+  $("#ag-actividad").innerHTML = t.actividad.length ? t.actividad.map(filaTrabajo).join("") : `<li class="vacio">Los departamentos aún no han trabajado. Encárgueles algo en Departamentos.</li>`;
+}
+
+function filaTrabajo(t) {
+  const estado = t.estado === "en_proceso" ? `<span class="chip trabajando">trabajando…</span>` : t.estado === "fallo" ? `<span class="chip fallo">falló</span>` : "";
+  return `<li data-trabajo="${t.id}"><div class="cuerpo"><b>${esc(nombreDepto(t.departamento))}</b>${t.cliente ? " · " + esc(t.cliente) : ""}<span class="sub">${esc((t.extracto || t.encargo || "").replace(/[#*]/g, "").slice(0, 140))}</span></div>${estado}<span class="tenue num">${fmtDia(t.terminado || t.creado)}</span></li>`;
+}
+
+async function cargarDeptos() {
+  const [deptos, tab] = await Promise.all([api("/departamentos"), api("/agencia")]);
+  deptosCache = deptos;
+  const opciones = `<option value="">Sin cliente</option>` + tab.clientes.filter((c) => c.estado !== "terminado").map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("");
+  // No se repinta una tarjeta mientras se escribe en ella.
+  const escribiendo = document.activeElement?.closest?.(".depto")?.dataset.depto;
+  const viejas = Object.fromEntries([...document.querySelectorAll(".depto")].map((x) => [x.dataset.depto, x]));
+  $("#deptos").innerHTML = deptos.map((d) => {
+    if (d.id === escribiendo && viejas[d.id]) return viejas[d.id].outerHTML;
+    return `<article class="depto panel" data-depto="${d.id}">
+      <header><h3>${esc(d.nombre)}</h3>${d.trabajando ? `<span class="chip trabajando">trabajando…</span>` : ""}</header>
+      <p class="tenue">${esc(d.resumen)}</p>
+      <ul class="lista clickable">${d.trabajos.length ? d.trabajos.slice(0, 3).map(filaTrabajo).join("") : `<li class="vacio">Sin trabajos todavía.</li>`}</ul>
+      <form class="encargo" data-encargo="${d.id}">
+        <textarea rows="2" maxlength="4000" placeholder="¿Qué le encarga a ${esc(d.nombre)}?"></textarea>
+        <div class="form-mini"><select>${opciones}</select><button type="submit">Encargar</button></div>
+      </form>
+    </article>`;
+  }).join("");
+}
+
+let filtroAprob = "pendiente";
+async function cargarAprobaciones() {
+  if (!deptosCache.length) deptosCache = await api("/departamentos").catch(() => []);
+  const lista = await api(`/aprobaciones?estado=${filtroAprob}`);
+  $("#lista-aprob").innerHTML = lista.length
+    ? lista.map((a) => `<li class="aprob-item ${a.estado}">
+        <div class="cuerpo">
+          <span class="sub">${esc(nombreDepto(a.departamento))}${a.cliente ? " · " + esc(a.cliente) : ""} · ${esc(TIPO_APROB[a.tipo] || a.tipo)} · ${fmtDia(a.creada)} ${fmtHora(a.creada)}</span>
+          <b>${esc(a.titulo)}</b>
+          <div class="aprob-contenido md">${md(a.contenido)}</div>
+          ${a.estado === "pendiente"
+            ? `<div class="form-mini aprob-acciones"><input type="text" placeholder="Comentario (opcional)" maxlength="500" /><button type="button" data-resolver="${a.id}" data-decision="rechazada" class="rechazar">Rechazar</button><button type="button" data-resolver="${a.id}" data-decision="aprobada" class="aprobar">Aprobar</button></div>`
+            : `<span class="chip ${a.estado}">${esc(a.estado)}</span>${a.comentario ? ` <span class="tenue">“${esc(a.comentario)}”</span>` : ""}`}
+        </div></li>`).join("")
+    : `<li class="vacio">${filtroAprob === "pendiente" ? "Nada pendiente de aprobar. Todo en orden, señor." : "Sin historial todavía."}</li>`;
+}
+
+document.querySelectorAll("[data-aprob]").forEach((b) => b.addEventListener("click", () => {
+  filtroAprob = b.dataset.aprob;
+  document.querySelectorAll("[data-aprob]").forEach((x) => x.classList.toggle("activa", x === b));
+  refrescar("aprobaciones", true);
+}));
+
+async function abrirTrabajo(id) {
+  const t = await api(`/trabajos/${id}`);
+  $("#tr-meta").textContent = `${nombreDepto(t.departamento)}${t.cliente ? " · " + t.cliente : ""} · ${fmtDia(t.terminado || t.creado)}`;
+  $("#tr-cuerpo").innerHTML = t.estado === "en_proceso"
+    ? `<p class="tenue">Trabajando en: ${esc(t.encargo)}</p>`
+    : `<p class="tenue"><b>Encargo:</b> ${esc(t.encargo)}</p><hr />${md(t.resultado || "")}`;
+  $("#tr-copiar").onclick = () => navigator.clipboard?.writeText(t.resultado || "").then(() => { $("#tr-copiar").textContent = "Copiado ✓"; setTimeout(() => ($("#tr-copiar").textContent = "Copiar"), 1500); });
+  $("#dlg-trabajo").showModal();
+}
+$("#tr-cerrar").addEventListener("click", () => $("#dlg-trabajo").close());
+
+let fichaActual = null;
+async function abrirFicha(id) {
+  const c = await api(`/clientes/${id}`);
+  fichaActual = c;
+  $("#fi-nombre").textContent = c.nombre;
+  const datos = [["Especialidad", c.industria], ["Estado", c.estado], ["Contacto", c.contacto], ["Teléfono", c.telefono], ["Correo", c.correo], ["Pago mensual", c.presupuesto_mensual ? dinero(c.presupuesto_mensual) : ""], ["Servicios", c.servicios], ["Web y redes", c.redes], ["Notas", c.notas]]
+    .filter(([, v]) => v).map(([k, v]) => `<div><span class="tenue">${k}</span><div>${esc(v)}</div></div>`).join("");
+  $("#fi-cuerpo").innerHTML = `<div class="ficha-datos">${datos}</div>
+    <h3>Proyectos</h3><ul class="lista">${c.proyectos.length ? c.proyectos.map((p) => `<li><div class="cuerpo">${esc(p.titulo)}<span class="sub">${[p.departamento ? nombreDepto(p.departamento) : "", p.entrega ? "entrega " + fmtDia(p.entrega) : ""].filter(Boolean).map(esc).join(" · ")}</span></div><select data-proyecto="${p.id}">${Object.entries(ESTADO_PROY).map(([k, v]) => `<option value="${k}" ${k === p.estado ? "selected" : ""}>${v}</option>`).join("")}</select></li>`).join("") : `<li class="vacio">Sin proyectos.</li>`}</ul>
+    <h3>Trabajos recientes</h3><ul class="lista clickable">${c.trabajos_recientes.length ? c.trabajos_recientes.map(filaTrabajo).join("") : `<li class="vacio">Aún nada.</li>`}</ul>`;
+  if (!$("#dlg-ficha").open) $("#dlg-ficha").showModal();
+}
+$("#fi-cerrar").addEventListener("click", () => $("#dlg-ficha").close());
+$("#fi-editar").addEventListener("click", () => { $("#dlg-ficha").close(); abrirFormCliente(fichaActual); });
+$("#form-proyecto").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const titulo = $("#pr-titulo").value.trim();
+  if (!titulo || !fichaActual) return;
+  try {
+    await api("/proyectos", { method: "POST", body: { cliente: String(fichaActual.id), titulo, entrega: $("#pr-entrega").value ? $("#pr-entrega").value + "T12:00" : undefined } });
+    $("#pr-titulo").value = ""; $("#pr-entrega").value = "";
+    sonar("accion");
+    abrirFicha(fichaActual.id);
+    refrescar("agencia", true);
+  } catch (err) { burbuja("aviso", err.message); }
+});
+document.addEventListener("change", async (e) => {
+  const sel = e.target.closest("[data-proyecto]");
+  if (!sel) return;
+  await api(`/proyectos/${sel.dataset.proyecto}`, { method: "PATCH", body: { estado: sel.value } }).catch((err) => burbuja("aviso", err.message));
+  refrescar("agencia", true);
+});
+
+const CAMPOS_CL = ["nombre", "industria", "estado", "contacto", "telefono", "correo", "servicios", "redes", "notas"];
+function abrirFormCliente(c) {
+  $("#cl-titulo").textContent = c ? "Editar cliente" : "Nuevo cliente";
+  $("#cl-id").value = c?.id || "";
+  for (const k of CAMPOS_CL) $("#cl-" + k).value = c?.[k] ?? (k === "estado" ? "activo" : "");
+  $("#cl-presupuesto").value = c?.presupuesto_mensual ?? "";
+  $("#cl-msg").hidden = true;
+  $("#dlg-cliente").showModal();
+}
+$("#btn-nuevo-cliente").addEventListener("click", () => abrirFormCliente(null));
+$("#cl-cancelar").addEventListener("click", () => $("#dlg-cliente").close());
+$("#form-cliente").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(CAMPOS_CL.map((k) => [k, $("#cl-" + k).value.trim()]));
+  const pres = $("#cl-presupuesto").value.replace(/[$,\s]/g, "");
+  body.presupuesto_mensual = pres ? Number(pres) : null;
+  if (pres && !Number.isFinite(body.presupuesto_mensual)) { $("#cl-msg").textContent = "El pago mensual debe ser un número."; $("#cl-msg").hidden = false; return; }
+  try {
+    const id = $("#cl-id").value;
+    await api(id ? `/clientes/${id}` : "/clientes", { method: id ? "PATCH" : "POST", body });
+    $("#dlg-cliente").close();
+    sonar("accion");
+    refrescar("agencia", true);
+  } catch (err) { $("#cl-msg").textContent = err.message; $("#cl-msg").hidden = false; }
+});
+
+document.addEventListener("click", async (e) => {
+  const ficha = e.target.closest("[data-ficha]");
+  if (ficha) return abrirFicha(ficha.dataset.ficha).catch((err) => burbuja("aviso", err.message));
+  const trab = e.target.closest("[data-trabajo]");
+  if (trab) return abrirTrabajo(trab.dataset.trabajo).catch((err) => burbuja("aviso", err.message));
+  const res = e.target.closest("[data-resolver]");
+  if (res) {
+    const comentario = res.closest(".aprob-acciones").querySelector("input").value.trim();
+    res.disabled = true;
+    try {
+      await api(`/aprobaciones/${res.dataset.resolver}`, { method: "POST", body: { decision: res.dataset.decision, comentario } });
+      sonar(res.dataset.decision === "aprobada" ? "accion" : "fin_escuchar");
+      refrescar("aprobaciones", true);
+      cargarPanel().catch(() => {});
+    } catch (err) { res.disabled = false; burbuja("aviso", err.message); }
+  }
+});
+
+document.addEventListener("submit", async (e) => {
+  const f = e.target.closest("[data-encargo]");
+  if (!f) return;
+  e.preventDefault();
+  const encargo = f.querySelector("textarea").value.trim();
+  if (!encargo) return;
+  const boton = f.querySelector("button");
+  boton.disabled = true;
+  try {
+    await api(`/departamentos/${f.dataset.encargo}/encargo`, { method: "POST", body: { encargo, cliente: f.querySelector("select").value || undefined } });
+    f.querySelector("textarea").value = "";
+    f.querySelector("textarea").blur();
+    sonar("enviar");
+    refrescar("departamentos", true);
+  } catch (err) { burbuja("aviso", err.message); }
+  finally { boton.disabled = false; }
+});
+
 // ---------------- Secciones ----------------
 // Cada sección carga sus datos solo cuando se abre (y se refresca si ya pasó un rato).
 const SECCIONES = {
@@ -156,7 +364,9 @@ const SECCIONES = {
   tareas: { cargar: () => cargarPanel(), cada: 60e3 },
   correo: { cargar: () => cargarCorreo(), cada: 120e3 },
   mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
-  agencia: {}, departamentos: {}, aprobaciones: {},
+  agencia: { cargar: () => cargarTablero(), cada: 30e3 },
+  departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
+  aprobaciones: { cargar: () => cargarAprobaciones(), cada: 30e3 },
 };
 let seccionActual = "inicio";
 const cargadaEn = {};
@@ -870,6 +1080,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
+    if (d.tipo === "agencia" && ["agencia", "departamentos", "aprobaciones"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "aviso" && ["agencia", "departamentos", "aprobaciones"].includes(seccionActual)) refrescar(seccionActual, true);
   };
 }
 
