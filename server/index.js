@@ -15,6 +15,7 @@ import * as seg from "./seguridad.js";
 import * as correo from "./gmail.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
+import * as voz from "./voz.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,6 +133,7 @@ api.get("/panel", envolver(() => {
     recordatorios: agenda.listarRecordatorios(),
     memorias: agenda.listarMemorias(),
     avisos: db.prepare("SELECT * FROM avisos ORDER BY id DESC LIMIT 10").all(),
+    voz: voz.estadoVoz(),
     hoy: { eventos: hoy.eventos.length, vencidas: hoy.tareas_vencidas.length, pendientes: hoy.total_pendientes },
     conexiones: {
       cerebro: Boolean(process.env.ANTHROPIC_API_KEY),
@@ -175,6 +177,27 @@ api.get("/correo", envolver(async () => {
   const { correos } = await correo.buscarCorreos({ consulta: "in:inbox newer_than:2d", max: 20 });
   return { conectado: true, cuenta: correo.cuentaGmail(), correos };
 }));
+
+// ---------- Voz natural (ElevenLabs) ----------
+api.get("/voz", envolver(() => voz.estadoVoz()));
+api.post("/voz/encender", envolver((req) => voz.encenderVoz(Boolean(req.body?.activa))));
+api.post("/voz/hablar", async (req, res) => {
+  try {
+    const audio = await voz.sintetizar(String(req.body?.texto || ""));
+    res.set({ "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=86400" }).send(audio);
+  } catch (e) {
+    console.error("[voz]", e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+api.post(
+  "/voz/muestras",
+  express.raw({ type: () => true, limit: voz.MAX_MUESTRA }),
+  envolver((req) => voz.guardarMuestra(req.body)),
+);
+api.delete("/voz/muestras", envolver(() => { voz.borrarMuestras(); return voz.estadoVoz(); }));
+api.post("/voz/crear", envolver((req) => voz.crearVoz({ nombre: req.body?.nombre, permiso: req.body?.permiso })));
+api.delete("/voz", envolver(() => voz.borrarVoz()));
 
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));

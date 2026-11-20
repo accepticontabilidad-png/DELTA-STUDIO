@@ -136,6 +136,7 @@ export function cabeceras(req, res, next) {
       "style-src 'self' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data:",
+      "media-src 'self' blob: data:",
       "connect-src 'self' https://api.open-meteo.com",
       "manifest-src 'self'",
       "worker-src 'self'",

@@ -107,6 +107,19 @@ WhatsApp exige usar su plataforma oficial para negocios. Se hace una sola vez:
 
 Costos: Meta cobra los mensajes que DELTA inicia con plantilla (centavos por mensaje). Responderte dentro de una conversación que tú empezaste no tiene costo.
 
+## Voz natural (voz de una persona real, con su permiso)
+
+Sin configurar nada, DELTA habla con la voz del equipo (la del navegador). Para que hable con la voz de una persona:
+
+1. Cree una cuenta en [ElevenLabs](https://elevenlabs.io) y elija el plan **Starter** (USD 5 al mes; incluye clonar voces y unos 30 minutos de habla al mes). Si DELTA habla mucho, el plan Creator (USD 22) da unos 100 minutos.
+2. En ElevenLabs: su perfil → **API Keys** → crear una clave.
+3. En Railway → el servicio de DELTA → **Variables** → agregue `ELEVENLABS_API_KEY` con esa clave. Railway reinicia DELTA solo.
+4. En DELTA → ⚙ Ajustes → **Voz de DELTA** → "Crear o cambiar la voz": suba las grabaciones (notas de voz de WhatsApp sirven), ponga un nombre, marque que la persona dio su permiso y toque **Crear voz**.
+
+DELTA guarda cada frase ya dicha, así que el saludo y las frases repetidas no vuelven a gastar créditos. Si el servicio falla o se acaban los créditos, DELTA usa la voz del equipo sin detenerse.
+
+**Cambiar o quitar la voz.** En Ajustes, "Crear o cambiar la voz" con otras grabaciones reemplaza la voz y borra la anterior en ElevenLabs. "Borrar esta voz" la elimina de ElevenLabs y de DELTA, y DELTA vuelve a la voz del equipo. También se puede revisar en elevenlabs.io → **Voices → My Voices** que ya no aparezca.
+
 ## Seguridad
 
 Cómo se protege DELTA:

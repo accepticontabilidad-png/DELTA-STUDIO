@@ -345,3 +345,8 @@ input[type=date], select { width: 100%; padding: 11px 14px; border-radius: 10px;
 @keyframes arr-nombre { 0% { opacity: 0; letter-spacing: 1.2em; margin-right: -1.2em; } 100% { opacity: 1; letter-spacing: .5em; margin-right: -.5em; } }
 @keyframes arr-linea { to { width: min(60vw, 520px); } }
 @media (prefers-reduced-motion: reduce) { .arranque.animando * { animation-duration: .01s !important; animation-delay: 0s !important; } }
+
+/* Voz de DELTA (Ajustes) */
+.voz-crear { margin: 8px 0 4px; border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; }
+.voz-crear summary { cursor: pointer; font-size: 13px; color: var(--texto); }
+.voz-crear p { font-size: 12px; margin: 8px 0; }
