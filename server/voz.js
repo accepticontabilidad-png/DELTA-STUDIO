@@ -9,6 +9,10 @@ import { DATA_DIR, getAjuste, setAjuste, db } from "./db.js";
 const API = () => (process.env.ELEVENLABS_URL || "https://api.elevenlabs.io").replace(/\/$/, "");
 const clave = () => process.env.ELEVENLABS_API_KEY || "";
 const modelo = () => process.env.ELEVENLABS_MODELO || "eleven_multilingual_v2";
+// Ajuste fino de la voz: más pareja y limpia, con algo de expresión. Si se cambia, sube AJUSTE_VERSION
+// para que las frases guardadas se vuelvan a generar con el ajuste nuevo.
+const AJUSTE = { stability: 0.55, similarity_boost: 0.85, style: 0.08, use_speaker_boost: true, speed: 0.97 };
+const AJUSTE_VERSION = 2;
 
 export const MAX_TEXTO = 2500; // caracteres por respuesta hablada
 export const MAX_MUESTRA = 10 * 1024 * 1024; // 10 MB por grabación
@@ -81,7 +85,7 @@ export async function sintetizar(textoOriginal) {
   if (!voz) throw new Error("Todavía no hay una voz creada.");
   const texto = limpiarParaVoz(textoOriginal);
   if (!texto) throw new Error("No hay nada que decir.");
-  const huella = crypto.createHash("sha256").update(`${voz.id}|${modelo()}|${texto}`).digest("hex");
+  const huella = crypto.createHash("sha256").update(`${voz.id}|${modelo()}|${AJUSTE_VERSION}|${texto}`).digest("hex");
   const archivo = path.join(CACHE, huella + ".mp3");
   try {
     const audio = fs.readFileSync(archivo);
@@ -96,7 +100,7 @@ export async function sintetizar(textoOriginal) {
       text: texto,
       model_id: modelo(),
       language_code: modelo().includes("multilingual_v2") ? undefined : "es",
-      voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true },
+      voice_settings: AJUSTE,
     }),
   });
   const audio = Buffer.from(await r.arrayBuffer());
