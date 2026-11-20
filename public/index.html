@@ -45,11 +45,25 @@
     <div class="rejilla">
       <!-- Columna izquierda: hoy y calendario -->
       <section class="panel" id="panel-agenda" data-tab="agenda">
-        <h2>Agenda</h2>
+        <div class="ag-cabeza">
+          <h2>Agenda</h2>
+          <button id="ag-agregar" class="ag-agregar" type="button">+ Agregar</button>
+        </div>
         <div id="resumen-hoy" class="resumen"></div>
-        <ul id="lista-eventos" class="lista"></ul>
-        <h3>Recordatorios</h3>
-        <ul id="lista-recordatorios" class="lista"></ul>
+        <div class="ag-control">
+          <div class="segmento" role="tablist" aria-label="Vista">
+            <button type="button" data-vista="dia" class="activa">Día</button>
+            <button type="button" data-vista="semana">Semana</button>
+          </div>
+          <div class="navegar">
+            <button type="button" id="ag-ant" aria-label="Anterior">‹</button>
+            <button type="button" id="ag-hoy">Hoy</button>
+            <button type="button" id="ag-sig" aria-label="Siguiente">›</button>
+          </div>
+        </div>
+        <div id="ag-titulo" class="ag-titulo"></div>
+        <div id="ag-contenido" class="ag-contenido"></div>
+        <p class="ag-leyenda"><span class="ag-tipo evento"></span>Cita <span class="ag-tipo tarea"></span>Tarea <span class="ag-tipo recordatorio"></span>Recordatorio</p>
       </section>
 
       <!-- Centro: orbe y conversación -->
@@ -90,6 +104,31 @@
     </nav>
   </main>
 
+  <dialog id="agregar" class="dialogo">
+    <form id="form-agregar" method="dialog">
+      <h2>Agregar</h2>
+      <div class="segmento ancho" role="radiogroup" aria-label="Tipo">
+        <button type="button" data-tipo="cita" class="activa">Cita</button>
+        <button type="button" data-tipo="tarea">Tarea</button>
+        <button type="button" data-tipo="recordatorio">Recordatorio</button>
+      </div>
+      <label>Qué es <input id="ag-f-titulo" type="text" required maxlength="200" placeholder="Ej. Junta con Café Luna" /></label>
+      <div class="fila-2">
+        <label>Día <input id="ag-f-dia" type="date" required /></label>
+        <label>Hora <input id="ag-f-hora" type="time" value="09:00" /></label>
+      </div>
+      <label data-solo="cita">Lugar <input id="ag-f-lugar" type="text" maxlength="200" placeholder="Opcional" /></label>
+      <label data-solo="recordatorio">Repetir
+        <select id="ag-f-repetir"><option value="no">No</option><option value="diario">Cada día</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select>
+      </label>
+      <p id="ag-f-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="ag-f-cancelar">Cancelar</button>
+        <button type="submit" class="primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="ajustes" class="dialogo">
     <form method="dialog">
       <h2>Ajustes</h2>
@@ -103,6 +142,7 @@
         <button type="button" id="btn-instalar" hidden>Instalar app</button>
       </div>
       <div class="botones">
+        <button type="button" id="btn-nueva-conv">Empezar conversación nueva</button>
         <button type="button" id="btn-salir">Cerrar sesión</button>
         <button type="button" id="btn-salir-todo">Cerrar sesión en todos los equipos</button>
       </div>

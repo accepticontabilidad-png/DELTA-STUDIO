@@ -31,7 +31,7 @@ await new Promise((r) => servidor.listen(0, r));
 process.env.ANTHROPIC_BASE_URL = `http://localhost:${servidor.address().port}`;
 after(() => servidor.close());
 
-const { hablarConDelta, afirmaAccion } = await import("../server/cerebro.js");
+const { hablarConDelta, afirmaAccion, nuevaConversacion } = await import("../server/cerebro.js");
 const agenda = await import("../server/agenda.js");
 const { db } = await import("../server/db.js");
 
@@ -80,4 +80,12 @@ test("cada mensaje lleva la agenda real y el historial dice qué se hizo de verd
   assert.match(historial, /\[Herramientas usadas en ese turno: crear_tarea\]/);
   const fila = db.prepare("SELECT acciones FROM conversacion ORDER BY id DESC LIMIT 1").get();
   assert.equal(fila.acciones, "[Herramientas usadas en ese turno: ninguna]");
+});
+
+test("conversación nueva: DELTA olvida la plática anterior", async () => {
+  nuevaConversacion();
+  recibidas.length = 0;
+  guion = [texto("Hola, señor.")];
+  await hablarConDelta("Hola");
+  assert.equal(recibidas[0].messages.length, 1); // solo el mensaje nuevo, sin historial viejo
 });

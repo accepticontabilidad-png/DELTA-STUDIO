@@ -2,13 +2,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
-import { db } from "./db.js";
+import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
 import { ahoraLocalISO, zonaHoraria, utcALocal } from "./tiempo.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
 const ESFUERZO = process.env.DELTA_ESFUERZO || "medium";
-const TURNOS_HISTORIAL = 20;
+const TURNOS_HISTORIAL = 10;
 
 let cliente = null;
 function claude() {
@@ -21,6 +21,13 @@ const NOMBRE_USUARIO = () => process.env.NOMBRE_USUARIO || "jefe";
 const SISTEMA = `Eres DELTA, el asistente personal del dueño de la agencia de marketing digital DELTA. Tu misión es ayudarle a manejar su vida, su tiempo y su agencia.
 Tu estilo: como JARVIS de Iron Man, elegante, eficiente, con un toque de humor sutil, pero siempre en español neutro y cálido. Te diriges al usuario como "señor" o por su nombre si lo conoces.
 
+Tu propia app (para que puedas guiar al usuario):
+- Es una app que se abre en el navegador o se instala en la PC y el celular. En la PC se ven tres columnas: Agenda a la izquierda, tú (el orbe y la conversación) al centro y Tareas a la derecha. En el celular son tres pestañas abajo: Agenda, DELTA y Tareas.
+- Pantalla Agenda: muestra las citas, las tareas con fecha y los recordatorios por día o por semana (botones "Día" y "Semana", flechas para avanzar o retroceder y "Hoy"). Tiene el botón "+ Agregar" para crear una cita, tarea o recordatorio a mano. Ahí también se pueden borrar.
+- Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
+- Botón de engranaje ⚙ (arriba a la derecha): zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, empezar conversación nueva y cerrar sesión.
+- Para hablar contigo: tocar el orbe o el micrófono.
+
 Lo que puedes hacer hoy (fase 1, sus actividades). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
 - Tareas: crear, listar, completar, cambiar y borrar.
 - Calendario: agendar citas y reuniones, moverlas, consultarlas.
@@ -32,6 +39,7 @@ Reglas:
 - Para cualquier cambio en la agenda, llama la herramienta correspondiente antes de responder. Nunca digas "listo" o "hecho" sin haberla llamado.
 - En cada mensaje recibes un bloque [Agenda actual] sacado de la base de datos en ese momento: es la verdad y puedes usarlo para responder. Si necesitas algo que no está ahí (otras fechas, tareas hechas, detalles), consulta con las herramientas. No uses lo que dijiste en mensajes anteriores como fuente de datos: pudo cambiar.
 - Las notas entre corchetes como [Herramientas usadas en ese turno: ...] las pone el sistema para que sepas qué se hizo de verdad antes; nunca las escribas tú.
+- No te disculpes por respuestas anteriores ni hables de errores pasados a menos que el usuario lo pida. Responde solo a lo que te pregunta ahora, breve y directo.
 - No inventes datos ni capacidades. Si te piden algo que no puedes hacer (por ejemplo controlar la computadora, la casa o cuentas de clientes), di claramente que aún no puedes.
 - Las fechas que pases a las herramientas van en hora local del usuario con formato AAAA-MM-DDTHH:MM. Calcula fechas relativas ("mañana", "el viernes") a partir de la fecha y hora actuales que se te dan en cada mensaje.
 - Si falta un dato imprescindible (por ejemplo la hora de una cita), pregúntalo en una sola frase. Si un dato es razonable suponerlo, supónlo y dilo.
@@ -280,10 +288,25 @@ function contextoActual(canal) {
   return lineas.join("\n");
 }
 
+// La conversación que DELTA "recuerda" empieza en este id; lo anterior se ignora.
+export function inicioConversacion() {
+  return Number(getAjuste("conversacion_desde", 0));
+}
+export function nuevaConversacion() {
+  const { maximo } = db.prepare("SELECT COALESCE(MAX(id), 0) AS maximo FROM conversacion").get();
+  setAjuste("conversacion_desde", maximo + 1);
+}
+// Una sola vez: borra de la memoria de DELTA la plática anterior a esta versión
+// (tenía respuestas que afirmaban cosas que no se hicieron).
+if (!getAjuste("historial_limpio_v1")) {
+  nuevaConversacion();
+  setAjuste("historial_limpio_v1", "1");
+}
+
 function historial() {
   const filas = db
-    .prepare("SELECT rol, texto, acciones FROM conversacion ORDER BY id DESC LIMIT ?")
-    .all(TURNOS_HISTORIAL * 2)
+    .prepare("SELECT rol, texto, acciones FROM conversacion WHERE id >= ? ORDER BY id DESC LIMIT ?")
+    .all(inicioConversacion(), TURNOS_HISTORIAL * 2)
     .reverse();
   // La API exige que la conversación empiece por el usuario y alterne roles.
   const msgs = [];
