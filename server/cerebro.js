@@ -9,6 +9,8 @@ import { ahoraLocalISO, zonaHoraria, utcALocal } from "./tiempo.js";
 import * as correo from "./gmail.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
+import * as agencia from "./agencia.js";
+import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
 const ESFUERZO = process.env.DELTA_ESFUERZO || "medium";
@@ -27,7 +29,7 @@ Tu estilo: como JARVIS de Iron Man, elegante, eficiente, con un toque de humor s
 
 Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. Al abrirla aparece una pantalla de arranque con el logo de DELTA y una bienvenida (se salta con "Saltar").
-- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia (Tablero, Departamentos y Aprobaciones, que llegan en la siguiente fase). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
+- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Tablero (clientes, proyectos y entregas; ahí se dan de alta clientes), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
 - Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano.
 - Correo: lista de sus correos recientes y botón "Resumir con DELTA". Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
@@ -47,6 +49,14 @@ Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso
 - Ideas de inversión: cuando pida ideas, usa analizar_accion y noticias para dar un análisis informativo (tendencia, rango del año, noticias que la mueven, riesgos). Presenta siempre ventajas y riesgos, recuerda en una frase corta que es información y no asesoría financiera, y sugiere diversificar. Nunca prometas rendimientos. No puedes comprar ni vender nada.
 - Noticias: titulares del día por tema (sus temas guardados o cualquier otro). Puede agregar o quitar temas. Al resumir noticias, menciona la fuente.
 
+La agencia (eres su director):
+- Llevas la ficha de cada cliente (crear_cliente, ver_cliente, actualizar_cliente) y sus proyectos con fecha de entrega (crear_proyecto, actualizar_proyecto). Cuando el usuario mencione un cliente nuevo, ofrécete a darlo de alta.
+- Tienes 10 departamentos, cada uno es un especialista: ${DEPARTAMENTOS.map((d) => `${d.nombre} (${d.id}): ${d.resumen}`).join(" | ")}.
+- Para trabajo de agencia (investigar tendencias, plan de estrategia, copys, guiones de video, calendario editorial, plan de pauta, SEO, reporte, cotización…) usa encargar_a_departamento con un encargo claro y completo (objetivo, cliente, formato de entrega, fechas). Si toca a varios departamentos, haz un encargo a cada uno. Los departamentos trabajan en segundo plano: responde al usuario que ya lo encargaste y que le avisarás cuando esté; no esperes ni inventes el resultado.
+- Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
+- Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
+- Pantallas de la agencia: Tablero (clientes, proyectos, entregas, actividad), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+
 Reglas:
 - Honestidad ante todo. Solo puedes decir que hiciste algo (agendar, anotar, programar, mover, completar, borrar, guardar) si llamaste la herramienta en ESTE turno y respondió bien. Si una herramienta falla, dilo tal cual.
 - Para cualquier cambio en la agenda, llama la herramienta correspondiente antes de responder. Nunca digas "listo" o "hecho" sin haberla llamado.
@@ -54,6 +64,7 @@ Reglas:
 - Las notas entre corchetes como [Herramientas usadas en ese turno: ...] las pone el sistema para que sepas qué se hizo de verdad antes; nunca las escribas tú.
 - No te disculpes por respuestas anteriores ni hables de errores pasados a menos que el usuario lo pida. Responde solo a lo que te pregunta ahora, breve y directo.
 - Nunca agregues confesiones del tipo "le debo la verdad" o "en mis mensajes anteriores...". Lo pasado ya está resuelto; no lo vuelvas a mencionar.
+- No muestres ids internos al usuario salvo que los pida; refiérete a las cosas por su nombre.
 - Si te piden abrir o ver una sección de la app (agenda, calendario, tareas, correo, bolsa, noticias), ábrela con abrir_seccion y responde en una frase.
 - No inventes datos ni capacidades. Si te piden algo que no puedes hacer (por ejemplo controlar la computadora, la casa o cuentas de clientes), di claramente que aún no puedes.
 - Las fechas que pases a las herramientas van en hora local del usuario con formato AAAA-MM-DDTHH:MM. Calcula fechas relativas ("mañana", "el viernes") a partir de la fecha y hora actuales que se te dan en cada mensaje.
@@ -396,6 +407,147 @@ herramientasBase.push(
     run: ({ accion, tema }) => json(accion === "agregar" ? noticias.agregarTema(tema) : accion === "quitar" ? noticias.quitarTema(tema) : noticias.temas()),
   }),
 );
+
+// ---------- Agencia: clientes, proyectos, departamentos y aprobaciones ----------
+const CLIENTE_CAMPOS = {
+  nombre: { type: "string" },
+  industria: { type: "string", description: "Ej. dermatología, odontología, cirugía plástica" },
+  contacto: { type: "string", description: "Persona de contacto" },
+  correo: { type: "string" },
+  telefono: { type: "string" },
+  redes: { type: "string", description: "Sitio web y cuentas de redes" },
+  servicios: { type: "string", description: "Qué le hace la agencia" },
+  presupuesto_mensual: { type: "number", description: "Lo que paga al mes a la agencia" },
+  notas: { type: "string" },
+  estado: { type: "string", enum: ["activo", "pausado", "prospecto", "terminado"] },
+};
+herramientasBase.push(
+  betaTool({
+    name: "crear_cliente",
+    description: "Da de alta un cliente de la agencia.",
+    inputSchema: { type: "object", properties: CLIENTE_CAMPOS, required: ["nombre"], additionalProperties: false },
+    run: (i) => json(agencia.crearCliente(i)),
+  }),
+  betaTool({
+    name: "ver_cliente",
+    description: "Ficha completa de un cliente: datos, proyectos, trabajos recientes y aprobaciones pendientes.",
+    inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id" } }, required: ["cliente"], additionalProperties: false },
+    run: ({ cliente }) => json(agencia.fichaCliente(cliente)),
+  }),
+  betaTool({
+    name: "listar_clientes",
+    description: "Lista los clientes (por defecto todos) con sus proyectos abiertos.",
+    inputSchema: { type: "object", properties: { estado: { type: "string", enum: ["activo", "pausado", "prospecto", "terminado", "todos"] } }, additionalProperties: false },
+    run: (i) => json(agencia.listarClientes(i)),
+  }),
+  betaTool({
+    name: "actualizar_cliente",
+    description: "Cambia datos de un cliente.",
+    inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id actual" }, ...CLIENTE_CAMPOS }, required: ["cliente"], additionalProperties: false },
+    run: ({ cliente, ...c }) => json(agencia.actualizarCliente(cliente, c)),
+  }),
+  betaTool({
+    name: "crear_proyecto",
+    description: "Crea un proyecto o entregable para un cliente, con brief y fecha de entrega.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string" },
+        titulo: { type: "string" },
+        departamento: { type: "string", enum: DEPARTAMENTOS.map((d) => d.id) },
+        brief: { type: "string" },
+        entrega: HORA,
+      },
+      required: ["titulo"],
+      additionalProperties: false,
+    },
+    run: (i) => json(agencia.crearProyecto(i)),
+  }),
+  betaTool({
+    name: "listar_proyectos",
+    description: "Lista proyectos. Por defecto los abiertos, de todos los clientes.",
+    inputSchema: {
+      type: "object",
+      properties: { cliente: { type: "string" }, estado: { type: "string", enum: ["abiertos", "pendiente", "en_proceso", "revision", "entregado", "cancelado", "todos"] } },
+      additionalProperties: false,
+    },
+    run: (i) => json(agencia.listarProyectos(i)),
+  }),
+  betaTool({
+    name: "actualizar_proyecto",
+    description: "Cambia un proyecto: estado, fecha de entrega, brief, título, cliente o departamento.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "integer" },
+        titulo: { type: "string" },
+        cliente: { type: "string" },
+        departamento: { type: "string", enum: DEPARTAMENTOS.map((d) => d.id) },
+        brief: { type: "string" },
+        estado: { type: "string", enum: ["pendiente", "en_proceso", "revision", "entregado", "cancelado"] },
+        entrega: HORA,
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    run: ({ id, ...c }) => json(agencia.actualizarProyecto(id, c)),
+  }),
+  betaTool({
+    name: "encargar_a_departamento",
+    description: "Encarga un trabajo a un departamento de la agencia. Trabaja en segundo plano y avisa al terminar.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        departamento: { type: "string", enum: DEPARTAMENTOS.map((d) => d.id) },
+        encargo: { type: "string", description: "Qué se necesita, para qué, formato de entrega y fechas. Completo: el departamento no ve esta conversación." },
+        cliente: { type: "string", description: "Cliente relacionado (nombre o id), si aplica" },
+        proyecto_id: { type: "integer" },
+      },
+      required: ["departamento", "encargo"],
+      additionalProperties: false,
+    },
+    run: (i) => json(encargar(i)),
+  }),
+  betaTool({
+    name: "ver_trabajos",
+    description: "Lista los trabajos recientes de los departamentos (estado y extracto).",
+    inputSchema: {
+      type: "object",
+      properties: { departamento: { type: "string", enum: DEPARTAMENTOS.map((d) => d.id) }, cliente: { type: "string" } },
+      additionalProperties: false,
+    },
+    run: (i) => json(agencia.listarTrabajos({ ...i, limite: 15 }).map(({ resultado, ...t }) => ({ ...t, extracto: (resultado || "").slice(0, 300) }))),
+  }),
+  betaTool({
+    name: "leer_trabajo",
+    description: "Lee completo lo que entregó un departamento.",
+    inputSchema: { type: "object", properties: { id: { type: "integer" } }, required: ["id"], additionalProperties: false },
+    run: ({ id }) => json(agencia.obtenerTrabajo(id) || { error: "No existe" }),
+  }),
+  betaTool({
+    name: "listar_aprobaciones",
+    description: "Lo que espera el sí o no del usuario (por defecto, pendientes).",
+    inputSchema: { type: "object", properties: { estado: { type: "string", enum: ["pendiente", "aprobada", "rechazada", "todas"] } }, additionalProperties: false },
+    run: (i) => json(agencia.listarAprobaciones(i)),
+  }),
+  betaTool({
+    name: "resolver_aprobacion",
+    description: "Aprueba o rechaza un punto de la bandeja. SOLO cuando el usuario lo decida explícitamente.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "integer" }, decision: { type: "string", enum: ["aprobada", "rechazada"] }, comentario: { type: "string" } },
+      required: ["id", "decision"],
+      additionalProperties: false,
+    },
+    run: ({ id, decision, comentario }) => json(agencia.resolverAprobacion(id, decision, comentario)),
+  }),
+  betaTool({
+    name: "tablero_agencia",
+    description: "Resumen de la agencia: clientes activos, proyectos, entregas de la semana, aprobaciones y actividad reciente.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    run: () => json(agencia.tablero()),
+  }),
+);
 herramientasBase.push(
   betaTool({
     name: "abrir_seccion",
@@ -419,6 +571,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_tarea", "actualizar_tarea", "borrar_tarea", "crear_evento", "mover_evento", "borrar_evento",
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
   "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
+  "crear_cliente", "actualizar_cliente", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
 ]);
 
 /**
@@ -426,7 +579,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
  * Se usa para detectar cuando el modelo dice "listo, agendé..." sin haber llamado ninguna herramienta.
  */
 export function afirmaAccion(texto) {
-  return /\b(agend[ée]|envi[ée]|anot[ée]|apunt[ée]|cre[ée]|program[ée]|cancel[ée]|borr[ée]|elimin[ée]|mov[íi]|reprogram[ée]|marqu[ée]|complet[ée]|guard[ée]|actualic[ée]|cambi[ée]|registr[ée]|qued[óo] (agendad|anotad|programad|guardad|registrad|cancelad|movid)|ya (est[áa]|qued[óo]) (agendad|anotad|programad|guardad|registrad|cancelad|movid))/i.test(texto);
+  return /\b(agend[ée]|envi[ée]|encargu[ée]|aprob[ée]|rechac[ée]|di de alta|anot[ée]|apunt[ée]|cre[ée]|program[ée]|cancel[ée]|borr[ée]|elimin[ée]|mov[íi]|reprogram[ée]|marqu[ée]|complet[ée]|guard[ée]|actualic[ée]|cambi[ée]|registr[ée]|qued[óo] (agendad|anotad|programad|guardad|registrad|cancelad|movid)|ya (est[áa]|qued[óo]) (agendad|anotad|programad|guardad|registrad|cancelad|movid))/i.test(texto);
 }
 
 function resumirAcciones(lista) {
