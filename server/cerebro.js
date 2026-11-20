@@ -371,7 +371,7 @@ function historial() {
  * @param {string} texto
  * @param {"app"|"voz"|"whatsapp"} canal
  */
-export async function hablarConDelta(texto, canal = "app", archivos = []) {
+export async function hablarConDelta(texto, canal = "app", archivos = [], info = {}) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return "Aún no tengo cerebro conectado, señor. Falta poner la clave de Claude (ANTHROPIC_API_KEY) en la configuración.";
   }
@@ -409,6 +409,8 @@ export async function hablarConDelta(texto, canal = "app", archivos = []) {
   const guardar = db.prepare("INSERT INTO conversacion (rol, texto, canal, acciones, archivos) VALUES (?, ?, ?, ?, ?)");
   guardar.run("user", texto, canal, null, archivos.length ? JSON.stringify(archivos) : null);
   respuesta = quitarDisculpas(respuesta);
+  // Para la app: si cambió algo de verdad, suena el tono de "acción hecha".
+  info.hizoCambio = acciones.some((a) => ACCIONES_QUE_CAMBIAN.has(a.nombre) && a.ok);
   guardar.run("assistant", respuesta, canal, resumirAcciones(acciones), null);
   return respuesta;
 }

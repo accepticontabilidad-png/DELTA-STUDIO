@@ -1,4 +1,5 @@
 // DELTA — app del panel (PC y celular)
+import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
   get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -95,10 +96,10 @@ async function cargarPanel() {
 document.addEventListener("click", async (e) => {
   const t = e.target;
   try {
-    if (t.dataset.hecha) { await api(`/tareas/${t.dataset.hecha}`, { method: "PATCH", body: { estado: "hecha" } }); await cargarPanel(); }
-    if (t.dataset.borrarEvento) { await api(`/eventos/${t.dataset.borrarEvento}`, { method: "DELETE" }); await cargarPanel(); }
-    if (t.dataset.borrarRecordatorio) { await api(`/recordatorios/${t.dataset.borrarRecordatorio}`, { method: "DELETE" }); await cargarPanel(); }
-  } catch (err) { burbuja("aviso", err.message); }
+    if (t.dataset.hecha) { await api(`/tareas/${t.dataset.hecha}`, { method: "PATCH", body: { estado: "hecha" } }); sonar("accion"); await cargarPanel(); }
+    if (t.dataset.borrarEvento) { await api(`/eventos/${t.dataset.borrarEvento}`, { method: "DELETE" }); sonar("fin_escuchar"); await cargarPanel(); }
+    if (t.dataset.borrarRecordatorio) { await api(`/recordatorios/${t.dataset.borrarRecordatorio}`, { method: "DELETE" }); sonar("fin_escuchar"); await cargarPanel(); }
+  } catch (err) { sonar("error"); burbuja("aviso", err.message); }
 });
 
 $("#form-tarea").addEventListener("submit", async (e) => {
@@ -107,6 +108,7 @@ $("#form-tarea").addEventListener("submit", async (e) => {
   if (!titulo) return;
   $("#nueva-tarea").value = "";
   await api("/tareas", { method: "POST", body: { titulo } });
+  sonar("accion");
   cargarPanel();
 });
 
@@ -327,9 +329,11 @@ $("#form-agregar").addEventListener("submit", async (e) => {
     else if (tipoNuevo === "tarea") await api("/tareas", { method: "POST", body: { titulo, fecha_limite: cuando } });
     else await api("/recordatorios", { method: "POST", body: { mensaje: titulo, cuando, repetir: $("#ag-f-repetir").value } });
     $("#agregar").close();
+    sonar("accion");
     agendaEstado.dia = $("#ag-f-dia").value;
     await cargarPanel();
   } catch (err) {
+    sonar("error");
     $("#ag-f-msg").textContent = err.message;
     $("#ag-f-msg").hidden = false;
   }
@@ -366,18 +370,21 @@ async function enviar(texto, canal = "app") {
   ocupado = true;
   const archivos = listos.map((a) => a.id);
   burbuja("user", texto, listos.map((a) => a.nombre));
+  sonar("enviar");
   adjuntos = adjuntos.filter((a) => !a.id && !a.error);
   pintarAdjuntos();
   const espera = burbuja("assistant pensando", "Procesando…");
   orbe.estado("pensando");
   try {
-    const { respuesta } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
+    const { respuesta, hizo_cambio } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
+    sonar(hizo_cambio || archivos.length ? "accion" : "respuesta");
     espera.className = "burbuja assistant";
     espera.textContent = respuesta;
     if (canal === "voz" || guardado.get("delta_voz") === "1") hablar(respuesta);
     else orbe.estado("reposo");
     cargarPanel();
   } catch (err) {
+    sonar("error");
     espera.className = "burbuja aviso";
     espera.textContent = "No pude completar eso: " + err.message;
     orbe.estado("reposo");
@@ -436,7 +443,9 @@ async function subir(archivo) {
     const datos = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(datos.error || "no se pudo subir");
     Object.assign(a, { id: datos.id, nombre: datos.nombre, tamano: datos.tamano });
+    sonar("archivo");
   } catch (err) {
+    sonar("error");
     a.error = err.message;
   } finally {
     a.subiendo = false;
@@ -495,7 +504,7 @@ function escuchar() {
   reconocedor.interimResults = true;
   reconocedor.continuous = false;
   let final = "";
-  reconocedor.onstart = () => { escuchando = true; orbe.estado("escuchando"); $("#btn-mic").classList.add("escuchando"); };
+  reconocedor.onstart = () => { if (!manosLibres) sonar("escuchar"); escuchando = true; orbe.estado("escuchando"); $("#btn-mic").classList.add("escuchando"); };
   reconocedor.onresult = (ev) => {
     let parcial = "";
     for (const r of ev.results) (r.isFinal ? (final = r[0].transcript) : (parcial += r[0].transcript));
@@ -514,7 +523,7 @@ function escuchar() {
       texto = m[2].trim() || "Hola";
     }
     if (texto) enviar(texto, "voz");
-    else orbe.estado("reposo");
+    else { if (!manosLibres) sonar("fin_escuchar"); orbe.estado("reposo"); }
   };
   reconocedor.start();
 }
@@ -682,6 +691,7 @@ function conectarVivo() {
   fuente.onmessage = (ev) => {
     const d = JSON.parse(ev.data);
     if (d.tipo === "aviso") {
+      sonar("aviso");
       burbuja("aviso", "🔔 " + d.texto);
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
@@ -718,11 +728,13 @@ window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); even
 $("#btn-instalar").addEventListener("click", async () => { eventoInstalar?.prompt(); eventoInstalar = null; $("#btn-instalar").hidden = true; });
 $("#btn-ajustes").addEventListener("click", () => {
   $("#aj-voz").checked = guardado.get("delta_voz") === "1";
+  $("#aj-sonidos").checked = sonidosActivos();
   $("#aj-manos").checked = manosLibres;
   $("#aj-msg").textContent = "";
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
+$("#aj-sonidos").addEventListener("change", (e) => { activarSonidos(e.target.checked); if (e.target.checked) sonar("accion"); });
 $("#btn-nueva-conv").addEventListener("click", async () => {
   await api("/conversacion/nueva", { method: "POST" });
   $("#ajustes").close();
