@@ -850,6 +850,7 @@ function callarVoz() {
 async function decir(texto, opciones = {}) {
   callarVoz();
   const turno = turnoVoz;
+  let motivo = vozNatural.voz ? (vozNatural.activa ? "" : "está apagada") : "todavía no hay una voz creada";
   if (usarVozNatural()) {
     try {
       const r = await fetch("/api/voz/hablar", {
@@ -860,20 +861,22 @@ async function decir(texto, opciones = {}) {
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "sin voz");
       const audio = await r.blob();
-      if (turno !== turnoVoz) return; // mientras tanto se pidió callar o decir otra cosa
+      if (turno !== turnoVoz) return { natural: false }; // mientras tanto se pidió callar o decir otra cosa
       if (urlAudio) URL.revokeObjectURL(urlAudio);
       urlAudio = URL.createObjectURL(audio);
       reproductor.src = urlAudio;
       reproductor.onplaying = () => opciones.alEmpezar?.();
       reproductor.onended = () => opciones.alTerminar?.();
       await reproductor.play();
-      return;
+      return { natural: true };
     } catch (e) {
       console.warn("[voz natural]", e.message);
-      if (turno !== turnoVoz) return;
+      motivo = e.message;
+      if (turno !== turnoVoz) return { natural: false, motivo };
     }
   }
   hablarNavegador(texto, opciones);
+  return { natural: false, motivo };
 }
 
 function hablar(texto) {
@@ -1117,6 +1120,7 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#aj-sonidos").checked = sonidosActivos();
   $("#aj-manos").checked = manosLibres;
   $("#aj-msg").textContent = "";
+  $("#voz-msg").textContent = "";
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
@@ -1146,6 +1150,12 @@ $("#aj-guardar").addEventListener("click", async () => {
   if (manosLibres && !escuchando) escuchar();
 });
 
+// Los mensajes de Ajustes se muestran donde la persona los vea (el cuadro es largo).
+for (const id of ["#aj-msg", "#voz-msg"]) {
+  new MutationObserver(() => { if ($(id).textContent) $(id).scrollIntoView({ block: "nearest", behavior: "smooth" }); })
+    .observe($(id), { childList: true, characterData: true, subtree: true });
+}
+
 // ---------------- Ajustes: voz de DELTA ----------------
 let borrarVozPendiente = false;
 function pintarVoz() {
@@ -1167,10 +1177,15 @@ function pintarVoz() {
 
 $("#aj-voz-natural").addEventListener("change", async (e) => {
   try { vozNatural = await api("/voz/encender", { method: "POST", body: { activa: e.target.checked } }); pintarVoz(); }
-  catch (err) { $("#aj-msg").textContent = err.message; }
+  catch (err) { $("#voz-msg").textContent = err.message; }
 });
 
-$("#btn-voz-probar").addEventListener("click", () => decir("Hola, señor. Soy DELTA. Así sueno ahora."));
+$("#btn-voz-probar").addEventListener("click", async () => {
+  const msg = $("#voz-msg");
+  msg.textContent = "Probando la voz…";
+  const r = await decir("Hola, señor. Soy DELTA. Así sueno ahora.");
+  msg.textContent = r.natural ? "Así suena la voz natural. Si no oye nada, suba el volumen del equipo." : `No se pudo usar la voz natural${r.motivo ? ": " + r.motivo : ""}. Sonó la voz del equipo.`;
+});
 
 $("#btn-voz-borrar").addEventListener("click", async () => {
   if (!borrarVozPendiente) {
@@ -1178,16 +1193,16 @@ $("#btn-voz-borrar").addEventListener("click", async () => {
     $("#btn-voz-borrar").textContent = "¿Seguro? Toque otra vez para borrarla";
     return;
   }
-  $("#aj-msg").textContent = "Borrando la voz…";
+  $("#voz-msg").textContent = "Borrando la voz…";
   try {
     vozNatural = await api("/voz", { method: "DELETE" });
     pintarVoz();
-    $("#aj-msg").textContent = "Voz borrada. DELTA vuelve a la voz del equipo.";
-  } catch (err) { $("#aj-msg").textContent = err.message; }
+    $("#voz-msg").textContent = "Voz borrada. DELTA vuelve a la voz del equipo.";
+  } catch (err) { $("#voz-msg").textContent = err.message; }
 });
 
 $("#btn-voz-crear").addEventListener("click", async () => {
-  const msg = $("#aj-msg");
+  const msg = $("#voz-msg");
   const archivos = [...$("#voz-archivos").files];
   if (!archivos.length) { msg.textContent = "Elija al menos una grabación."; return; }
   if (archivos.length > 8) { msg.textContent = "Máximo 8 grabaciones."; return; }
