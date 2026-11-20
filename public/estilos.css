@@ -152,3 +152,4 @@ button[type=submit], .primario, .botones button {
   .barra .lema { display: none; }
 }
 .form-chat .mic.escuchando svg { stroke: var(--dorado); }
+.resumen b.alerta { color: var(--rojo); }

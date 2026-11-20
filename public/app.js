@@ -6,14 +6,15 @@ const guardado = {
   del: (k) => { try { localStorage.removeItem(k); } catch {} },
 };
 
-let token = guardado.get("delta_token");
+guardado.del("delta_token"); // versiones anteriores guardaban la sesión aquí; ahora va en una cookie protegida
 let zona = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // ---------------- API ----------------
 async function api(ruta, opciones = {}) {
   const r = await fetch(`/api${ruta}`, {
     ...opciones,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Delta": "1" },
     body: opciones.body ? JSON.stringify(opciones.body) : undefined,
   });
   if (r.status === 401) { mostrarEntrada(); throw new Error("No autorizado"); }
@@ -30,11 +31,11 @@ function mostrarEntrada() {
 $("#form-entrada").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    const r = await fetch("/api/entrar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: $("#clave").value }) });
+    const r = await fetch("/api/entrar", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: $("#clave").value }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    token = d.token;
-    guardado.set("delta_token", token);
+    $("#clave").value = "";
+    $("#error-entrada").hidden = true;
     iniciar();
   } catch (err) {
     $("#error-entrada").textContent = err.message;
@@ -63,7 +64,7 @@ async function cargarPanel() {
   $("#resumen-hoy").innerHTML = `
     <div><b>${p.hoy.eventos}</b><span>citas hoy</span></div>
     <div><b>${p.hoy.pendientes}</b><span>pendientes</span></div>
-    <div><b style="color:${p.hoy.vencidas ? "var(--rojo)" : "inherit"}">${p.hoy.vencidas}</b><span>atrasadas</span></div>`;
+    <div><b class="${p.hoy.vencidas ? "alerta" : ""}">${p.hoy.vencidas}</b><span>atrasadas</span></div>`;
 
   $("#lista-eventos").innerHTML = p.eventos.length
     ? p.eventos.map((e) => `<li><div class="cuerpo">${esc(e.titulo)}<span class="sub">${fmtDia(e.inicio)} · ${fmtHora(e.inicio)}${e.lugar ? " · " + esc(e.lugar) : ""}</span></div><button class="x" data-borrar-evento="${e.id}" title="Borrar">✕</button></li>`).join("")
@@ -383,7 +384,7 @@ irA("hablar");
 
 // ---------------- Avisos en vivo ----------------
 function conectarVivo() {
-  const fuente = new EventSource(`/api/vivo?token=${encodeURIComponent(token || "")}`);
+  const fuente = new EventSource("/api/vivo");
   fuente.onmessage = (ev) => {
     const d = JSON.parse(ev.data);
     if (d.tipo === "aviso") {
@@ -428,6 +429,14 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
+$("#btn-salir").addEventListener("click", async () => {
+  await fetch("/api/salir", { method: "POST", credentials: "same-origin" });
+  location.reload();
+});
+$("#btn-salir-todo").addEventListener("click", async () => {
+  await api("/salir-de-todo", { method: "POST" }).catch(() => {});
+  location.reload();
+});
 $("#btn-prueba").addEventListener("click", async () => { await api("/push/prueba", { method: "POST" }); $("#aj-msg").textContent = "Aviso enviado."; });
 $("#aj-guardar").addEventListener("click", async () => {
   guardado.set("delta_voz", $("#aj-voz").checked ? "1" : "0");

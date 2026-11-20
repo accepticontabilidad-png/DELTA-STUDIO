@@ -10,29 +10,48 @@ import { iniciarVigilante, suscribirPantalla, avisar } from "./avisos.js";
 import { whatsappConfigurado, verificarWebhook, crearReceptorWebhook } from "./whatsapp.js";
 import { llavesPush, guardarSuscripcion } from "./push.js";
 import { zonaHoraria } from "./tiempo.js";
+import * as seg from "./seguridad.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-app.use(express.json({ limit: "1mb" }));
 
-// ---------- Acceso (un solo usuario, protegido con clave) ----------
-const CLAVE = process.env.CLAVE_ACCESO || "";
-if (!CLAVE) console.warn("⚠️  Falta CLAVE_ACCESO: la app quedará abierta a cualquiera que tenga el enlace.");
-const tokenValido = () => crypto.createHmac("sha256", CLAVE || "sin-clave").update("delta-v1").digest("hex");
-
-function protegido(req, res, next) {
-  if (!CLAVE) return next();
-  const t = (req.headers.authorization || "").replace(/^Bearer /, "") || req.query.token;
-  if (t && t.length === tokenValido().length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(tokenValido()))) return next();
-  res.status(401).json({ error: "No autorizado" });
+try {
+  seg.revisarClave();
+} catch (e) {
+  console.error("⛔ " + e.message);
+  process.exit(1);
 }
 
-app.post("/api/entrar", (req, res) => {
-  const clave = String(req.body?.clave || "");
-  const a = crypto.createHash("sha256").update(clave).digest();
-  const b = crypto.createHash("sha256").update(CLAVE).digest();
-  if (!CLAVE || crypto.timingSafeEqual(a, b)) return res.json({ token: tokenValido() });
-  res.status(401).json({ error: "Clave incorrecta" });
+const app = express();
+app.disable("x-powered-by");
+// Detrás del servidor de la nube (Railway/Render) la conexión real llega por un proxy.
+app.set("trust proxy", Number(process.env.PROXIES_DE_CONFIANZA ?? 1));
+app.use(seg.cabeceras);
+// Guardamos el cuerpo original para poder comprobar la firma de WhatsApp.
+app.use(express.json({ limit: "200kb", verify: (req, _res, buf) => { req.cuerpoOriginal = buf; } }));
+
+// ---------- Entrada (un solo usuario, protegido con clave) ----------
+app.post("/api/entrar", async (req, res) => {
+  const ip = req.ip;
+  const espera = seg.bloqueado(ip);
+  if (espera) return res.status(429).json({ error: `Demasiados intentos. Intente de nuevo en ${espera} min.` });
+
+  if (!seg.claveCorrecta(String(req.body?.clave || ""))) {
+    const activoBloqueo = seg.registrarFallo(ip);
+    await new Promise((r) => setTimeout(r, 600)); // frena a quien intenta adivinar
+    if (activoBloqueo) {
+      avisar(`⚠️ Alguien intentó entrar a DELTA con clave incorrecta varias veces (IP ${ip}). Lo bloqueé un rato.`, "Alerta de seguridad").catch(() => {});
+    }
+    return res.status(401).json({ error: "Clave incorrecta" });
+  }
+  const { id, expira } = seg.crearSesion(req.get("user-agent"));
+  seg.ponerCookie(req, res, id, expira);
+  res.json({ ok: true });
+});
+
+app.post("/api/salir", (req, res) => {
+  seg.cerrarSesion(seg.leerCookie(req));
+  seg.borrarCookie(res);
+  res.json({ ok: true });
 });
 
 // ---------- WhatsApp ----------
@@ -41,20 +60,23 @@ app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta));
 
 // ---------- API del panel ----------
 const api = express.Router();
-api.use(protegido);
+api.use(seg.protegido);
 
 const envolver = (fn) => async (req, res) => {
   try {
     res.json(await fn(req));
   } catch (e) {
     console.error(e);
-    res.status(400).json({ error: e.message });
+    // Errores de la API de Claude u otros internos no se muestran tal cual.
+    const interno = e?.status || e?.name === "APIError" || /Anthropic|ECONN|fetch/i.test(String(e?.constructor?.name) + e?.message);
+    res.status(interno ? 502 : 400).json({ error: interno ? "DELTA no pudo completar eso ahora. Intente de nuevo." : e.message });
   }
 };
 
 api.post("/chat", envolver(async (req) => {
   const texto = String(req.body?.texto || "").trim();
   if (!texto) throw new Error("Mensaje vacío");
+  if (texto.length > 4000) throw new Error("Mensaje demasiado largo");
   const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app");
   return { respuesta };
 }));
@@ -106,6 +128,11 @@ api.post("/ajustes", envolver((req) => {
 
 api.get("/push/llave", envolver(() => ({ llave: llavesPush().publicKey })));
 api.post("/push/suscribir", envolver((req) => { guardarSuscripcion(req.body); return { ok: true }; }));
+api.post("/salir-de-todo", (_req, res) => {
+  seg.cerrarTodas();
+  seg.borrarCookie(res);
+  res.json({ ok: true });
+});
 api.post("/push/prueba", envolver(async () => { await avisar("Prueba de aviso. Todo en orden, señor."); return { ok: true }; }));
 
 // Avisos en tiempo real para la pantalla abierta
