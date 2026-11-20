@@ -82,8 +82,9 @@ api.post("/chat", envolver(async (req) => {
   if (!texto && archivos.length) texto = "Revise lo que le adjunto, por favor.";
   if (!texto) throw new Error("Mensaje vacío");
   if (texto.length > 4000) throw new Error("Mensaje demasiado largo");
-  const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app", archivos);
-  return { respuesta };
+  const info = {};
+  const respuesta = await hablarConDelta(texto, req.body?.canal === "voz" ? "voz" : "app", archivos, info);
+  return { respuesta, hizo_cambio: Boolean(info.hizoCambio) };
 }));
 
 api.get("/historial", envolver(() =>

@@ -7,6 +7,7 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 - **Conversación con voz:** tocas el orbe, hablas, y DELTA responde en voz alta. También tiene modo manos libres: dices "Delta, …" y te escucha.
 - **Tareas:** "Anota que tengo que mandarle el reporte a Acme el viernes, es urgente."
 - **Calendario propio:** "Agenda junta con Café Luna mañana a las 10 por Zoom." Te avisa 15 minutos antes. En la app se ve como calendario de Día, Semana o Mes.
+- **Sonidos:** tonos propios de DELTA al escuchar, enviar, responder, cuando agenda o completa algo y en los avisos. Se apagan en ⚙ Ajustes.
 - **Archivos:** con el clip 📎 adjuntas fotos (o la cámara del celular), PDF, Word (.docx), Excel (.xlsx), CSV o texto, y DELTA los lee y analiza. Hasta 10 MB cada uno y 5 por mensaje.
 - **Recordatorios:** "Recuérdame pagar la renta cada mes el día 1 a las 9." Únicos, diarios, semanales o mensuales.
 - **Resumen de la mañana:** cada día a la hora que elijas (8:00 por defecto) te manda tus citas y pendientes.

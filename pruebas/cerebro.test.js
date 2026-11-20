@@ -132,3 +132,14 @@ test("los archivos adjuntos llegan a DELTA y quedan anotados en la plática", as
   assert.equal(typeof previo, "string");
   assert.match(previo, new RegExp(`archivo ${a.id}`));
 });
+
+test("avisa a la app cuando DELTA cambió algo de verdad (para el sonido)", async () => {
+  const info = {};
+  guion = [usar("crear_tarea", { titulo: "Probar sonido" }), texto("Anotada, señor.")];
+  await hablarConDelta("Anota probar sonido", "app", [], info);
+  assert.equal(info.hizoCambio, true);
+  const info2 = {};
+  guion = [texto("Buenas tardes.")];
+  await hablarConDelta("Hola", "app", [], info2);
+  assert.equal(info2.hizoCambio, false);
+});

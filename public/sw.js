@@ -1,6 +1,6 @@
 // Service worker de DELTA: deja la app instalable, funciona sin conexión básica y muestra avisos.
-const CACHE = "delta-v5";
-const ARCHIVOS = ["/", "/index.html", "/estilos.css", "/app.js", "/manifest.webmanifest", "/icons/logo.svg", "/icons/icono-192.png", "/icons/icono-512.png"];
+const CACHE = "delta-v6";
+const ARCHIVOS = ["/", "/index.html", "/estilos.css", "/app.js", "/sonidos.js", "/manifest.webmanifest", "/icons/logo.svg", "/icons/icono-192.png", "/icons/icono-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
