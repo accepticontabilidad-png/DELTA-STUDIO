@@ -112,3 +112,23 @@ test("no arrastra disculpas por respuestas pasadas", async () => {
   assert.doesNotMatch(hist, /ninguna\]/);
   assert.doesNotMatch(hist, /Le debo la verdad/);
 });
+
+test("los archivos adjuntos llegan a DELTA y quedan anotados en la plática", async () => {
+  const { guardarArchivo } = await import("../server/archivos.js");
+  const a = guardarArchivo(Buffer.from("Cliente,Monto\nSol,4500"), "ventas.csv");
+  nuevaConversacion();
+  recibidas.length = 0;
+  guion = [texto("Vendió 4,500 a Sol, señor.")];
+  await hablarConDelta("¿Cuánto vendí?", "app", [a.id]);
+  const contenido = recibidas[0].messages.at(-1).content;
+  assert.equal(contenido[0].type, "document");
+  assert.match(contenido[0].source.data, /Sol,4500/);
+  assert.match(contenido.at(-1).text, /\[Adjuntó: ventas\.csv/);
+  // En el siguiente turno ya no se reenvía el archivo; queda la nota con su id para leer_archivo.
+  recibidas.length = 0;
+  guion = [texto("De nada.")];
+  await hablarConDelta("Gracias");
+  const previo = recibidas[0].messages[0].content;
+  assert.equal(typeof previo, "string");
+  assert.match(previo, new RegExp(`archivo ${a.id}`));
+});

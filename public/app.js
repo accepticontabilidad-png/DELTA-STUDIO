@@ -336,10 +336,16 @@ $("#form-agregar").addEventListener("submit", async (e) => {
 });
 
 // ---------------- Conversación ----------------
-function burbuja(rol, texto) {
+function burbuja(rol, texto, archivos = []) {
   const div = document.createElement("div");
   div.className = `burbuja ${rol}`;
   div.textContent = texto;
+  if (archivos.length) {
+    const lista = document.createElement("div");
+    lista.className = "burbuja-archivos";
+    for (const n of archivos) { const s = document.createElement("span"); s.textContent = "📎 " + n; lista.appendChild(s); }
+    div.prepend(lista);
+  }
   $("#conversacion").appendChild(div);
   $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
   return div;
@@ -349,18 +355,23 @@ async function cargarHistorial() {
   const h = await api("/historial");
   $("#conversacion").innerHTML = "";
   if (!h.length) burbuja("assistant", "A sus órdenes, señor. Puede pedirme que agende una cita, anote una tarea o le recuerde algo.");
-  h.forEach((m) => burbuja(m.rol, m.texto));
+  h.forEach((m) => burbuja(m.rol, m.texto, m.archivos || []));
 }
 
 let ocupado = false;
 async function enviar(texto, canal = "app") {
-  if (!texto || ocupado) return;
+  const listos = adjuntos.filter((a) => a.id);
+  if ((!texto && !listos.length) || ocupado) return;
+  if (adjuntos.some((a) => a.subiendo)) { burbuja("aviso", "Espere un momento, todavía se está subiendo el archivo."); return; }
   ocupado = true;
-  burbuja("user", texto);
+  const archivos = listos.map((a) => a.id);
+  burbuja("user", texto, listos.map((a) => a.nombre));
+  adjuntos = adjuntos.filter((a) => !a.id && !a.error);
+  pintarAdjuntos();
   const espera = burbuja("assistant pensando", "Procesando…");
   orbe.estado("pensando");
   try {
-    const { respuesta } = await api("/chat", { method: "POST", body: { texto, canal } });
+    const { respuesta } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
     espera.className = "burbuja assistant";
     espera.textContent = respuesta;
     if (canal === "voz" || guardado.get("delta_voz") === "1") hablar(respuesta);
@@ -374,6 +385,70 @@ async function enviar(texto, canal = "app") {
     ocupado = false;
   }
 }
+
+// ---------------- Archivos adjuntos ----------------
+const MAX_MB = 10;
+let adjuntos = []; // { clave, nombre, tamano, subiendo, id, error }
+const tamanoLegible = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
+
+function pintarAdjuntos() {
+  const caja = $("#adjuntos");
+  caja.hidden = !adjuntos.length;
+  caja.innerHTML = adjuntos.map((a) => `<span class="adjunto${a.subiendo ? " subiendo" : ""}${a.error ? " error" : ""}" title="${esc(a.error || a.nombre)}">📎 <span class="nombre">${esc(a.nombre)}</span><small>${a.error ? esc(a.error) : a.subiendo ? "subiendo…" : tamanoLegible(a.tamano)}</small><button type="button" data-quitar-adjunto="${a.clave}" aria-label="Quitar">✕</button></span>`).join("");
+}
+$("#adjuntos").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-quitar-adjunto]");
+  if (!b) return;
+  adjuntos = adjuntos.filter((a) => String(a.clave) !== b.dataset.quitarAdjunto);
+  pintarAdjuntos();
+});
+
+// Las fotos se achican antes de subirlas (más rápido y dentro del límite).
+async function achicarFoto(archivo) {
+  if (!/^image\/(jpeg|png|webp)$/.test(archivo.type) || archivo.size < 1.5 * 1048576) return archivo;
+  try {
+    const img = await createImageBitmap(archivo);
+    const escala = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = Math.round(img.width * escala);
+    lienzo.height = Math.round(img.height * escala);
+    lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
+    const blob = await new Promise((r) => lienzo.toBlob(r, "image/jpeg", 0.85));
+    return blob ? new File([blob], archivo.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : archivo;
+  } catch { return archivo; }
+}
+
+async function subir(archivo) {
+  const a = { clave: Math.random().toString(36).slice(2), nombre: archivo.name, tamano: archivo.size, subiendo: true };
+  adjuntos.push(a);
+  pintarAdjuntos();
+  try {
+    if (adjuntos.filter((x) => !x.error).length > 5) throw new Error("máximo 5 por mensaje");
+    const listo = await achicarFoto(archivo);
+    if (listo.size > MAX_MB * 1048576) throw new Error(`pesa más de ${MAX_MB} MB`);
+    const r = await fetch("/api/archivos", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/octet-stream", "X-Delta": "1", "X-Nombre": encodeURIComponent(listo.name) },
+      body: listo,
+    });
+    if (r.status === 401) { mostrarEntrada(); throw new Error("sesión cerrada"); }
+    const datos = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(datos.error || "no se pudo subir");
+    Object.assign(a, { id: datos.id, nombre: datos.nombre, tamano: datos.tamano });
+  } catch (err) {
+    a.error = err.message;
+  } finally {
+    a.subiendo = false;
+    pintarAdjuntos();
+  }
+}
+$("#btn-clip").addEventListener("click", () => $("#archivo").click());
+$("#archivo").addEventListener("change", (e) => {
+  for (const f of e.target.files) subir(f);
+  e.target.value = "";
+  $("#texto").focus();
+});
 
 $("#form-chat").addEventListener("submit", (e) => {
   e.preventDefault();

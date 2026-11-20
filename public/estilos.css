@@ -265,3 +265,17 @@ input[type=date], select { width: 100%; padding: 11px 14px; border-radius: 10px;
 .det-titulo { font-size: 18px; margin: 10px 0 6px; color: var(--texto); letter-spacing: 0; text-transform: none; }
 .det-cuando { margin: 0 0 6px; color: var(--lila); font-weight: 600; }
 .det-linea { margin: 4px 0; overflow-wrap: anywhere; }
+
+/* ---------- Archivos adjuntos ---------- */
+.adjuntos { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
+.adjunto { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 6px 5px 10px; border-radius: 999px; background: var(--cian-suave); border: 1px solid var(--borde); font-size: 12px; }
+.adjunto .nombre { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adjunto small { color: var(--tenue); }
+.adjunto.subiendo { opacity: .75; }
+.adjunto.subiendo small { color: var(--dorado); }
+.adjunto.error { border-color: rgba(255,90,122,.5); }
+.adjunto.error small { color: var(--rojo); }
+.adjunto button { border: none; background: none; color: var(--tenue); padding: 0 4px; font-size: 12px; }
+.burbuja-archivos { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.burbuja-archivos span { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(8,5,24,.45); border: 1px solid var(--borde); }
+.form-chat .clip { flex-shrink: 0; }
