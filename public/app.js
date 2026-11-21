@@ -1365,8 +1365,14 @@ const orbe = (() => {
   }
   const chispas = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
 
+  // El lienzo se ajusta al tamaño real del orbe para que se vea nítido aunque esté muy grande.
+  function ajustarLienzo() {
+    const lado = Math.round(Math.min(1600, Math.max(300, lienzo.clientWidth * Math.min(window.devicePixelRatio || 1, 2))));
+    if (lado && Math.abs(lienzo.width - lado) > 4) { lienzo.width = lienzo.height = lado; }
+  }
+  if ("ResizeObserver" in window) new ResizeObserver(ajustarLienzo).observe(lienzo);
   function dibujar(t) {
-    const W = lienzo.width, C = W / 2;
+    const W = lienzo.width, C = W / 2, e = W / 600; // e: escala de trazos respecto al tamaño original
     ctx.clearRect(0, 0, W, W);
     const nivel = estado === "hablando" ? nivelVoz() : null;
     empuje *= 0.94;
@@ -1396,7 +1402,7 @@ const orbe = (() => {
       const brillo = 0.25 + 0.6 * Math.abs(Math.sin(t / 700 + p.t));
       ctx.fillStyle = `rgba(233,230,255,${brillo * (0.4 + energia * 0.6)})`;
       ctx.beginPath();
-      ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, 1.4, 0, Math.PI * 2);
+      ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, 1.4 * e, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -1405,9 +1411,9 @@ const orbe = (() => {
     anillos.forEach(([rad, grosor, vel, largo], i) => {
       const giro = t * vel * (1 + energia);
       ctx.strokeStyle = rgba(0.3 + 0.45 * energia);
-      ctx.lineWidth = grosor * 2;
+      ctx.lineWidth = grosor * 2 * e;
       ctx.shadowColor = rgba(0.9);
-      ctx.shadowBlur = 12 * energia;
+      ctx.shadowBlur = 12 * energia * e;
       for (let k = 0; k < 3; k++) {
         ctx.beginPath();
         const ini = giro + (k * Math.PI * 2) / 3;
@@ -1417,7 +1423,7 @@ const orbe = (() => {
       ctx.shadowBlur = 0;
       if (i === 0) { // marcas tipo instrumento
         ctx.strokeStyle = rgba(0.18);
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 * e;
         for (let k = 0; k < 72; k++) {
           const a = (k / 72) * Math.PI * 2 - giro * 0.3;
           const r1 = W * 0.465, r2 = W * (k % 6 ? 0.475 : 0.488);
@@ -1433,7 +1439,7 @@ const orbe = (() => {
     if (energia > 0.4 && estado !== "reposo") {
       const barras = 64;
       ctx.lineCap = "round";
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * e;
       for (let k = 0; k < barras; k++) {
         const a = (k / barras) * Math.PI * 2 - Math.PI / 2;
         const v = nivel != null
@@ -1454,13 +1460,13 @@ const orbe = (() => {
     const puntos = 120;
     for (let k = 0; k <= puntos; k++) {
       const a = (k / puntos) * Math.PI * 2;
-      const onda = Math.sin(a * 7 + t / 230) * Math.sin(a * 3 - t / 380) * 14 * energia;
+      const onda = Math.sin(a * 7 + t / 230) * Math.sin(a * 3 - t / 380) * 14 * energia * e;
       const rad = W * 0.29 + onda;
       const x = C + Math.cos(a) * rad, y = C + Math.sin(a) * rad;
       k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.strokeStyle = rgba(0.25 + 0.5 * energia);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * e;
     ctx.stroke();
 
     // En reposo y con "reducir movimiento" se dibuja más lento para cuidar la batería.

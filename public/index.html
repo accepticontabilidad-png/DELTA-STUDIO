@@ -69,18 +69,6 @@
       <div class="secciones">
       <!-- Inicio: centro de mando (HUD) con DELTA y el resumen del día -->
       <section class="seccion inicio" data-seccion="inicio">
-        <header class="hud-hero">
-          <div class="hud-saludo">
-            <span id="hud-fecha" class="hud-eyebrow"></span>
-            <h1 id="hud-saludo">Hola</h1>
-            <p id="hud-frase" class="hud-frase">Preparando tu día…</p>
-          </div>
-          <div class="hud-derecha">
-            <div id="hud-clima" class="hud-clima" hidden></div>
-            <div class="hud-reloj" aria-label="Hora"><span id="hud-hora">--:--</span><small id="hud-seg">00</small><em id="hud-ampm"></em></div>
-          </div>
-          <div class="hud-progreso" aria-hidden="true"><span id="hud-progreso"></span></div>
-        </header>
         <div class="hud-ticker" id="hud-ticker-caja" hidden aria-label="Mercados"><div class="hud-ticker-pista" id="hud-ticker"></div></div>
 
         <section class="centro">
@@ -113,7 +101,19 @@
           </form>
         </section>
 
-        <aside class="hud-tablero" id="panel-hoy">
+        <aside class="hud-tablero hud-izq" id="panel-hoy">
+          <header class="hud-hero">
+            <div class="hud-saludo">
+              <span id="hud-fecha" class="hud-eyebrow"></span>
+              <h1 id="hud-saludo">Hola</h1>
+              <p id="hud-frase" class="hud-frase">Preparando tu día…</p>
+            </div>
+            <div class="hud-derecha">
+              <div id="hud-clima" class="hud-clima" hidden></div>
+              <div class="hud-reloj" aria-label="Hora"><span id="hud-hora">--:--</span><small id="hud-seg">00</small><em id="hud-ampm"></em></div>
+            </div>
+            <div class="hud-progreso" aria-hidden="true"><span id="hud-progreso"></span></div>
+          </header>
           <div id="resumen-hoy" class="hud-tiles"></div>
           <article class="hud-card hud-agenda">
             <h2><a href="#/agenda" class="ver-mas">Agenda <span>›</span></a></h2>
@@ -124,6 +124,8 @@
             <h2><a href="#/tareas" class="ver-mas">Pendientes <span>›</span></a></h2>
             <ul id="hoy-tareas" class="lista"></ul>
           </article>
+        </aside>
+        <aside class="hud-tablero hud-der" id="panel-der">
           <article class="hud-card">
             <h2><a href="#/correo" class="ver-mas">Correo <span>›</span></a></h2>
             <ul id="hud-correo" class="lista correos-mini"></ul>
@@ -132,11 +134,11 @@
             <h2><a href="#/mercados" class="ver-mas">Mercados <span>›</span></a></h2>
             <ul id="lista-mercados" class="lista mercados"></ul>
           </article>
-          <article class="hud-card hud-ancha">
+          <article class="hud-card">
             <h2><a href="#/mercados" class="ver-mas">Noticias <span>›</span></a></h2>
             <ul id="hud-noticias" class="lista noticias"></ul>
           </article>
-          <article class="hud-card hud-ancha">
+          <article class="hud-card">
             <h2>Avisos recientes</h2>
             <ul id="lista-avisos" class="lista tenue"></ul>
           </article>
