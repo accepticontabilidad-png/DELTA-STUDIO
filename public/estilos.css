@@ -593,8 +593,11 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
 @keyframes hud-entra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 1280px) and (min-width: 901px) {
-  /* Pantallas medianas: DELTA a la izquierda en grande, la información en una columna a la derecha */
-  .seccion.inicio.visible { grid-template-columns: minmax(400px, 1.5fr) minmax(280px, 1fr); grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "ticker ticker" "centro izq" "centro der"; }
+  /* Pantallas medianas: DELTA arriba y al centro; la información debajo en dos columnas */
+  .seccion.inicio.visible { height: auto; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "ticker ticker" "centro centro" "izq der"; }
+  .seccion.inicio .centro { width: min(860px, 100%); justify-self: center; }
+  .seccion.inicio .conversacion { max-height: 36vh; }
+  .hud-tablero { overflow: visible; }
   .seccion.inicio .orbe { width: clamp(340px, calc(100vh - 400px), 620px); }
   .atajo { display: none; }
 }
@@ -713,3 +716,23 @@ body::before { content: ""; position: fixed; inset: -20%; z-index: 0; pointer-ev
 .pastilla { border: 1px solid transparent; background: linear-gradient(rgba(12,9,34,.6), rgba(12,9,34,.6)) padding-box, var(--linea-luz) border-box; }
 .chip { border: 1px solid transparent; background: linear-gradient(rgba(22,16,58,.55), rgba(22,16,58,.55)) padding-box, var(--linea-luz) border-box; }
 @media (prefers-reduced-motion: reduce) { body::before, .modo-delta .delta-nombre { animation: none; } }
+
+/* ---------- DELTA siempre al centro de la pantalla ----------
+   En DELTA e Inicio el menú se vuelve un panel que se abre con el botón de arriba,
+   así el orbe queda justo en medio de la ventana, nunca de lado. */
+.btn-menu-pc { display: none; }
+@media (min-width: 901px) {
+  body[data-seccion="delta"] .btn-menu-pc, body[data-seccion="inicio"] .btn-menu-pc { display: grid; }
+  body[data-seccion="delta"] .cuerpo-app, body[data-seccion="inicio"] .cuerpo-app { grid-template-columns: minmax(0, 1fr); }
+  body[data-seccion="delta"] .menu, body[data-seccion="inicio"] .menu { position: fixed; top: 0; bottom: 0; left: 0; height: 100vh; width: 280px; z-index: 20; border-radius: 0 var(--radio) var(--radio) 0; transform: translateX(-105%); transition: transform .28s cubic-bezier(.2,.8,.2,1); overflow: auto; padding-top: 20px; background: linear-gradient(170deg, rgba(24,18,64,.97), rgba(8,6,24,.98)) padding-box, var(--linea-luz) border-box; }
+  body[data-seccion="delta"] .menu.abierto, body[data-seccion="inicio"] .menu.abierto { transform: none; }
+  body[data-seccion="delta"] .menu-fondo, body[data-seccion="inicio"] .menu-fondo { display: block; position: fixed; inset: 0; background: rgba(2,1,10,.55); backdrop-filter: blur(3px); z-index: 19; }
+  .barra .btn-menu-pc { margin-right: -4px; }
+}
+/* Aurora centrada detrás del orbe: respira despacio, siempre en medio */
+body::before { inset: 0; background:
+  radial-gradient(44vmin 40vmin at 50% 46%, rgba(123,92,255,.22), transparent 70%),
+  radial-gradient(70vmin 52vmin at 50% 50%, rgba(150,90,255,.10), transparent 72%),
+  radial-gradient(36vmin 28vmin at 56% 58%, rgba(255,120,220,.07), transparent 70%);
+  animation: aurora-centro 14s ease-in-out infinite alternate; transform-origin: 50% 48%; }
+@keyframes aurora-centro { 0% { transform: scale(1) rotate(0deg); opacity: .85; } 50% { transform: scale(1.1) rotate(4deg); opacity: 1; } 100% { transform: scale(1.03) rotate(-3deg); opacity: .9; } }

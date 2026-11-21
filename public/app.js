@@ -762,6 +762,7 @@ addEventListener("hashchange", () => mostrarSeccion(seccionDeLaDireccion()));
 // Menú en el celular: se abre con "Más"
 function cerrarMenu() { $("#menu").classList.remove("abierto"); $("#menu-fondo").hidden = true; }
 $("#btn-mas").addEventListener("click", () => { $("#menu").classList.add("abierto"); $("#menu-fondo").hidden = false; });
+$("#btn-menu-pc").addEventListener("click", () => { $("#menu").classList.add("abierto"); $("#menu-fondo").hidden = false; });
 $("#menu-fondo").addEventListener("click", cerrarMenu);
 
 // Botones "Resumir con DELTA" / "Analizar con DELTA": llevan la pregunta al chat.
