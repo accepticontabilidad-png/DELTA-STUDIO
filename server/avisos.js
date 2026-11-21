@@ -4,7 +4,7 @@ import { enviarWhatsApp } from "./whatsapp.js";
 import { enviarPush } from "./push.js";
 import { utcALocal, ahoraLocalISO, siguiente } from "./tiempo.js";
 import { resumenDelDia, legible } from "./agenda.js";
-import * as correo from "./gmail.js";
+import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 
@@ -82,9 +82,12 @@ export async function extrasDelResumen() {
   ]);
   const partes = [];
   if (mail.status === "fulfilled" && mail.value) {
-    const c = mail.value.correos;
-    partes.push(c.length ? `\n📧 ${c.length} correo(s) sin leer:` : "\n📧 Sin correos nuevos importantes.");
-    for (const m of c.slice(0, 5)) partes.push(`• ${m.de.replace(/<.*>/, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}`);
+    for (const c of Object.values(mail.value)) {
+      const titulo = `\n📧 ${c.nombre}${c.cuenta ? ` (${c.cuenta})` : ""}`;
+      if (c.error) { partes.push(`${titulo}: no pude revisarlo ahora.`); continue; }
+      partes.push(c.correos.length ? `${titulo}: ${c.correos.length} sin leer` : `${titulo}: sin correos nuevos importantes.`);
+      for (const m of c.correos.slice(0, 4)) partes.push(`• ${m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}`);
+    }
   }
   if (bolsa.status === "fulfilled") {
     const ok = bolsa.value.filter((d) => !d.error).slice(0, 6);

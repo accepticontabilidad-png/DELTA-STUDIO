@@ -24,7 +24,7 @@ function urlRetorno(req) {
 const estados = new Map(); // estado -> expira (un solo uso, 10 min)
 
 export function urlConexion(req) {
-  if (!gmailDisponible()) throw new Error("Falta configurar GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en el servidor");
+  if (!gmailDisponible()) throw new Error("Falta poner GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en Railway (Variables). Vea la guía para conectar Gmail.");
   const estado = crypto.randomBytes(24).toString("hex");
   const ahora = Date.now();
   for (const [k, exp] of estados) if (exp < ahora) estados.delete(k);
