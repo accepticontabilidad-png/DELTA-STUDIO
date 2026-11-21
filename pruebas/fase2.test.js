@@ -103,3 +103,45 @@ test("gmail: sin configurar no está conectado", () => {
   assert.equal(gmail.gmailConectado(), false);
   assert.throws(() => gmail.urlConexion({ protocol: "https", get: () => "x" }), /GOOGLE_CLIENT_ID/);
 });
+
+test("tablero de bolsa: velas, tipos y símbolos", () => {
+  const v = mercados.interpretarVelas({ chart: { result: [{
+    meta: { symbol: "AAPL", currency: "USD", regularMarketPrice: 12 },
+    timestamp: [100, 200, 300],
+    indicators: { quote: [{ open: [10, null, 11], high: [11, 9, 12.5], low: [9, 8, 10.5], close: [10.5, 8.5, 12], volume: [5, 6, 7] }] },
+  }] } }, "Apple");
+  assert.equal(v.nombre, "Apple");
+  assert.equal(v.velas.length, 2); // la vela incompleta se descarta
+  assert.deepEqual(v.velas[1], { t: 300000, o: 11, h: 12.5, l: 10.5, c: 12, v: 7 });
+  assert.equal(mercados.tipoDe("^GSPC"), "Índice");
+  assert.equal(mercados.tipoDe("MXN=X"), "Divisa");
+  assert.equal(mercados.tipoDe("BTC-USD"), "Cripto");
+  assert.equal(mercados.tipoDe("WALMEX.MX"), "Acción");
+  assert.throws(() => mercados.velas("a b;c"), /no válido/);
+});
+
+const panorama = await import("../server/panorama.js");
+
+test("centro de noticias: ubica titulares en el globo", () => {
+  assert.equal(panorama.ubicar("Banxico recorta su tasa de interés")?.lugar, "México");
+  assert.equal(panorama.ubicar("Sismo sacude la Ciudad de México esta mañana")?.lugar, "Ciudad de México");
+  assert.equal(panorama.ubicar("Israel y Hamas negocian tregua en Gaza")?.lugar, "Israel");
+  assert.equal(panorama.ubicar("Japón anuncia paquete económico")?.lugar, "Japón");
+  assert.equal(panorama.ubicar("El oro toca nuevo máximo"), null);
+  const r = panorama.agruparPorLugar([
+    { region: "Mundo", noticias: [{ titulo: "Japón sube tasas", fecha: "2026-11-21T10:00:00Z" }, { titulo: "El oro sube" }] },
+    { region: "Europa", centro: [50, 10], noticias: [{ titulo: "Japón sube tasas" }, { titulo: "Cumbre climática sin acuerdo" }] },
+  ]);
+  assert.equal(r.puntos.find((p) => p.lugar === "Japón").noticias.length, 1); // sin repetidos
+  assert.ok(r.puntos.some((p) => p.lugar === "Europa")); // sin lugar en el titular: cae en el centro de su región
+  assert.deepEqual(r.sin_lugar.map((n) => n.titulo), ["El oro sube"]);
+});
+
+test("centro de noticias: lee canales y videos de YouTube", () => {
+  assert.equal(panorama.idDeCanal('..."externalId":"UCabcdefghijklmnopqrstuv"...'), "UCabcdefghijklmnopqrstuv");
+  assert.equal(panorama.idDeCanal("<html>nada</html>"), null);
+  const v = panorama.leerVideos(`<feed><entry><yt:videoId>abcDEF12345</yt:videoId><title>Noticias &amp; más</title><published>2026-11-21T10:00:00+00:00</published></entry><entry><title>sin id</title></entry></feed>`, "N+");
+  assert.equal(v.length, 1);
+  assert.equal(v[0].titulo, "Noticias & más");
+  assert.equal(v[0].imagen, "https://i.ytimg.com/vi/abcDEF12345/mqdefault.jpg");
+});

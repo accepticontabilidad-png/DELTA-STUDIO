@@ -210,18 +210,95 @@
       </section>
 
       <section class="seccion mercados-noticias" data-seccion="mercados">
-        <div class="panel">
-          <div class="ag-cabeza">
-            <h2>Mercados</h2>
-            <div class="ag-botones"><button type="button" class="ag-agregar" data-pedir="¿Cómo va la bolsa hoy y qué ideas de inversión ves? Incluye los riesgos.">Analizar con DELTA</button></div>
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Mercados y noticias</h1>
+          <span class="tb-hora" id="tb-hora"></span>
+          <div class="ag-botones">
+            <button type="button" class="ag-agregar" data-pedir="¿Cómo va la bolsa hoy y qué ideas de inversión ves? Incluye los riesgos.">Analizar bolsa</button>
+            <button type="button" class="ag-agregar" data-pedir="Dame el panorama de las noticias de hoy: qué está pasando en el mundo y qué me puede afectar.">Platicar noticias</button>
           </div>
-          <ul id="tabla-mercados" class="lista mercados"></ul>
-          <p class="tenue">Para agregar o quitar: "Delta, agrega Tesla a mi lista". Solo información, no asesoría financiera.</p>
         </div>
-        <div class="panel">
-          <h2>Noticias</h2>
-          <div id="noticias"></div>
-          <p class="tenue">Para cambiar temas: "Delta, agrega fútbol a mis noticias".</p>
+
+        <!-- Un solo tablero: bolsa y noticias juntas -->
+        <div class="tablero" id="tablero">
+          <div class="tb-kpis" id="tb-kpis"></div>
+          <div class="panel tb-velas">
+            <div class="tb-sel">
+              <div>
+                <h2 id="tb-sel-nombre">Bolsa</h2>
+                <span class="tb-sel-simbolo" id="tb-sel-simbolo"></span>
+              </div>
+              <div class="tb-sel-datos">
+                <b id="tb-sel-precio"></b>
+                <span class="tb-chip" id="tb-sel-cambio"></span>
+                <span class="tb-sel-periodo" id="tb-sel-periodo"></span>
+              </div>
+            </div>
+            <div class="tb-herramientas">
+              <div class="segmento chico" id="tb-periodos"></div>
+              <span class="tb-leyenda"><i class="ley-vela"></i>Velas <i class="ley-media"></i>Promedio 20 <i class="ley-vol"></i>Volumen</span>
+              <button type="button" class="tb-link" id="tb-preguntar" data-pedir="">Preguntarle a DELTA</button>
+            </div>
+            <div class="tb-grafica-caja" id="tb-grafica-caja">
+              <svg id="tb-grafica" class="tb-grafica" role="img" aria-label="Gráfica de velas"></svg>
+              <div class="tb-tip" id="tb-tip" hidden></div>
+              <p class="tenue tb-grafica-msg" id="tb-grafica-msg"></p>
+            </div>
+          </div>
+          <div class="panel tb-lista-caja">
+            <h2>Tu lista</h2>
+            <ul class="tb-lista" id="tb-lista"></ul>
+            <p class="tenue chico">Para agregar o quitar: "Delta, agrega Tesla a mi lista".</p>
+          </div>
+          <div class="panel tb-barras-caja">
+            <h2>Cambio del día</h2>
+            <svg id="tb-barras" class="tb-barras" role="img" aria-label="Cambio del día por símbolo"></svg>
+          </div>
+          <div class="panel tb-dona-caja">
+            <h2>Ánimo del mercado</h2>
+            <div id="tb-dona" class="tb-dona"></div>
+          </div>
+          <div class="panel tb-extremos">
+            <h2>Lo que más se mueve</h2>
+            <div class="tb-dos">
+              <div><h3>Suben</h3><ul id="tb-suben" class="tb-mini"></ul></div>
+              <div><h3>Bajan</h3><ul id="tb-bajan" class="tb-mini"></ul></div>
+            </div>
+            <div class="tb-rango" id="tb-rango" hidden></div>
+          </div>
+          <div class="panel tn-globo-caja">
+            <div class="tn-globo-cabeza">
+              <h2>El mundo ahora</h2>
+              <span class="tb-hora" id="tn-contador"></span>
+            </div>
+            <canvas id="tn-globo" class="tn-globo" aria-label="Globo con los lugares de las noticias"></canvas>
+            <div class="tn-lugares" id="tn-lugares"></div>
+          </div>
+          <div class="panel tn-resumen-caja">
+            <div class="ag-cabeza">
+              <h2>Resumen de la situación</h2>
+              <div class="ag-botones">
+                <button type="button" class="tb-link" id="tn-resumen-oir" title="Escuchar">Escuchar</button>
+                <button type="button" class="tb-link" id="tn-resumen-nuevo">Actualizar</button>
+              </div>
+            </div>
+            <div id="tn-resumen" class="tn-resumen"></div>
+            <p class="tenue chico" id="tn-resumen-hora"></p>
+          </div>
+          <div class="panel tn-lugar-caja">
+            <h2 id="tn-lugar-nombre">Noticias</h2>
+            <ul id="tn-lugar" class="tn-lugar"></ul>
+          </div>
+          <div class="panel tn-videos-caja">
+            <h2>Videos de noticias</h2>
+            <div id="tn-videos" class="tn-videos"></div>
+          </div>
+          <div class="panel tn-temas">
+            <h2>Tus temas</h2>
+            <div id="noticias" class="tn-temas-lista"></div>
+            <p class="tenue chico">Para cambiar temas: "Delta, agrega fútbol a mis noticias".</p>
+          </div>
+          <p class="tenue chico tb-nota">Datos de Yahoo Finanzas (pueden tener unos minutos de retraso). Solo información, no asesoría financiera: DELTA nunca compra ni vende.</p>
         </div>
       </section>
 
@@ -290,6 +367,12 @@
       <button type="button" id="btn-mas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Más</span></button>
     </nav>
   </main>
+
+  <dialog id="dlg-video" class="dialogo video">
+    <div class="ag-cabeza"><h2 id="dlg-video-titulo">Video</h2><button type="button" class="tb-link" id="dlg-video-cerrar">Cerrar</button></div>
+    <div class="tn-reproductor" id="tn-reproductor"></div>
+    <a class="tb-link" id="dlg-video-yt" href="#" target="_blank" rel="noopener noreferrer">Abrir en YouTube</a>
+  </dialog>
 
   <dialog id="agregar" class="dialogo">
     <form id="form-agregar" method="dialog">

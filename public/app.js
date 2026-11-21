@@ -1,5 +1,6 @@
 // DELTA — app del panel (PC y celular)
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
+import { iniciarTableros } from "/tableros.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
   get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -131,16 +132,17 @@ async function cargarMercadosMini() {
   pintarTicker(ok);
 }
 
+// Tablero unificado de bolsa y noticias (se arma la primera vez que se abre la sección).
+let tableros = null;
 async function cargarMercadosYNoticias() {
-  const [bolsa, notas] = await Promise.allSettled([api("/mercados"), api("/noticias")]);
-  const ok = bolsa.status === "fulfilled" ? bolsa.value.filter((d) => !d.error) : [];
-  $("#tabla-mercados").innerHTML = ok.length ? ok.map(filaMercado).join("") : sinBolsa;
+  tableros ||= iniciarTableros({ api, esc, guardado, decir });
+  const [, notas] = await Promise.allSettled([tableros.cargar(), api("/noticias")]);
   $("#noticias").innerHTML = notas.status === "fulfilled"
-    ? notas.value.map((t) => `<h3>${esc(t.tema)}</h3><ul class="lista noticias">${
+    ? notas.value.map((t) => `<div class="tn-tema"><h3>${esc(t.tema)}</h3><ul class="lista noticias">${
         t.noticias?.length
           ? t.noticias.map((n) => `<li><div class="cuerpo"><a href="${esc(/^https:\/\//.test(n.enlace) ? n.enlace : "#")}" target="_blank" rel="noopener noreferrer">${esc(n.titulo)}</a><span class="sub">${esc(n.fuente)}${n.fecha ? " · " + fmtDia(n.fecha) + " " + fmtHora(n.fecha) : ""}</span></div></li>`).join("")
           : `<li class="vacio">${t.error ? "No se pudo cargar." : "Sin noticias hoy."}</li>`
-      }</ul>`).join("")
+      }</ul></div>`).join("")
     : `<p class="tenue">No se pudieron cargar las noticias.</p>`;
 }
 

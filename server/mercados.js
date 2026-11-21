@@ -89,12 +89,85 @@ export function cotizacion(simbolo, periodo = "mes", nombre) {
   return conCache(`bolsa:${limpiar(simbolo)}:${periodo}:${nombre || ""}`, 60e3, () => cotizacionDirecta(simbolo, periodo, nombre));
 }
 
-async function cotizacionDirecta(simbolo, periodo, nombre) {
-  const rango = RANGOS[periodo] || "1mo";
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(limpiar(simbolo))}?range=${rango}&interval=1d`;
+async function pedirYahoo(simbolo, rango, intervalo = "1d") {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(limpiar(simbolo))}?range=${rango}&interval=${intervalo}`;
   const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(10000) });
   if (!r.ok && r.status !== 404) throw new Error(`El servicio de bolsa respondió ${r.status}`);
-  return { ...interpretarGrafica(await r.json(), nombre), periodo };
+  return r.json();
+}
+
+async function cotizacionDirecta(simbolo, periodo, nombre) {
+  return { ...interpretarGrafica(await pedirYahoo(simbolo, RANGOS[periodo] || "1mo"), nombre), periodo };
+}
+
+// ---------- Tablero de bolsa (velas, series y tipos) ----------
+
+/** Qué es cada símbolo, para agrupar en el tablero. */
+export function tipoDe(simbolo) {
+  const s = limpiar(simbolo);
+  if (s.startsWith("^")) return "Índice";
+  if (s.endsWith("=X")) return "Divisa";
+  if (/-(USD|MXN|EUR)$/.test(s)) return "Cripto";
+  if (s.endsWith("=F")) return "Materia prima";
+  return "Acción";
+}
+
+/** Convierte la respuesta de Yahoo en velas (apertura, máximo, mínimo, cierre y volumen). */
+export function interpretarVelas(json, nombre) {
+  const r = json?.chart?.result?.[0];
+  if (!r) throw new Error(json?.chart?.error?.description || "Sin datos");
+  const m = r.meta || {};
+  const q = r.indicators?.quote?.[0] || {};
+  const red = (x) => Math.round(x * 10000) / 10000;
+  const velas = (r.timestamp || [])
+    .map((t, i) => ({ t: t * 1000, o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] || 0 }))
+    .filter((x) => [x.o, x.h, x.l, x.c].every((n) => typeof n === "number"))
+    .map((x) => ({ t: x.t, o: red(x.o), h: red(x.h), l: red(x.l), c: red(x.c), v: x.v }));
+  return {
+    simbolo: m.symbol,
+    nombre: nombre || m.shortName || m.longName || m.symbol,
+    moneda: m.currency || "",
+    precio: m.regularMarketPrice ?? velas.at(-1)?.c ?? null,
+    anterior: m.chartPreviousClose ?? m.previousClose ?? null,
+    max_52s: m.fiftyTwoWeekHigh ?? null,
+    min_52s: m.fiftyTwoWeekLow ?? null,
+    velas,
+  };
+}
+
+export const PERIODOS_VELAS = { hoy: ["1d", "5m"], "5d": ["5d", "30m"], "1m": ["1mo", "1d"], "3m": ["3mo", "1d"], "6m": ["6mo", "1d"], "1a": ["1y", "1d"], "5a": ["5y", "1wk"] };
+
+export function velas(simbolo, periodo = "3m") {
+  const [rango, intervalo] = PERIODOS_VELAS[periodo] || PERIODOS_VELAS["3m"];
+  const s = limpiar(simbolo);
+  if (!/^[\^A-Z0-9.=\-]{1,20}$/.test(s)) throw new Error("Símbolo no válido");
+  const nombre = lista().find((x) => x.simbolo === s)?.nombre;
+  const vida = periodo === "hoy" || periodo === "5d" ? 60e3 : 5 * 60e3;
+  return conCache(`velas:${s}:${periodo}`, vida, async () => ({ ...interpretarVelas(await pedirYahoo(s, rango, intervalo), nombre), periodo }));
+}
+
+/** Resumen de un símbolo para el tablero: cotización del día, cambio del mes y su línea de los últimos 3 meses. */
+export function resumenTablero(simbolo, nombre) {
+  return conCache(`tablero:${limpiar(simbolo)}:${nombre || ""}`, 2 * 60e3, async () => {
+    const json = await pedirYahoo(simbolo, "3mo");
+    const base = interpretarGrafica(json, nombre);
+    const cierres = (json.chart.result[0].indicators?.quote?.[0]?.close || []).filter((c) => typeof c === "number");
+    const hace1m = cierres.length > 22 ? cierres.at(-22) : cierres[0];
+    return {
+      ...base,
+      tipo: tipoDe(simbolo),
+      cambio_mes_pct: pct(base.precio, hace1m),
+      cambio_3m_pct: base.cambio_periodo_pct,
+      serie: cierres.slice(-40).map((c) => Math.round(c * 100) / 100),
+    };
+  });
+}
+
+export async function tablero() {
+  const base = lista();
+  const res = await Promise.allSettled(base.map((x) => resumenTablero(x.simbolo, x.nombre)));
+  const items = res.map((r, i) => (r.status === "fulfilled" ? r.value : { simbolo: base[i].simbolo, nombre: base[i].nombre, tipo: tipoDe(base[i].simbolo), error: r.reason.message }));
+  return { items, hora: new Date().toISOString() };
 }
 
 /** Cotiza varios símbolos; los que fallen se reportan sin tumbar a los demás. */
