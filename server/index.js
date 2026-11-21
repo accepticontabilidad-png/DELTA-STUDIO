@@ -16,6 +16,7 @@ import * as gmail from "./gmail.js";
 import * as outlook from "./outlook.js";
 import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
+import * as panorama from "./panorama.js";
 import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
@@ -190,6 +191,13 @@ api.get("/outlook/conectar", envolver((req) => ({ url: outlook.urlConexion(req) 
 api.post("/outlook/desconectar", envolver(() => { outlook.desconectar(); return { ok: true }; }));
 api.get("/mercados", envolver(() => mercados.verMercados(null, "dia")));
 api.get("/noticias", envolver(() => noticias.titulares(4)));
+// Tableros de "Mercados y noticias"
+api.get("/bolsa/tablero", envolver(() => mercados.tablero()));
+api.get("/bolsa/velas/:simbolo", envolver((req) => mercados.velas(req.params.simbolo, String(req.query.periodo || "3m"))));
+api.get("/noticias/mapa", envolver(() => panorama.mapa()));
+api.get("/noticias/videos", envolver(() => panorama.videos()));
+api.get("/noticias/resumen", envolver(() => panorama.resumen(false)));
+api.post("/noticias/resumen", envolver(() => panorama.resumen(true)));
 api.get("/correo", envolver(() => correo.recientes(25)));
 api.get("/correo/mensaje", envolver((req) => correo.leerCorreo(String(req.query.id || ""))));
 const datosCorreo = (b = {}) => {
