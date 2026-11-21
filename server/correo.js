@@ -96,6 +96,17 @@ export async function enviarBorrador(idCompleto) {
   return { ...r, desde: proveedores[origen].cuenta() || NOMBRES[origen] };
 }
 
+/**
+ * Envío directo desde la pantalla de Correo: lo pide el usuario con su propio botón "Enviar"
+ * (DELTA, en el chat, sigue obligada a mostrar el borrador y esperar su confirmación).
+ */
+export async function enviarAhora(datos) {
+  if (!String(datos.cuerpo || "").trim()) throw new Error("El correo está vacío");
+  const b = await crearBorrador(datos);
+  const r = await enviarBorrador(b.borrador_id);
+  return { ...r, para: b.para, asunto: b.asunto };
+}
+
 /** Para el resumen de la mañana: no leídos de las últimas 24 h, separados por cuenta. */
 export async function pendientesDeHoy() {
   const cuentas = conectados();
