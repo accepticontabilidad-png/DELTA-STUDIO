@@ -85,7 +85,8 @@ async function cargarPanel() {
   const c = p.conexiones;
   const filas = [
     ["Cerebro (Claude)", c.cerebro], ["Calendario de DELTA", c.calendario],
-    [c.gmail ? `Gmail${c.gmail_cuenta ? ` (${c.gmail_cuenta})` : ""}` : "Gmail: conéctelo en ⚙ Ajustes", c.gmail],
+    [c.gmail ? `Gmail${c.gmail_cuenta ? ` (${c.gmail_cuenta})` : ""}` : c.gmail_disponible ? "Gmail: toque Conectar Gmail" : "Gmail: faltan sus llaves de Google en Railway", c.gmail],
+    [c.outlook ? `Hotmail${c.outlook_cuenta ? ` (${c.outlook_cuenta})` : ""}` : c.outlook_disponible ? "Hotmail: toque Conectar Hotmail" : "Hotmail: faltan sus llaves de Microsoft en Railway", c.outlook],
     ["Bolsa y noticias", true], [c.higgsfield ? "Higgsfield (imágenes y video con IA)" : "Higgsfield: falta su llave en Railway", c.higgsfield], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
   ].map(([n, on]) => `<li class="${on ? "on" : ""}"><span class="punto"></span>${n}</li>`);
   filas.push(`<li class="pronto"><span class="punto"></span>Cuentas de clientes (Meta, Instagram, TikTok): próximamente</li>`);
@@ -99,16 +100,20 @@ async function cargarPanel() {
   const n = p.aprobaciones_pendientes || 0;
   $("#badge-aprob").hidden = !n;
   $("#badge-aprob").textContent = n;
-  gmailConectado = c.gmail;
+  correoConectado = { gmail: c.gmail, outlook: c.outlook };
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
-  $("#btn-gmail").hidden = !c.gmail_disponible && !c.gmail;
+  $("#btn-outlook").textContent = c.outlook ? "Desconectar Hotmail" : "Conectar Hotmail";
 
   if (p.voz) { vozNatural = p.voz; pintarVoz(); }
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
 }
 
-let gmailConectado = false;
+let correoConectado = { gmail: false, outlook: false };
+const NOMBRE_CUENTA = { gmail: "Gmail", outlook: "Hotmail" };
+const remitente = (m) => m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de;
+const marcaCuenta = (m, varias) => (varias ? `<span class="marca-cuenta ${m.origen === "outlook" ? "hotmail" : "gmail"}">${NOMBRE_CUENTA[m.origen] || ""}</span>` : "");
+const variasCuentas = (d) => (d.cuentas || []).length > 1;
 const filaMercado = (d) => {
         const c = d.cambio_dia_pct;
         const clase = c > 0 ? "sube" : c < 0 ? "baja" : "";
@@ -138,13 +143,17 @@ async function cargarMercadosYNoticias() {
 async function cargarCorreo() {
   const d = await api("/correo");
   if (!d.conectado) {
-    $("#correo-estado").textContent = "Gmail no está conectado todavía. Conéctelo en ⚙ Ajustes → Conectar Gmail.";
+    $("#correo-estado").textContent = "Todavía no hay correo conectado. Conecte Gmail y Hotmail en ⚙ Ajustes.";
     $("#lista-correos").innerHTML = "";
     return;
   }
-  $("#correo-estado").textContent = `${d.cuenta || "Gmail"} · bandeja de entrada, últimos 2 días`;
+  const varias = variasCuentas(d);
+  const falta = ["gmail", "outlook"].filter((k) => !d.cuentas.some((c) => c.origen === k)).map((k) => NOMBRE_CUENTA[k]);
+  $("#correo-estado").textContent = `${d.cuenta} · bandeja de entrada, últimos 2 días`
+    + (falta.length ? ` · ${falta.join(" y ")} sin conectar` : "")
+    + (d.errores?.length ? ` · No pude revisar ${d.errores.map((e) => e.split(":")[0]).join(" ni ")} ahora` : "");
   $("#lista-correos").innerHTML = d.correos.length
-    ? d.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de)}</b> · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
+    ? d.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b>${marcaCuenta(m, varias)} · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
     : `<li class="vacio">Sin correos recientes.</li>`;
 }
 
@@ -317,12 +326,12 @@ async function cargarHudExtra() {
   $("#hud-correo").innerHTML = !c
     ? `<li class="vacio">No pude revisar el correo ahora.</li>`
     : !c.conectado
-      ? `<li class="vacio">Conecta Gmail en ⚙ Ajustes y aquí verás lo nuevo.</li>`
+      ? `<li class="vacio">Conecte Gmail y Hotmail en ⚙ Ajustes y aquí verá lo nuevo.</li>`
       : (() => {
         const nuevos = c.correos.filter((m) => m.sin_leer);
         const ver = (nuevos.length ? nuevos : c.correos).slice(0, 3);
         return ver.length
-          ? ver.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de)}</b><span class="sub">${esc(m.asunto || "(sin asunto)")}</span></div><span class="tenue hora">${fmtHora(m.fecha)}</span></li>`).join("")
+          ? ver.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b><span class="sub">${marcaCuenta(m, variasCuentas(c))}${esc(m.asunto || "(sin asunto)")}</span></div><span class="tenue hora">${fmtHora(m.fecha)}</span></li>`).join("")
           : `<li class="vacio">Bandeja tranquila.</li>`;
       })();
   const titulares = (hud.noticias || []).flatMap((t) => (t.noticias || []).slice(0, 1).map((n) => ({ ...n, tema: t.tema }))).slice(0, 4);
@@ -802,24 +811,30 @@ document.addEventListener("click", (e) => {
   enviar(b.dataset.pedir);
 });
 
-$("#btn-gmail").addEventListener("click", async () => {
-  try {
-    if (gmailConectado) {
-      await api("/gmail/desconectar", { method: "POST" });
-      $("#aj-msg").textContent = "Gmail desconectado.";
-      return cargarPanel();
-    }
-    const { url } = await api("/gmail/conectar");
-    location.href = url;
-  } catch (err) { $("#aj-msg").textContent = err.message; }
-});
+for (const boton of document.querySelectorAll("[data-correo]")) {
+  boton.addEventListener("click", async () => {
+    const k = boton.dataset.correo;
+    try {
+      if (correoConectado[k]) {
+        await api(`/${k}/desconectar`, { method: "POST" });
+        $("#aj-msg").textContent = `${NOMBRE_CUENTA[k]} desconectado.`;
+        hud.extraEn = 0;
+        return cargarPanel();
+      }
+      const { url } = await api(`/${k}/conectar`);
+      location.href = url;
+    } catch (err) { $("#aj-msg").textContent = err.message; }
+  });
+}
 
-// Regreso de Google después de conectar Gmail
+// Regreso de Google o Microsoft después de conectar un correo
 {
   const q = new URLSearchParams(location.search);
-  if (q.get("gmail")) {
+  const estado = q.get("correo") || q.get("gmail");
+  if (estado) {
+    const nombre = NOMBRE_CUENTA[q.get("cuenta")] || "Gmail";
     history.replaceState(null, "", "/");
-    setTimeout(() => burbuja("aviso", q.get("gmail") === "ok" ? "Gmail conectado. Pregúnteme por su correo cuando guste." : `No se pudo conectar Gmail: ${q.get("motivo") || "intente de nuevo"}`), 800);
+    setTimeout(() => burbuja("aviso", estado === "ok" ? `${nombre} conectado. Pregúnteme por su correo cuando guste.` : `No se pudo conectar ${nombre}: ${q.get("motivo") || "intente de nuevo"}`), 800);
   }
 }
 

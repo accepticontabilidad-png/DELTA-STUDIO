@@ -17,7 +17,7 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 
 ## Fase 2: correo, bolsa y noticias
 
-- **Correo (Gmail):** "¿Qué correos importantes tengo?", "Resúmeme lo que mandó Acme", "Contéstale que sí el jueves". DELTA lee, resume, saca citas y tareas, y escribe borradores. **Nunca envía sin que usted lo vea y diga "envíalo".**
+- **Correo (Gmail y Hotmail):** las dos cuentas en una sola bandeja. "¿Qué correos importantes tengo?", "Resúmeme lo que mandó Acme", "Contéstale que sí el jueves". DELTA lee, resume, saca citas y tareas, y escribe borradores. **Nunca envía sin que usted lo vea y diga "envíalo".**
 - **Bolsa:** "¿Cómo va la bolsa?", "¿Cómo le fue a Nvidia este año?", "Agrega Tesla a mi lista", "Dame ideas para invertir". Lista inicial: S&P 500, Nasdaq, IPC, dólar/peso, Apple, Microsoft, Nvidia, Amazon, Walmart de México y Bitcoin. Avisa si algo se mueve más de 3 % en el día. Solo informa: no compra ni vende, y sus ideas no son asesoría financiera.
 - **Noticias:** "¿Qué hay de nuevo en cine?", "Agrega fútbol a mis noticias". Temas iniciales: marketing, tendencias, IA, ciencia, arte, cine, economía mundial y política en México.
 - **Resumen de la mañana** ahora incluye correos sin leer, mercados y un titular por tema.
@@ -110,6 +110,23 @@ Se hace una sola vez (unos 10 minutos):
 5. En **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**: tipo **Aplicación web**. En "URI de redireccionamiento autorizados" ponga `https://SU-DIRECCION/oauth/google` (ej. `https://delta-studio-production.up.railway.app/oauth/google`).
 6. Copie el **ID de cliente** en `GOOGLE_CLIENT_ID` y el **Secreto** en `GOOGLE_CLIENT_SECRET` (en Railway: pestaña Variables). Opcional: ponga su correo en `GMAIL_CUENTA` para que DELTA solo acepte esa cuenta.
 7. En la app: ⚙ → **Conectar Gmail** y acepte los permisos.
+
+### 5b. Conectar Hotmail / Outlook.com
+
+También una sola vez (unos 15 minutos). Microsoft pide que la "app" de DELTA viva en un directorio de Azure; con su cuenta de Hotmail se crea gratis.
+
+1. Entre a [portal.azure.com](https://portal.azure.com) con su Hotmail. Si le dice que no tiene directorio o suscripción, cree la **cuenta gratuita de Azure** (pide una tarjeta solo para verificar identidad; DELTA no usa nada de pago).
+2. Busque **Microsoft Entra ID → Registros de aplicaciones → Nuevo registro**.
+   - Nombre: `DELTA`.
+   - Tipos de cuenta: **Cuentas en cualquier directorio organizativo y cuentas personales de Microsoft** (la que incluye Skype y Xbox).
+   - URI de redirección: plataforma **Web**, `https://SU-DIRECCION/oauth/microsoft` (ej. `https://delta-studio-production.up.railway.app/oauth/microsoft`).
+3. En **Información general** copie el **Id. de aplicación (cliente)** en `MICROSOFT_CLIENT_ID`.
+4. En **Certificados y secretos → Nuevo secreto de cliente** (duración 24 meses) copie el **Valor** (no el "Id. de secreto") en `MICROSOFT_CLIENT_SECRET`. Anote en su agenda renovarlo antes de que venza.
+5. En **Permisos de API → Agregar un permiso → Microsoft Graph → Permisos delegados** marque `Mail.ReadWrite`, `Mail.Send`, `User.Read` y `offline_access`.
+6. En Railway (pestaña Variables) ponga las dos llaves. Opcional: su Hotmail en `OUTLOOK_CUENTA` para que DELTA solo acepte esa cuenta.
+7. En la app: ⚙ → **Conectar Hotmail**, entre con su Hotmail y acepte los permisos.
+
+DELTA lee, resume y hace borradores en las dos cuentas; al contestar un correo, el borrador sale de la cuenta que lo recibió. Nunca envía sin que usted lo vea y diga "envíalo".
 
 ### 6. Conectar WhatsApp
 

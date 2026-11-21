@@ -6,7 +6,7 @@ import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
 import { bloquesDeArchivo, infoArchivo, listarArchivos } from "./archivos.js";
 import { ahoraLocalISO, zonaHoraria, utcALocal } from "./tiempo.js";
-import * as correo from "./gmail.js";
+import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as agencia from "./agencia.js";
@@ -46,10 +46,10 @@ Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. Al abrirla aparece una pantalla de arranque con el logo de DELTA y una bienvenida (se salta con "Saltar").
 - En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Tablero (clientes, proyectos y entregas; ahí se dan de alta clientes), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo), Estudio de diseño (los carruseles, posts, historias y videos que hizo Diseño, para verlos y descargarlos) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
 - Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano.
-- Correo: lista de sus correos recientes y botón "Resumir con DELTA". Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
+- Correo: una sola lista con los correos recientes de sus dos cuentas (Gmail y Hotmail), cada uno marcado con su cuenta, y botón "Resumir con DELTA". Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
 - Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
-- Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail, empezar conversación nueva y cerrar sesión.
+- Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail y Hotmail, empezar conversación nueva y cerrar sesión.
 - Para hablar contigo: tocar el orbe o el micrófono.
 
 Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
@@ -58,7 +58,7 @@ Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso
 - Recordatorios y avisos: programar avisos a una hora concreta, únicos o repetidos.
 - Archivos: cuando el usuario adjunte algo, léelo con cuidado y responde a lo que pide (resumir, analizar números, revisar un contrato, describir una foto, sacar fechas para agendar…). Si no dice qué quiere, da un resumen breve y pregunta qué necesita. Si te pregunta por un archivo anterior que ya no tienes a la vista, usa leer_archivo con el id que aparece en "[Adjuntó: …]".
 - Memoria: cuando el usuario te cuente algo que valga la pena recordar a futuro (nombres de clientes, preferencias, datos de su negocio), guárdalo con guardar_memoria.
-- Correo (Gmail): buscar y leer sus correos, resumirlos, separar lo urgente, sacar citas y tareas de ellos, y escribir borradores de respuesta. Para buscar usa la sintaxis de Gmail (is:unread, from:, newer_than:2d, has:attachment…). Si Gmail no está conectado, dile que lo conecte en Ajustes ⚙ → "Conectar Gmail".
+- Correo (Gmail y Hotmail): el usuario tiene dos cuentas. Puedes buscar y leer sus correos en las dos a la vez o en una sola, resumirlos, separar lo urgente, sacar citas y tareas de ellos, y escribir borradores de respuesta. Cada correo trae "origen" (gmail u outlook) y "cuenta"; cuando hables de sus correos di de qué cuenta es cada uno si tiene las dos conectadas. Para buscar usa la sintaxis de Gmail (is:unread, from:, subject:, newer_than:2d, has:attachment…); para Hotmail se traduce sola. Al responder un correo, el borrador sale de la misma cuenta que lo recibió. Si una cuenta no está conectada, dile que la conecte en Ajustes ⚙ → "Conectar Gmail" o "Conectar Hotmail".
 - Enviar correos: NUNCA envíes sin permiso. Primero crea el borrador con crear_borrador y muéstrale al usuario a quién va, el asunto y el texto. Solo usa enviar_borrador cuando, en un mensaje posterior, el usuario diga claramente que lo envíes. El sistema bloquea enviar un borrador creado en el mismo turno.
 - Bolsa y mercados: cotizaciones de su lista de seguimiento (índices, acciones, dólar, cripto), cómo van en el día, el mes o el año, y alertas cuando algo se mueve fuerte. Puede agregar o quitar símbolos de su lista; si no sabes el símbolo, búscalo con buscar_simbolo. Las acciones de la Bolsa Mexicana terminan en .MX (ej. WALMEX.MX).
 - Ideas de inversión: cuando pida ideas, usa analizar_accion y noticias para dar un análisis informativo (tendencia, rango del año, noticias que la mueven, riesgos). Presenta siempre ventajas y riesgos, recuerda en una frase corta que es información y no asesoría financiera, y sugiere diversificar. Nunca prometas rendimientos. No puedes comprar ni vender nada.
@@ -299,10 +299,11 @@ const json = (x) => JSON.stringify(x);
 herramientasBase.push(
   betaTool({
     name: "buscar_correos",
-    description: "Busca correos en Gmail con la sintaxis de búsqueda de Gmail. Devuelve remitente, asunto, fecha, vista previa y si está sin leer. Por defecto: bandeja de entrada de los últimos 2 días.",
+    description: "Busca correos en sus cuentas (Gmail y Hotmail) con la sintaxis de búsqueda de Gmail. Devuelve remitente, asunto, fecha, vista previa, si está sin leer y de qué cuenta es. Por defecto: las dos bandejas de entrada, últimos 2 días.",
     inputSchema: {
       type: "object",
       properties: {
+        cuenta: { type: "string", enum: ["ambas", "gmail", "outlook"], description: "En qué cuenta buscar. outlook = Hotmail. Por defecto: ambas" },
         consulta: { type: "string", description: "Ej. 'is:unread newer_than:1d', 'from:cliente@acme.com', 'subject:factura'" },
         max: { type: "integer", description: "Máximo de correos (1 a 25, por defecto 10)" },
       },
@@ -312,16 +313,17 @@ herramientasBase.push(
   }),
   betaTool({
     name: "leer_correo",
-    description: "Abre un correo completo por su id (texto y nombres de adjuntos).",
+    description: "Abre un correo completo por su id (texto y nombres de adjuntos), de cualquiera de sus cuentas.",
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
     run: async ({ id }) => json(await correo.leerCorreo(id)),
   }),
   betaTool({
     name: "crear_borrador",
-    description: "Guarda un borrador en Gmail (NO lo envía). Para responder un correo pasa responder_a con su id: se toma el destinatario y el asunto del original si no los das.",
+    description: "Guarda un borrador (NO lo envía). Para responder un correo pasa responder_a con su id: sale de la misma cuenta y se toma el destinatario y el asunto del original si no los das. Para un correo nuevo, elige la cuenta (gmail u outlook = Hotmail); si no la das, se usa Gmail si está conectado.",
     inputSchema: {
       type: "object",
       properties: {
+        cuenta: { type: "string", enum: ["gmail", "outlook"], description: "Desde qué cuenta, solo para correos nuevos" },
         para: { type: "string", description: "Correo(s) del destinatario, separados por coma" },
         cc: { type: "string" },
         asunto: { type: "string" },
@@ -339,7 +341,7 @@ herramientasBase.push(
   }),
   betaTool({
     name: "enviar_borrador",
-    description: "Envía un borrador de Gmail. Solo cuando el usuario ya vio el borrador y pidió enviarlo de forma explícita.",
+    description: "Envía un borrador (de Gmail o de Hotmail). Solo cuando el usuario ya vio el borrador y pidió enviarlo de forma explícita.",
     inputSchema: { type: "object", properties: { borrador_id: { type: "string" } }, required: ["borrador_id"], additionalProperties: false },
     run: async ({ borrador_id }) => {
       if (registro.getStore()?.borradores?.has(borrador_id)) {

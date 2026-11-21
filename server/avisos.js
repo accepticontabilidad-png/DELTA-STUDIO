@@ -4,7 +4,7 @@ import { enviarWhatsApp } from "./whatsapp.js";
 import { enviarPush } from "./push.js";
 import { utcALocal, ahoraLocalISO, siguiente } from "./tiempo.js";
 import { resumenDelDia, legible } from "./agenda.js";
-import * as correo from "./gmail.js";
+import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 
@@ -84,7 +84,8 @@ export async function extrasDelResumen() {
   if (mail.status === "fulfilled" && mail.value) {
     const c = mail.value.correos;
     partes.push(c.length ? `\n📧 ${c.length} correo(s) sin leer:` : "\n📧 Sin correos nuevos importantes.");
-    for (const m of c.slice(0, 5)) partes.push(`• ${m.de.replace(/<.*>/, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}`);
+    const varias = new Set(c.map((m) => m.origen)).size > 1;
+    for (const m of c.slice(0, 5)) partes.push(`• ${m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}${varias ? ` (${correo.NOMBRES[m.origen]})` : ""}`);
   }
   if (bolsa.status === "fulfilled") {
     const ok = bolsa.value.filter((d) => !d.error).slice(0, 6);

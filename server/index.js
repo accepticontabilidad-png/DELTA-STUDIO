@@ -12,7 +12,9 @@ import { llavesPush, guardarSuscripcion } from "./push.js";
 import { zonaHoraria } from "./tiempo.js";
 import { guardarArchivo, infoArchivo, MAX_BYTES, MAX_POR_MENSAJE } from "./archivos.js";
 import * as seg from "./seguridad.js";
-import * as correo from "./gmail.js";
+import * as gmail from "./gmail.js";
+import * as outlook from "./outlook.js";
+import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
@@ -68,18 +70,22 @@ app.post("/api/salir", (req, res) => {
 app.get("/webhook/whatsapp", verificarWebhook);
 app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta));
 
-// ---------- Gmail: Google regresa aquí después de que el usuario da permiso ----------
-// (Llega desde Google, así que no trae la cookie; se valida con el "estado" de un solo uso.)
-app.get("/oauth/google", async (req, res) => {
-  try {
-    const cuenta = await correo.terminarConexion(req);
-    avisar(`Gmail conectado${cuenta ? ` (${cuenta})` : ""}. Ya puedo leer y ordenar tu correo.`, "Correo").catch(() => {});
-    res.redirect("/?gmail=ok");
-  } catch (e) {
-    console.error("[gmail]", e.message);
-    res.redirect("/?gmail=error&motivo=" + encodeURIComponent(e.message.slice(0, 200)));
-  }
-});
+// ---------- Correo: Google o Microsoft regresan aquí después de que el usuario da permiso ----------
+// (Llegan desde fuera, así que no traen la cookie; se valida con el "estado" de un solo uso.)
+function retornoOAuth(nombre, mod, clave) {
+  return async (req, res) => {
+    try {
+      const cuenta = await mod.terminarConexion(req);
+      avisar(`${nombre} conectado${cuenta ? ` (${cuenta})` : ""}. Ya puedo leer y ordenar ese correo.`, "Correo").catch(() => {});
+      res.redirect(`/?correo=ok&cuenta=${clave}`);
+    } catch (e) {
+      console.error(`[${clave}]`, e.message);
+      res.redirect(`/?correo=error&cuenta=${clave}&motivo=` + encodeURIComponent(e.message.slice(0, 200)));
+    }
+  };
+}
+app.get("/oauth/google", retornoOAuth("Gmail", gmail, "gmail"));
+app.get("/oauth/microsoft", retornoOAuth("Hotmail", outlook, "outlook"));
 
 // ---------- API del panel ----------
 const api = express.Router();
@@ -145,9 +151,12 @@ api.get("/panel", envolver(() => {
       whatsapp: whatsappConfigurado(),
       push: db.prepare("SELECT COUNT(*) n FROM suscripciones_push").get().n > 0,
       calendario: true,
-      gmail: correo.gmailConectado(),
-      gmail_disponible: correo.gmailDisponible(),
-      gmail_cuenta: correo.cuentaGmail(),
+      gmail: gmail.gmailConectado(),
+      gmail_disponible: gmail.gmailDisponible(),
+      gmail_cuenta: gmail.cuentaGmail(),
+      outlook: outlook.outlookConectado(),
+      outlook_disponible: outlook.outlookDisponible(),
+      outlook_cuenta: outlook.cuentaOutlook(),
       higgsfield: higgsfield.higgsfieldDisponible(),
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
@@ -175,15 +184,13 @@ api.post("/ajustes", envolver((req) => {
   return { ok: true };
 }));
 
-api.get("/gmail/conectar", envolver((req) => ({ url: correo.urlConexion(req) })));
-api.post("/gmail/desconectar", envolver(() => { correo.desconectar(); return { ok: true }; }));
+api.get("/gmail/conectar", envolver((req) => ({ url: gmail.urlConexion(req) })));
+api.post("/gmail/desconectar", envolver(() => { gmail.desconectar(); return { ok: true }; }));
+api.get("/outlook/conectar", envolver((req) => ({ url: outlook.urlConexion(req) })));
+api.post("/outlook/desconectar", envolver(() => { outlook.desconectar(); return { ok: true }; }));
 api.get("/mercados", envolver(() => mercados.verMercados(null, "dia")));
 api.get("/noticias", envolver(() => noticias.titulares(4)));
-api.get("/correo", envolver(async () => {
-  if (!correo.gmailConectado()) return { conectado: false };
-  const { correos } = await correo.buscarCorreos({ consulta: "in:inbox newer_than:2d", max: 20 });
-  return { conectado: true, cuenta: correo.cuentaGmail(), correos };
-}));
+api.get("/correo", envolver(() => correo.recientes(25)));
 
 // ---------- Voz natural (ElevenLabs) ----------
 api.get("/voz", envolver(() => voz.estadoVoz()));
