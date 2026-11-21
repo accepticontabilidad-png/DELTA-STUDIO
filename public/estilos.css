@@ -593,8 +593,11 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
 @keyframes hud-entra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 1280px) and (min-width: 901px) {
-  /* Pantallas medianas: DELTA a la izquierda en grande, la información en una columna a la derecha */
-  .seccion.inicio.visible { grid-template-columns: minmax(400px, 1.5fr) minmax(280px, 1fr); grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "ticker ticker" "centro izq" "centro der"; }
+  /* Pantallas medianas: DELTA arriba y al centro; la información debajo en dos columnas */
+  .seccion.inicio.visible { height: auto; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "ticker ticker" "centro centro" "izq der"; }
+  .seccion.inicio .centro { width: min(860px, 100%); justify-self: center; }
+  .seccion.inicio .conversacion { max-height: 36vh; }
+  .hud-tablero { overflow: visible; }
   .seccion.inicio .orbe { width: clamp(340px, calc(100vh - 400px), 620px); }
   .atajo { display: none; }
 }
@@ -655,3 +658,81 @@ a.marca { color: inherit; }
   .modo-delta .hud-hero { display: none; }
   .modo-delta .centro { width: 100%; }
 }
+
+/* =========================================================
+   Acabado premium: aurora de fondo, bordes de luz finos,
+   letras más ligeras y más aire
+   ========================================================= */
+:root { --linea-luz: linear-gradient(140deg, rgba(220,212,255,.38), rgba(139,115,255,.06) 38%, rgba(139,115,255,.04) 62%, rgba(255,158,232,.22)); }
+body { letter-spacing: .005em; -webkit-font-smoothing: antialiased; }
+/* Aurora: dos luces muy suaves que se mueven despacio detrás de todo */
+body::before { content: ""; position: fixed; inset: -20%; z-index: 0; pointer-events: none;
+  background: radial-gradient(38% 30% at 30% 30%, rgba(123,92,255,.16), transparent 70%), radial-gradient(30% 26% at 72% 64%, rgba(255,120,220,.07), transparent 70%);
+  animation: aurora 38s ease-in-out infinite alternate; will-change: transform; }
+@keyframes aurora { 0% { transform: translate3d(-4%, -2%, 0) scale(1); } 50% { transform: translate3d(3%, 3%, 0) scale(1.08); } 100% { transform: translate3d(5%, -3%, 0) scale(1.02); } }
+
+/* Barra superior y menú más ligeros */
+.barra .lema { opacity: .7; font-weight: 500; }
+.menu { background: linear-gradient(170deg, rgba(30,22,78,.42), rgba(10,8,28,.5)) padding-box, var(--linea-luz) border-box; border: 1px solid transparent; backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%); padding: 14px 10px; }
+.menu-grupo { font-weight: 600; letter-spacing: .38em; font-size: 9.5px; opacity: .8; }
+.menu-item { font-weight: 400; letter-spacing: .02em; position: relative; transition: background .25s, color .25s, transform .25s; }
+.menu-item svg { stroke-width: 1.3; }
+.menu-item:hover { transform: translateX(2px); }
+.menu-item.activa { background: linear-gradient(90deg, rgba(139,115,255,.22), rgba(139,115,255,.04)); border-color: transparent; }
+.menu-item.activa::before { content: ""; position: absolute; left: -10px; top: 22%; bottom: 22%; width: 2px; border-radius: 2px; background: linear-gradient(var(--lila), #ff9ee8); box-shadow: 0 0 10px var(--cian); }
+
+/* Tarjetas: vidrio con un borde de luz fino en degradado */
+.hud-hero, .hud-card, .hud-tile, .hud-ticker {
+  border: 1px solid transparent;
+  background: linear-gradient(165deg, rgba(34,25,86,.40), rgba(10,8,28,.52)) padding-box, var(--linea-luz) border-box;
+  box-shadow: inset 0 1px 0 rgba(233,230,255,.05), 0 18px 50px rgba(2,1,12,.45);
+}
+.hud-card { padding: 16px 18px; border-radius: 18px; }
+.hud-tile { border-radius: 16px; }
+.hud-tile b, .hud-reloj span, .hud-clima b { font-weight: 200; }
+.hud-card h2 { letter-spacing: .36em; font-weight: 600; font-size: 10.5px; }
+.hud-card .lista li { background: rgba(255,255,255,.025); border-left-width: 1px; border-radius: 10px; transition: background .2s; }
+.hud-card .lista li:hover { background: rgba(139,115,255,.08); }
+.hud-saludo h1 { font-weight: 200; letter-spacing: .02em; }
+.hud-card:hover, .hud-tile:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(233,230,255,.06), 0 22px 60px rgba(60,30,160,.28); }
+
+/* Nombre DELTA con un brillo que pasa lento */
+.modo-delta .delta-nombre { background: linear-gradient(100deg, #b7a6ff 0%, #e9e6ff 22%, #ffffff 30%, #c9bfff 40%, #7b5cff 70%, #b7a6ff 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; animation: hud-entra .6s ease-out both, brillo-nombre 7s ease-in-out 1s infinite; }
+@keyframes brillo-nombre { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0% 0; } }
+.orbe .logo-orbe { width: 40%; height: 40%; }
+.estado-orbe { font-weight: 500; letter-spacing: .55em; opacity: .85; }
+
+/* Conversación y cuadro de texto de vidrio */
+.burbuja { border-radius: 18px; line-height: 1.55; }
+.burbuja.assistant { background: linear-gradient(165deg, rgba(34,25,86,.38), rgba(10,8,28,.46)) padding-box, var(--linea-luz) border-box; border: 1px solid transparent; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.burbuja.user { background: linear-gradient(135deg, rgba(139,115,255,.34), rgba(123,92,255,.12)); border-color: rgba(201,191,255,.28); border-bottom-right-radius: 6px; }
+.burbuja.assistant { border-bottom-left-radius: 6px; }
+.seccion.inicio .form-chat #texto { border: 1px solid transparent; background: linear-gradient(rgba(10,8,28,.72), rgba(10,8,28,.72)) padding-box, var(--linea-luz) border-box; transition: box-shadow .25s; }
+.seccion.inicio .form-chat #texto:focus { box-shadow: 0 0 0 4px rgba(139,115,255,.12), 0 0 30px rgba(139,115,255,.18); background: linear-gradient(rgba(10,8,28,.8), rgba(10,8,28,.8)) padding-box, linear-gradient(120deg, #b7a6ff, #7b5cff 50%, #ff9ee8) border-box; }
+.seccion.inicio .form-chat .enviar { background: radial-gradient(circle at 30% 25%, rgba(201,191,255,.55), rgba(123,92,255,.45) 60%, rgba(80,50,200,.5)); box-shadow: 0 0 22px rgba(123,92,255,.45); border-color: rgba(220,212,255,.5); }
+.form-chat .icono { border-color: rgba(183,166,255,.22); background: rgba(12,9,34,.45); transition: border-color .2s, box-shadow .2s; }
+.form-chat .icono:hover { border-color: rgba(183,166,255,.55); box-shadow: 0 0 14px rgba(139,115,255,.3); }
+.pastilla, .chip { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-weight: 500; }
+.pastilla { border: 1px solid transparent; background: linear-gradient(rgba(12,9,34,.6), rgba(12,9,34,.6)) padding-box, var(--linea-luz) border-box; }
+.chip { border: 1px solid transparent; background: linear-gradient(rgba(22,16,58,.55), rgba(22,16,58,.55)) padding-box, var(--linea-luz) border-box; }
+@media (prefers-reduced-motion: reduce) { body::before, .modo-delta .delta-nombre { animation: none; } }
+
+/* ---------- DELTA siempre al centro de la pantalla ----------
+   En DELTA e Inicio el menú se vuelve un panel que se abre con el botón de arriba,
+   así el orbe queda justo en medio de la ventana, nunca de lado. */
+.btn-menu-pc { display: none; }
+@media (min-width: 901px) {
+  body[data-seccion="delta"] .btn-menu-pc, body[data-seccion="inicio"] .btn-menu-pc { display: grid; }
+  body[data-seccion="delta"] .cuerpo-app, body[data-seccion="inicio"] .cuerpo-app { grid-template-columns: minmax(0, 1fr); }
+  body[data-seccion="delta"] .menu, body[data-seccion="inicio"] .menu { position: fixed; top: 0; bottom: 0; left: 0; height: 100vh; width: 280px; z-index: 20; border-radius: 0 var(--radio) var(--radio) 0; transform: translateX(-105%); transition: transform .28s cubic-bezier(.2,.8,.2,1); overflow: auto; padding-top: 20px; background: linear-gradient(170deg, rgba(24,18,64,.97), rgba(8,6,24,.98)) padding-box, var(--linea-luz) border-box; }
+  body[data-seccion="delta"] .menu.abierto, body[data-seccion="inicio"] .menu.abierto { transform: none; }
+  body[data-seccion="delta"] .menu-fondo, body[data-seccion="inicio"] .menu-fondo { display: block; position: fixed; inset: 0; background: rgba(2,1,10,.55); backdrop-filter: blur(3px); z-index: 19; }
+  .barra .btn-menu-pc { margin-right: -4px; }
+}
+/* Aurora centrada detrás del orbe: respira despacio, siempre en medio */
+body::before { inset: 0; background:
+  radial-gradient(44vmin 40vmin at 50% 46%, rgba(123,92,255,.22), transparent 70%),
+  radial-gradient(70vmin 52vmin at 50% 50%, rgba(150,90,255,.10), transparent 72%),
+  radial-gradient(36vmin 28vmin at 56% 58%, rgba(255,120,220,.07), transparent 70%);
+  animation: aurora-centro 14s ease-in-out infinite alternate; transform-origin: 50% 48%; }
+@keyframes aurora-centro { 0% { transform: scale(1) rotate(0deg); opacity: .85; } 50% { transform: scale(1.1) rotate(4deg); opacity: 1; } 100% { transform: scale(1.03) rotate(-3deg); opacity: .9; } }
