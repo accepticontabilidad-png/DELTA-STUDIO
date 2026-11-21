@@ -176,7 +176,6 @@ button[type=submit], .primario, .botones button {
   .menu.abierto { transform: none; }
   .menu-fondo { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 19; }
   .seccion.inicio.visible { display: flex; flex-direction: column; }
-  .seccion.inicio #panel-hoy { display: none; }
   .centro .hoy-mini { display: grid; width: 100%; margin: 0 0 4px; }
   .hoy-mini div { padding: 6px; }
   .hoy-mini b { font-size: 18px; }
@@ -470,9 +469,10 @@ a.ag-agregar { text-decoration: none; }
    ========================================================= */
 .seccion.inicio.visible {
   display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(320px, 1.05fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas: "hero hero" "ticker ticker" "centro tablero";
+  /* DELTA al centro y en grande; la información a los lados */
+  grid-template-columns: minmax(270px, .78fr) minmax(440px, 1.7fr) minmax(270px, .78fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "ticker ticker ticker" "izq centro der";
   gap: 14px 18px;
   height: calc(100vh - 92px);
 }
@@ -486,22 +486,23 @@ body[data-seccion="inicio"] .barra-datos .dato { display: none; }
 }
 
 /* Cabecera: saludo, fecha, clima y reloj grande */
-.hud-hero { grid-area: hero; position: relative; display: flex; align-items: center; gap: 24px; padding: 18px 24px 20px; border-radius: 18px; overflow: hidden; animation: hud-entra .5s ease-out both; }
+.hud-hero { position: relative; display: flex; flex-direction: column-reverse; gap: 10px; padding: 16px 18px 18px; border-radius: 18px; overflow: hidden; animation: hud-entra .5s ease-out both; }
 .hud-hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(600px 180px at 0% 0%, rgba(139,115,255,.22), transparent 60%), radial-gradient(400px 160px at 100% 100%, rgba(255,158,232,.08), transparent 60%); pointer-events: none; }
 .hud-saludo { position: relative; min-width: 0; flex: 1; }
 .hud-eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; color: var(--cian); }
-.hud-saludo h1 { margin: 4px 0 2px; font-size: clamp(24px, 2.4vw, 34px); font-weight: 300; letter-spacing: .01em; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.hud-frase { margin: 0; color: var(--tenue); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hud-derecha { position: relative; display: flex; align-items: center; gap: 26px; }
+.hud-saludo h1 { margin: 4px 0 2px; font-size: clamp(22px, 1.7vw, 30px); font-weight: 300; letter-spacing: .01em; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hud-frase { margin: 0; color: var(--tenue); font-size: 13px; line-height: 1.4; }
+.hud-derecha { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-direction: row-reverse; }
 .hud-reloj { display: flex; align-items: baseline; font-variant-numeric: tabular-nums; }
-.hud-reloj span { font-size: clamp(38px, 3.6vw, 54px); font-weight: 200; letter-spacing: .02em; color: #fff; text-shadow: 0 0 24px rgba(139,115,255,.55); line-height: 1; }
+.hud-reloj span { font-size: clamp(36px, 2.8vw, 50px); font-weight: 200; letter-spacing: .02em; color: #fff; text-shadow: 0 0 24px rgba(139,115,255,.55); line-height: 1; }
 .hud-reloj small { font-size: 16px; font-weight: 400; color: var(--lila); margin-left: 4px; width: 22px; }
 .hud-reloj em { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .15em; color: var(--tenue); margin-left: 4px; text-transform: uppercase; }
-.hud-clima { display: flex; align-items: center; gap: 10px; padding-right: 26px; border-right: 1px solid rgba(183,166,255,.18); }
-.hud-clima svg { width: 34px; height: 34px; fill: none; stroke: var(--lila); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(139,115,255,.7)); }
+.hud-clima { display: flex; align-items: center; gap: 8px; }
+.hud-clima svg { flex: none; width: 28px; height: 28px; fill: none; stroke: var(--lila); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(139,115,255,.7)); }
 .hud-clima div { display: grid; line-height: 1.15; }
-.hud-clima b { font-size: 24px; font-weight: 300; color: #fff; }
-.hud-clima span { font-size: 11.5px; color: var(--tenue); white-space: nowrap; }
+.hud-clima b { font-size: 20px; font-weight: 300; color: #fff; }
+.hud-clima div { min-width: 0; }
+.hud-clima span { font-size: 10.5px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .hud-progreso { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(139,115,255,.1); }
 .hud-progreso span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(139,115,255,.2), var(--cian), #ff9ee8); box-shadow: 0 0 10px var(--cian); transition: width 1s linear; }
 
@@ -518,7 +519,10 @@ body[data-seccion="inicio"] .barra-datos .dato { display: none; }
 
 /* Centro: orbe, accesos y conversación */
 .seccion.inicio .centro { grid-area: centro; max-height: none; min-height: 0; }
-.seccion.inicio .orbe { width: min(300px, 34vh); }
+/* El orbe es lo más grande de la pantalla: ocupa todo el alto que dejan los botones y la conversación */
+.seccion.inicio .orbe { width: clamp(360px, calc(100vh - 400px), 760px); max-width: 100%; margin-top: -6px; }
+.seccion.inicio .estado-orbe { font-size: 11px; bottom: 4%; }
+.seccion.inicio .conversacion { flex: 1 1 120px; min-height: 110px; }
 .voz-controles { display: flex; align-items: center; gap: 12px; margin: 2px 0 10px; }
 .pastilla { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--borde); background: rgba(12,9,34,.55); color: var(--tenue); font-size: 11.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; transition: all .2s; }
 .pastilla:hover { color: var(--texto); border-color: rgba(183,166,255,.5); }
@@ -546,12 +550,15 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
 .seccion.inicio .form-chat .enviar { border-radius: 50%; width: 44px; height: 44px; }
 
 /* Tablero de tarjetas */
-.hud-tablero { grid-area: tablero; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; grid-auto-rows: max-content; gap: 12px; padding: 2px 4px 8px 2px; scrollbar-width: thin; }
-.hud-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.hud-tile { position: relative; display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; text-decoration: none; color: var(--texto); overflow: hidden; transition: transform .2s, border-color .2s; animation: hud-entra .5s ease-out both; }
+.hud-tablero { min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; grid-auto-rows: max-content; gap: 12px; padding: 2px 4px 8px 2px; scrollbar-width: thin; }
+.hud-izq { grid-area: izq; }
+.hud-der { grid-area: der; }
+.hud-tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hud-tile { position: relative; display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; padding: 10px 12px; border-radius: 14px; text-decoration: none; color: var(--texto); overflow: hidden; transition: transform .2s, border-color .2s; animation: hud-entra .5s ease-out both; }
 .hud-tile:nth-child(2) { animation-delay: .05s; } .hud-tile:nth-child(3) { animation-delay: .1s; } .hud-tile:nth-child(4) { animation-delay: .15s; }
 .hud-tile-icono svg { width: 18px; height: 18px; fill: none; stroke: var(--lila); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(139,115,255,.8)); }
-.hud-tile b { font-size: 28px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; color: #fff; }
+.hud-tile > span:not(.hud-tile-icono), .hud-tile em { grid-column: 1 / -1; }
+.hud-tile b { font-size: 26px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; color: #fff; }
 .hud-tile span { font-size: 11px; color: var(--tenue); letter-spacing: .04em; }
 .hud-tile em { font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--rojo); }
 .hud-card { position: relative; border-radius: 16px; padding: 14px 16px; overflow: hidden; transition: transform .2s, border-color .2s; animation: hud-entra .5s ease-out both; }
@@ -579,26 +586,29 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
 .correos-mini b { font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .correos-mini .hora { font-size: 11px; white-space: nowrap; flex: none; }
 .hud-tema { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase; color: var(--cian); margin-bottom: 2px; }
-.hud-card .noticias { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hud-card .noticias { grid-template-columns: minmax(0, 1fr); }
 .hud-card .noticias a { color: var(--texto); text-decoration: none; line-height: 1.35; }
 .hud-card .noticias a:hover { color: var(--lila); }
 .hud-card .mercados li { align-items: center; padding: 6px 10px; }
 @keyframes hud-entra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-@media (max-width: 1280px) {
-  .seccion.inicio.visible { grid-template-columns: minmax(340px, 1fr) minmax(280px, .85fr); }
-  .hud-tablero { grid-template-columns: 1fr; }
-  .hud-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hud-card .noticias { grid-template-columns: 1fr; }
+@media (max-width: 1280px) and (min-width: 901px) {
+  /* Pantallas medianas: DELTA a la izquierda en grande, la información en una columna a la derecha */
+  .seccion.inicio.visible { grid-template-columns: minmax(400px, 1.5fr) minmax(280px, 1fr); grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "ticker ticker" "centro izq" "centro der"; }
+  .seccion.inicio .orbe { width: clamp(340px, calc(100vh - 400px), 620px); }
   .atajo { display: none; }
 }
 @media (max-width: 900px) {
   .seccion.inicio.visible { display: flex; flex-direction: column; gap: 10px; height: auto; }
-  .hud-hero { padding: 14px 16px 16px; gap: 12px; }
+  .hud-hero { padding: 14px 16px 16px; gap: 12px; flex-direction: row; align-items: center; order: -2; }
+  .seccion.inicio .hud-tablero { display: contents; }
+  .hud-ticker { order: -1; }
+  .hud-izq > .hud-card, .hud-der > .hud-card { order: 1; }
   .hud-saludo h1 { font-size: 24px; }
   .hud-eyebrow { font-size: 9px; letter-spacing: .18em; }
-  .hud-frase { white-space: normal; font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .hud-derecha { flex-direction: column-reverse; align-items: flex-end; gap: 4px; }
+  .hud-frase { white-space: normal; font-size: 12.5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .hud-saludo { flex: 1; }
+  .hud-derecha { flex-direction: column-reverse; align-items: flex-end; gap: 4px; justify-content: flex-start; }
   .hud-reloj span { font-size: 30px; }
   .hud-reloj small, .hud-reloj em { font-size: 10px; }
   .hud-reloj small { width: 14px; }
@@ -608,9 +618,9 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
   .hud-clima span { display: none; }
   .hud-ticker { height: 30px; flex: none; }
   .seccion.inicio .centro { max-height: none; }
-  .seccion.inicio .orbe { width: min(200px, 50vw); }
+  .seccion.inicio .orbe { width: min(330px, 84vw); margin-top: 0; }
   .centro .hoy-mini.hud-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 4px; }
-  .hoy-mini .hud-tile { padding: 8px 6px; text-align: center; justify-items: center; border-radius: 12px; }
+  .hoy-mini .hud-tile { grid-template-columns: 1fr; padding: 8px 6px; text-align: center; justify-items: center; border-radius: 12px; }
   .hoy-mini .hud-tile-icono { display: none; }
   .hoy-mini .hud-tile b { font-size: 20px; }
   .hoy-mini .hud-tile span { font-size: 10px; }
@@ -620,11 +630,28 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
   .chips::-webkit-scrollbar { display: none; }
   .chip { flex: none; }
   .seccion.inicio .conversacion { min-height: 200px; max-height: 46dvh; }
-  .seccion.inicio #panel-hoy { display: grid; grid-template-columns: 1fr; }
   .seccion.inicio #panel-hoy #resumen-hoy { display: none; }
   .hud-card .noticias { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hud-ticker-pista { animation: none; }
   .hud-hero, .hud-card, .hud-tile, .chip, .burbuja { animation: none; }
+}
+
+/* ---------- Modo DELTA: al abrir solo está ella, en grande ---------- */
+.delta-nombre, .ver-tablero { display: none; }
+.seccion.inicio.modo-delta.visible { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "centro"; }
+.modo-delta .hud-ticker, .modo-delta .hud-tablero, .modo-delta .hoy-mini, .modo-delta .chips { display: none !important; }
+.modo-delta .centro { width: min(860px, 100%); justify-self: center; }
+.seccion.inicio.modo-delta .orbe { width: clamp(380px, calc(100vh - 340px), 880px); margin-top: -10px; }
+.modo-delta .estado-orbe { bottom: 2%; }
+.modo-delta .delta-nombre { display: block; margin: -4px 0 12px; margin-right: -.6em; font-weight: 200; font-size: clamp(30px, 3.4vw, 52px); letter-spacing: .6em; line-height: 1; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(150,120,255,.4)); animation: hud-entra .6s ease-out both; }
+.modo-delta .ver-tablero { display: inline-flex; text-decoration: none; }
+.modo-delta .conversacion { flex: 1 1 90px; min-height: 90px; mask-image: linear-gradient(transparent, #000 28px); -webkit-mask-image: linear-gradient(transparent, #000 28px); }
+a.marca { color: inherit; }
+@media (max-width: 900px) {
+  .seccion.inicio.modo-delta .orbe { width: min(380px, 88vw); }
+  .modo-delta .delta-nombre { font-size: 30px; margin-bottom: 10px; }
+  .modo-delta .hud-hero { display: none; }
+  .modo-delta .centro { width: 100%; }
 }
