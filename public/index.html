@@ -14,6 +14,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/estilos.css" />
+  <script>
+    // Mood de día o de noche antes de pintar (sin parpadeo). "auto" cambia según la hora.
+    (function () {
+      var m = "auto";
+      try { m = localStorage.getItem("delta_mood") || "auto"; } catch (e) {}
+      if (m !== "dia" && m !== "noche") { var h = new Date().getHours(); m = h >= 7 && h < 19 ? "dia" : "noche"; }
+      document.documentElement.dataset.mood = m;
+    })();
+  </script>
 </head>
 <body>
   <canvas id="estrellas" aria-hidden="true"></canvas>
@@ -49,6 +58,7 @@
         <span id="clima" class="dato"></span>
         <span id="reloj" class="dato reloj">--:--</span>
       </div>
+      <button type="button" id="btn-mood" class="icono btn-mood" aria-label="Cambiar a modo noche" title="Día / noche"><svg class="ic-sol" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg><svg class="ic-luna" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
       <button id="btn-ajustes" class="icono" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </header>
 
@@ -379,6 +389,7 @@
       <label class="fila"><input id="aj-voz" type="checkbox" /> Responder en voz alta</label>
       <label class="fila"><input id="aj-sonidos" type="checkbox" /> Sonidos de DELTA (al escuchar, responder, agendar y avisar)</label>
       <label class="fila"><input id="aj-manos" type="checkbox" /> Manos libres (di "Delta…" u "Oye Delta…")</label>
+      <label class="fila"><input id="aj-mood-auto" type="checkbox" /> Cambiar sola entre día y noche según la hora (de 7 de la mañana a 7 de la noche, de día)</label>
       <label class="fila"><input id="aj-saludo" type="checkbox" /> Al abrir, saludarme con el resumen del día (una vez al día)</label>
       <h3 class="aj-sub">Voz de DELTA</h3>
       <p id="voz-estado" class="tenue"></p>

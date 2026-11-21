@@ -61,6 +61,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 async function cargarPanel() {
   const p = await api("/panel");
   zona = p.zona_horaria || zona;
+  aplicarMood();
 
   hud.panel = p;
   pintarMosaicos();
@@ -147,6 +148,34 @@ async function cargarCorreo() {
     : `<li class="vacio">Sin correos recientes.</li>`;
 }
 
+
+// ---------------- Mood de día y de noche ----------------
+const MOOD_COLOR = { dia: "#f4f1ff", noche: "#04030c" };
+function moodActual() {
+  const m = guardado.get("delta_mood", "auto");
+  if (m === "dia" || m === "noche") return m;
+  const h = Number(new Intl.DateTimeFormat("en-US", { timeZone: zona, hour: "numeric", hourCycle: "h23" }).format(new Date()));
+  return h >= 7 && h < 19 ? "dia" : "noche";
+}
+function aplicarMood() {
+  const m = moodActual();
+  const raiz = document.documentElement;
+  if (raiz.dataset.mood !== m) {
+    raiz.classList.add("cambiando-mood");
+    raiz.dataset.mood = m;
+    setTimeout(() => raiz.classList.remove("cambiando-mood"), 900);
+  }
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", MOOD_COLOR[m]);
+  const b = $("#btn-mood");
+  if (b) b.setAttribute("aria-label", m === "dia" ? "Cambiar a modo noche" : "Cambiar a modo día");
+}
+$("#btn-mood").addEventListener("click", () => {
+  guardado.set("delta_mood", moodActual() === "dia" ? "noche" : "dia"); // al tocarlo, se queda fijo hasta volver a "automático"
+  aplicarMood();
+  sonar("accion");
+});
+setInterval(aplicarMood, 60_000);
+aplicarMood();
 
 // ---------------- Inicio tipo centro de mando (HUD) ----------------
 const hud = { panel: null, correo: null, noticias: null, extraEn: 0 };
@@ -1391,6 +1420,7 @@ const orbe = (() => {
     energia += (objetivo - energia) * (nivel != null ? 0.25 : 0.06);
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
+    const dia = document.documentElement.dataset.mood === "dia";
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
 
     // Resplandor de fondo: núcleo violeta y un borde rosado muy tenue
@@ -1405,8 +1435,9 @@ const orbe = (() => {
     // Esfera de cristal detrás del logo (con un reflejo arriba a la izquierda)
     const R = W * (0.305 + 0.006 * Math.sin(t / 1600) + 0.01 * energia);
     const cristal = ctx.createRadialGradient(C - R * 0.3, C - R * 0.35, R * 0.1, C, C, R);
-    cristal.addColorStop(0, "rgba(201,191,255,0.10)");
-    cristal.addColorStop(0.6, "rgba(60,40,150,0.10)");
+    // De día la esfera es una gema violeta intensa para que el logo resalte sobre el fondo claro
+    cristal.addColorStop(0, dia ? "rgba(150,120,255,0.75)" : "rgba(201,191,255,0.10)");
+    cristal.addColorStop(0.6, dia ? "rgba(60,36,170,0.82)" : "rgba(60,40,150,0.10)");
     cristal.addColorStop(0.92, rgba(0.16 + 0.12 * energia));
     cristal.addColorStop(1, rgba(0));
     ctx.fillStyle = cristal;
@@ -1424,7 +1455,7 @@ const orbe = (() => {
       p.a += p.v * (1 + energia * 3);
       const rr = W * (p.r + 0.01 * Math.sin(t / 900 + p.t));
       const brillo = 0.2 + 0.7 * Math.pow(Math.abs(Math.sin(t / 900 + p.t)), 3);
-      ctx.fillStyle = `rgba(233,230,255,${brillo * (0.35 + energia * 0.6)})`;
+      ctx.fillStyle = dia ? `rgba(106,76,240,${brillo * (0.45 + energia * 0.5)})` : `rgba(233,230,255,${brillo * (0.35 + energia * 0.6)})`;
       ctx.beginPath();
       ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, (0.7 + p.t * 0.25) * e, 0, Math.PI * 2);
       ctx.fill();
@@ -1652,6 +1683,7 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#aj-sonidos").checked = sonidosActivos();
   $("#aj-manos").checked = manosLibres;
   $("#aj-saludo").checked = guardado.get("delta_saludo") !== "0";
+  $("#aj-mood-auto").checked = !["dia", "noche"].includes(guardado.get("delta_mood"));
   $("#aj-msg").textContent = "";
   $("#voz-msg").textContent = "";
   $("#hab-msg").textContent = "";
@@ -1716,6 +1748,9 @@ $("#aj-guardar").addEventListener("click", async () => {
   manosLibres = $("#aj-manos").checked;
   guardado.set("delta_manos", manosLibres ? "1" : "0");
   guardado.set("delta_saludo", $("#aj-saludo").checked ? "1" : "0");
+  if ($("#aj-mood-auto").checked) guardado.set("delta_mood", "auto");
+  else if (!["dia", "noche"].includes(guardado.get("delta_mood"))) guardado.set("delta_mood", moodActual());
+  aplicarMood();
   pintarManos();
   try {
     await api("/ajustes", { method: "POST", body: { zona_horaria: $("#aj-zona").value.trim(), hora_resumen: $("#aj-resumen").value } });
