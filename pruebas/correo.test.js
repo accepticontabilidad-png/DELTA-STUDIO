@@ -96,3 +96,13 @@ test("correo unificado: no deja usar Hotmail si no tiene llaves aunque haya perm
   await assert.rejects(correo.leerCorreo("o:123"), /Hotmail no está conectado/);
   await assert.rejects(correo.buscarCorreos({ cuenta: "outlook" }), /Conecte Gmail o Hotmail/);
 });
+
+test("gmail: la vista previa ya no muestra códigos como &#39;", async () => {
+  const gmail = await import("../server/gmail.js");
+  assert.equal(gmail.decodificarEntidades("they&#39;re &quot;ok&quot; &amp; listos&#x21; &lt;a&gt;"), 'they\'re "ok" & listos! <a>');
+  assert.equal(gmail.decodificarEntidades(""), "");
+});
+
+test("correo unificado: enviar desde la pantalla rechaza un correo vacío", async () => {
+  await assert.rejects(() => correo.enviarAhora({ para: "a@b.com", asunto: "x", cuerpo: "   " }), /vacío/);
+});

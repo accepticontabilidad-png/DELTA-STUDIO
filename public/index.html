@@ -196,6 +196,7 @@
         <div class="ag-cabeza">
           <h2>Correo</h2>
           <div class="ag-botones">
+            <button type="button" class="ag-agregar" id="btn-redactar">+ Redactar</button>
             <button type="button" class="ag-agregar" data-pedir="Resúmeme mi correo de hoy, cada cuenta por separado: qué es importante y qué necesita respuesta.">Resumir con DELTA</button>
           </div>
         </div>
@@ -364,6 +365,35 @@
     <div class="botones"><button type="button" id="fi-cerrar">Cerrar</button></div>
   </dialog>
 
+  <dialog id="dlg-correo" class="dialogo ancho dlg-correo">
+    <span id="co-cuenta" class="det-tipo"></span>
+    <h3 id="co-asunto" class="co-asunto"></h3>
+    <p class="co-meta"><b id="co-de"></b><span id="co-para" class="tenue"></span><span id="co-fecha" class="tenue"></span></p>
+    <p id="co-adjuntos" class="tenue" hidden></p>
+    <div id="co-texto" class="co-texto"></div>
+    <div class="botones">
+      <button type="button" id="co-cerrar">Cerrar</button>
+      <button type="button" id="co-delta">Que DELTA lo conteste</button>
+      <button type="button" id="co-responder" class="primario">Responder</button>
+    </div>
+  </dialog>
+  <dialog id="dlg-redactar" class="dialogo ancho">
+    <form id="form-redactar" method="dialog">
+      <h2 id="rd-titulo">Nuevo correo</h2>
+      <input type="hidden" id="rd-responder" />
+      <label>Enviar desde <select id="rd-cuenta"></select></label>
+      <label>Para <input id="rd-para" type="text" maxlength="1000" placeholder="correo@ejemplo.com (varios, separados por coma)" /></label>
+      <label>CC <input id="rd-cc" type="text" maxlength="1000" placeholder="Opcional" /></label>
+      <label>Asunto <input id="rd-asunto" type="text" maxlength="300" /></label>
+      <label>Mensaje <textarea id="rd-cuerpo" rows="10" maxlength="50000"></textarea></label>
+      <p id="rd-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="rd-cancelar">Cancelar</button>
+        <button type="button" id="rd-borrador">Guardar borrador</button>
+        <button type="button" id="rd-enviar" class="primario">Enviar</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="dlg-trabajo" class="dialogo ancho">
     <span id="tr-meta" class="det-tipo"></span>
     <div id="tr-cuerpo" class="md"></div>
