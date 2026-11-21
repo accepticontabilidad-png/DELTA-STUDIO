@@ -11,9 +11,30 @@ import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as agencia from "./agencia.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
+import * as gasto from "./gasto.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
 const ESFUERZO = process.env.DELTA_ESFUERZO || "medium";
+const MODELO_ECONOMICO = gasto.MODELO_ECONOMICO;
+
+// Lo que necesita al modelo fuerte: pensar, escribir o analizar. Lo demás (agenda, tareas,
+// recordatorios, preguntas cortas) lo resuelve bien el económico, que cuesta unas 40 veces menos.
+const PIDE_FUERTE = /anali[zc]|estrategi|planea|planific|propuest|redact|escrib|borrador|contrat|revis[ae]|compar[ae]|investig|por ?qu[eé]|expl[ií]c|resum|informe|reporte|ideas?\b|campañ|presupuest|cotiza|finanz|inversi|encarg|departament|diseñ|carrusel|guion|copy|marketing|recomiend|aconsej|opina|traduc|corrig/i;
+const SOLO_CONFIRMA = /^(s[ií]|va|ok|okey|dale|hazlo|adelante|perfecto|claro|no|eso|ese|esa|listo|gracias)\b/i;
+
+/** Elige el modelo para este mensaje: el económico para lo sencillo y el fuerte solo cuando hace falta. */
+export function elegirModelo(texto, archivos = []) {
+  const modo = gasto.modoModelo();
+  if (modo === "fuerte") return MODELO;
+  if (modo === "economico") return MODELO_ECONOMICO;
+  // Cerca del tope, todo con el económico para que el presupuesto rinda.
+  if (gasto.estado().ahorro) return MODELO_ECONOMICO;
+  const t = String(texto || "").trim();
+  // "Sí, hazlo" después de algo complejo sigue con el mismo modelo que lo estaba atendiendo.
+  if (t.length < 40 && SOLO_CONFIRMA.test(t)) return getAjuste("ultimo_modelo", MODELO_ECONOMICO);
+  if (archivos.length || t.length > 280 || PIDE_FUERTE.test(t)) return MODELO;
+  return MODELO_ECONOMICO;
+}
 const TURNOS_HISTORIAL = 10;
 
 let cliente = null;
@@ -49,7 +70,8 @@ Tu propia app (para que puedas guiar al usuario):
 - Correo: dos bandejas separadas, una pestaña para Gmail y otra para Hotmail, cada una con sus correos recientes, y botón "Resumir con DELTA". En Inicio, la tarjeta de Correo también muestra las dos cuentas por separado. Mercados y noticias: su lista de bolsa con el cambio del día y los titulares de sus temas, con botón "Analizar con DELTA".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
 - Pantalla Tareas: lista de pendientes; se marcan como hechas con la casilla y se agregan escribiendo arriba.
-- Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail y Hotmail, empezar conversación nueva y cerrar sesión.
+- Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail y Hotmail, el gasto de Claude (medidor del mes, tope mensual y qué modelo usar), empezar conversación nueva y cerrar sesión.
+- Medidor de gasto: en Inicio, junto a "Oye DELTA", una pastilla muestra lo gastado este mes contra el tope (por ejemplo "USD 12.40 de 90"); en el tablero hay una tarjeta "Gasto del mes" con la barra. Al 80 % del tope avisas y pasas al modelo económico; al llegar al tope dejas de usar a Claude hasta el mes siguiente o hasta que suba el tope en Ajustes.
 - Para hablar contigo: tocar el orbe o el micrófono.
 
 Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
@@ -584,6 +606,12 @@ herramientasBase.push(
     },
   }),
 );
+herramientasBase.push(betaTool({
+  name: "ver_gasto",
+  description: "Cuánto lleva gastado DELTA este mes en la API de Claude, el tope mensual, el porcentaje y el desglose por modelo. Úsala si pregunta por el gasto, los créditos o el presupuesto.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  run: () => json(gasto.estado()),
+}));
 const herramientas = herramientasBase.map(conRegistro);
 
 const ACCIONES_QUE_CAMBIAN = new Set([
@@ -707,6 +735,11 @@ export async function hablarConDelta(texto, canal = "app", archivos = [], info =
   if (!process.env.ANTHROPIC_API_KEY) {
     return "Ay, todavía no tengo cerebro conectado. Falta poner la clave de Claude (ANTHROPIC_API_KEY) en la configuración y quedo lista.";
   }
+  if (!gasto.hayPresupuesto()) {
+    gasto.revisarAvisos();
+    return `Llegamos al tope de gasto que pusiste para este mes, ${gasto.usd(gasto.tope())}, así que dejé de usar a Claude para no pasarme. Si quieres que siga, sube el tope en Ajustes y aquí estoy.`;
+  }
+  const modelo = elegirModelo(texto, archivos);
   const mensajes = [
     ...historial(),
     {
@@ -719,12 +752,12 @@ export async function hablarConDelta(texto, canal = "app", archivos = [], info =
 
   const acciones = [];
   acciones.borradores = new Set(); // borradores creados en este turno: no se pueden enviar todavía
-  let respuesta = await registro.run(acciones, () => pensar(mensajes));
+  let respuesta = await registro.run(acciones, () => pensar(mensajes, modelo));
 
   // Verificación: si afirma haber cambiado algo pero no llamó ninguna herramienta que cambie datos,
   // se le pide otra vez que lo haga de verdad (o que lo diga con honestidad).
   const cambio = acciones.some((a) => ACCIONES_QUE_CAMBIAN.has(a.nombre) && a.ok);
-  if (!cambio && afirmaAccion(respuesta)) {
+  if (!cambio && afirmaAccion(respuesta) && gasto.hayPresupuesto()) {
     console.warn("[cerebro] respuesta afirmaba una acción sin herramientas; se repite con verificación");
     respuesta = await registro.run(acciones, () =>
       pensar([
@@ -735,7 +768,7 @@ export async function hablarConDelta(texto, canal = "app", archivos = [], info =
             "Verificación automática: en tu intento anterior respondiste que hiciste un cambio en la agenda, pero no llamaste ninguna herramienta, así que no se hizo nada. " +
             "Si el usuario pidió ese cambio, llama ahora la herramienta correspondiente y luego confirma. Si no puedes hacerlo, dilo con honestidad. No afirmes nada que no hayas hecho.",
         },
-      ]),
+      ], modelo),
     );
   }
 
@@ -749,18 +782,22 @@ export async function hablarConDelta(texto, canal = "app", archivos = [], info =
   return respuesta;
 }
 
-async function pensar(mensajes) {
-  const final = await claude().beta.messages.toolRunner({
-    model: MODELO,
+async function pensar(mensajes, modelo = MODELO) {
+  const economico = modelo === MODELO_ECONOMICO;
+  const { final, cortado } = await gasto.correrConMedidor(claude(), "chat", {
+    model: modelo,
     max_tokens: 16000,
     system: [{ type: "text", text: SISTEMA, cache_control: { type: "ephemeral" } }],
     output_config: { effort: ESFUERZO },
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default", // si el modelo principal declina, la API reintenta con otro
+    // El económico no tiene respaldo automático; si declina, se reintenta abajo con el fuerte.
+    ...(economico ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" }),
     tools: herramientas,
     messages: mensajes,
     max_iterations: 12,
   });
+  setAjuste("ultimo_modelo", modelo);
+  if (cortado) return "Me detuve a la mitad porque llegamos al tope de gasto del mes. Lo que alcancé a hacer ya quedó; si quieres que siga, sube el tope en Ajustes.";
+  if (final.stop_reason === "refusal" && economico && gasto.hayPresupuesto()) return pensar(mensajes, MODELO);
   if (final.stop_reason === "refusal") return "Uy, con eso no te puedo ayudar. ¿Lo vemos de otra forma?";
   const texto = final.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   return texto || "Mmm, ahí no tengo nada más que agregar.";

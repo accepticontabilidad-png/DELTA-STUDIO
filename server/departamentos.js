@@ -12,6 +12,7 @@ import * as higgsfield from "./higgsfield.js";
 import { avisar, avisarPantalla } from "./avisos.js";
 import { db, getAjuste, setAjuste } from "./db.js";
 import { ahoraLocalISO, utcALocal } from "./tiempo.js";
+import * as gasto from "./gasto.js";
 
 const MODELO = process.env.DELTA_MODELO_DEPTOS || "claude-sonnet-5-5";
 const BUSQUEDA_WEB = process.env.DELTA_BUSQUEDA_WEB !== "no";
@@ -323,7 +324,7 @@ function herramientasDeDiseno(d, ctx) {
 
 async function correrAgente(d, ctx, encargo) {
   const contexto = ctx.cliente_id ? `\n\n[Cliente del encargo: ${agencia.obtenerCliente(ctx.cliente_id)?.nombre} (id ${ctx.cliente_id})]` : "";
-  const final = await claude().beta.messages.toolRunner({
+  const { final, cortado } = await gasto.correrConMedidor(claude(), d.id, {
     model: MODELO,
     max_tokens: d.id === "diseno" ? 20000 : 12000,
     system: [{ type: "text", text: sistema(d) }],
@@ -332,6 +333,7 @@ async function correrAgente(d, ctx, encargo) {
     messages: [{ role: "user", content: encargo + contexto }],
     max_iterations: d.id === "diseno" ? 30 : 15,
   });
+  if (cortado) throw new gasto.SinPresupuesto();
   if (final.stop_reason === "refusal") throw new Error("El modelo no quiso hacer este encargo");
   return final.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 }
@@ -345,6 +347,7 @@ export function encargar({ departamento, encargo, cliente, proyecto_id, origen =
   const d = deptoPorId(departamento);
   if (!d) throw new Error(`No existe el departamento "${departamento}". Opciones: ${DEPARTAMENTOS.map((x) => x.id).join(", ")}`);
   if (!String(encargo || "").trim()) throw new Error("Falta decir qué se encarga");
+  if (!gasto.hayPresupuesto()) throw new Error(`La agencia está en pausa: se llegó al tope de gasto del mes (${gasto.usd(gasto.tope())}). Puede subirlo en Ajustes.`);
   const c = cliente ? agencia.clienteRequerido(cliente) : null;
   const id = agencia.crearTrabajo({ departamento: d.id, cliente_id: c?.id, proyecto_id, encargo: encargo.trim() });
   cola.push({ id, d, encargo: encargo.trim(), cliente_id: c?.id ?? null, origen });
@@ -381,8 +384,9 @@ async function ejecutar({ id, d, encargo, cliente_id, origen }) {
     await avisar(`${d.nombre} terminó: ${titulo}.${extra}`, `Agencia · ${d.nombre}`);
   } catch (e) {
     console.error(`[${d.id}]`, e);
-    agencia.terminarTrabajo(id, { resultado: "No se pudo completar: " + (e.message || e), estado: "fallo" });
-    await avisar(`${d.nombre} no pudo terminar el encargo #${id}. Si quieres, se lo pido otra vez.`, `Agencia · ${d.nombre}`).catch(() => {});
+    const sinDinero = e instanceof gasto.SinPresupuesto;
+    agencia.terminarTrabajo(id, { resultado: sinDinero ? "Se detuvo al llegar al tope de gasto del mes. Puede subir el tope en Ajustes y pedirlo de nuevo." : "No se pudo completar: " + (e.message || e), estado: "fallo" });
+    if (!sinDinero) await avisar(`${d.nombre} no pudo terminar el encargo #${id}. Si quieres, se lo pido otra vez.`, `Agencia · ${d.nombre}`).catch(() => {});
   } finally {
     avisarPantalla({ tipo: "agencia" });
   }
@@ -402,7 +406,7 @@ export function revisarRutinas() {
   if (dia !== 1 || hora < "09:00" || hora > "12:00" || getAjuste("ultima_rutina_tendencias") === semana) return;
   setAjuste("ultima_rutina_tendencias", semana);
   const activos = agencia.listarClientes({ estado: "activo" });
-  if (!activos.length) return;
+  if (!activos.length || !gasto.hayPresupuesto()) return;
   encargar({
     departamento: "tendencias",
     origen: "rutina",
