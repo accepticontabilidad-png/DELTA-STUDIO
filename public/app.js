@@ -413,7 +413,7 @@ const escribiendoEn = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|S
 addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat || escribiendoEn(e.target) || document.querySelector("dialog[open]") || $("#app").hidden) return;
   e.preventDefault();
-  if (seccionActual !== "inicio") location.hash = "#/inicio";
+  if (!conDelta()) location.hash = "#/delta";
   espacioHablando = true;
   if (!escuchando) escuchar();
 });
@@ -718,6 +718,8 @@ $("#btn-pedir-diseno").addEventListener("click", () => setTimeout(() => document
 // ---------------- Secciones ----------------
 // Cada sección carga sus datos solo cuando se abre (y se refresca si ya pasó un rato).
 const SECCIONES = {
+  // "delta" es la vista de entrada: solo DELTA en grande (usa la misma sección que el inicio, sin el tablero)
+  delta: { cargar: () => Promise.all([cargarPanel(), cargarHudExtra()]), cada: 60e3 },
   inicio: { cargar: () => Promise.all([cargarPanel(), cargarMercadosMini(), cargarHudExtra()]), cada: 60e3 },
   agenda: { cargar: () => cargarAgenda(), cada: 60e3 },
   tareas: { cargar: () => cargarPanel(), cada: 60e3 },
@@ -728,7 +730,8 @@ const SECCIONES = {
   aprobaciones: { cargar: () => cargarAprobaciones(), cada: 30e3 },
   estudio: { cargar: () => cargarEstudio(), cada: 30e3 },
 };
-let seccionActual = "inicio";
+let seccionActual = "delta";
+const conDelta = (n = seccionActual) => n === "delta" || n === "inicio"; // vistas donde está el orbe
 const cargadaEn = {};
 
 function refrescar(nombre, forzar = false) {
@@ -740,18 +743,20 @@ function refrescar(nombre, forzar = false) {
 }
 
 function mostrarSeccion(nombre) {
-  if (!SECCIONES[nombre]) nombre = "inicio";
+  if (!SECCIONES[nombre]) nombre = "delta";
   seccionActual = nombre;
-  document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === nombre));
+  const vista = nombre === "delta" ? "inicio" : nombre;
+  document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === vista));
+  document.querySelector('.seccion[data-seccion="inicio"]').classList.toggle("modo-delta", nombre === "delta");
   document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("activa", x.dataset.ir === nombre));
-  $("#mini-orbe").hidden = nombre === "inicio";
+  $("#mini-orbe").hidden = conDelta(nombre);
   document.body.dataset.seccion = nombre;
   cerrarMenu();
   refrescar(nombre);
-  if (nombre === "inicio") $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
+  if (conDelta(nombre)) $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
 }
 
-const seccionDeLaDireccion = () => (location.hash.match(/^#\/(\w+)/) || [])[1] || "inicio";
+const seccionDeLaDireccion = () => (location.hash.match(/^#\/(\w+)/) || [])[1] || "delta";
 addEventListener("hashchange", () => mostrarSeccion(seccionDeLaDireccion()));
 
 // Menú en el celular: se abre con "Más"
@@ -763,7 +768,7 @@ $("#menu-fondo").addEventListener("click", cerrarMenu);
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-pedir]");
   if (!b) return;
-  location.hash = "#/inicio";
+  if (!conDelta()) location.hash = "#/delta";
   enviar(b.dataset.pedir);
 });
 

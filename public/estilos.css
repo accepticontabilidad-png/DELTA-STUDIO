@@ -637,3 +637,21 @@ kbd { font: 600 10.5px Montserrat, sans-serif; padding: 2px 7px; border-radius: 
   .hud-ticker-pista { animation: none; }
   .hud-hero, .hud-card, .hud-tile, .chip, .burbuja { animation: none; }
 }
+
+/* ---------- Modo DELTA: al abrir solo está ella, en grande ---------- */
+.delta-nombre, .ver-tablero { display: none; }
+.seccion.inicio.modo-delta.visible { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "centro"; }
+.modo-delta .hud-ticker, .modo-delta .hud-tablero, .modo-delta .hoy-mini, .modo-delta .chips { display: none !important; }
+.modo-delta .centro { width: min(860px, 100%); justify-self: center; }
+.seccion.inicio.modo-delta .orbe { width: clamp(380px, calc(100vh - 340px), 880px); margin-top: -10px; }
+.modo-delta .estado-orbe { bottom: 2%; }
+.modo-delta .delta-nombre { display: block; margin: -4px 0 12px; margin-right: -.6em; font-weight: 200; font-size: clamp(30px, 3.4vw, 52px); letter-spacing: .6em; line-height: 1; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(150,120,255,.4)); animation: hud-entra .6s ease-out both; }
+.modo-delta .ver-tablero { display: inline-flex; text-decoration: none; }
+.modo-delta .conversacion { flex: 1 1 90px; min-height: 90px; mask-image: linear-gradient(transparent, #000 28px); -webkit-mask-image: linear-gradient(transparent, #000 28px); }
+a.marca { color: inherit; }
+@media (max-width: 900px) {
+  .seccion.inicio.modo-delta .orbe { width: min(380px, 88vw); }
+  .modo-delta .delta-nombre { font-size: 30px; margin-bottom: 10px; }
+  .modo-delta .hud-hero { display: none; }
+  .modo-delta .centro { width: 100%; }
+}
