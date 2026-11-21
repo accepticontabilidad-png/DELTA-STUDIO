@@ -68,7 +68,7 @@ button[type=submit], .primario, .botones button {
 .barra .lema { margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--borde); }
 .barra-datos { margin-left: auto; display: flex; gap: 14px; align-items: center; }
 .dato { font-size: 13px; color: var(--tenue); letter-spacing: .08em; }
-.reloj { color: var(--texto); font-size: 16px; font-weight: 600; }
+.reloj { color: var(--texto); font-size: 16px; font-weight: 600; white-space: nowrap; }
 .icono { background: none; border: 1px solid var(--borde); border-radius: 50%; width: 38px; height: 38px; display: grid; place-items: center; }
 
 /* Menú lateral + secciones (solo una a la vista) */
@@ -753,17 +753,17 @@ html[data-mood="dia"] {
   --fondo: #f6f3ff;
   --fondo-2: #ece6ff;
   --panel: rgba(255, 255, 255, 0.62);
-  --borde: rgba(106, 76, 240, 0.18);
-  --cian: #6a4cf0;
-  --cian-suave: rgba(106, 76, 240, 0.12);
-  --lila: #6a4cf0;
-  --dorado: #c8409e;
-  --texto: #1d1640;
-  --tenue: #6d6794;
+  --borde: rgba(82, 50, 216, 0.30);
+  --cian: #5232d8;
+  --cian-suave: rgba(82, 50, 216, 0.12);
+  --lila: #4a2fc4;
+  --dorado: #b0307f;
+  --texto: #160f36;
+  --tenue: #4c4577;
   --rojo: #d93a5c;
   --verde: #0f9a72;
   --degradado: linear-gradient(135deg, #24186a 0%, #5a3fe0 55%, #b04fd8 100%);
-  --linea-luz: linear-gradient(140deg, rgba(255,255,255,.98), rgba(140,120,255,.28) 40%, rgba(140,120,255,.14) 62%, rgba(255,170,225,.45));
+  --linea-luz: linear-gradient(140deg, rgba(255,255,255,.98), rgba(106,76,240,.42) 40%, rgba(106,76,240,.26) 62%, rgba(220,110,190,.55));
   --vidrio-dia: linear-gradient(165deg, rgba(255,255,255,.78), rgba(246,242,255,.58));
   color-scheme: light;
 }
@@ -834,3 +834,24 @@ html[data-mood="dia"] .cal-ev { color: var(--texto); background: linear-gradient
 html[data-mood="dia"] .cal-ev.tarea { background: linear-gradient(135deg, rgba(15,154,114,.2), rgba(15,154,114,.08)); }
 html[data-mood="dia"] .cal-ev.recordatorio { background: linear-gradient(135deg, rgba(200,64,158,.2), rgba(200,64,158,.08)); }
 html[data-mood="dia"] .orbe .logo-orbe { filter: drop-shadow(0 0 4px rgba(255,255,255,.95)) drop-shadow(0 0 16px rgba(220,210,255,.9)); }
+
+/* Día con más contraste: letras finas más firmes, bordes visibles y nombre DELTA definido */
+html[data-mood="dia"] .barra .lema { opacity: 1; font-weight: 600; color: var(--cian); }
+html[data-mood="dia"] .marca small { font-weight: 700; color: var(--cian); }
+html[data-mood="dia"] .estado-orbe { opacity: 1; font-weight: 700; color: var(--cian); text-shadow: 0 0 10px rgba(255,255,255,.9); }
+html[data-mood="dia"] .dato:not(.reloj) { color: var(--tenue); font-weight: 500; }
+html[data-mood="dia"] .pastilla { color: #2c2266; font-weight: 600; box-shadow: 0 4px 14px rgba(80,50,200,.10); }
+html[data-mood="dia"] .pastilla .led { background: var(--cian); }
+html[data-mood="dia"] .atajo { color: var(--tenue); font-weight: 500; }
+html[data-mood="dia"] kbd { color: var(--cian); border-color: rgba(82,50,216,.4); }
+html[data-mood="dia"] .icono { border-color: rgba(82,50,216,.32); color: var(--cian); background: rgba(255,255,255,.75); box-shadow: 0 2px 10px rgba(80,50,200,.08); }
+html[data-mood="dia"] .icono svg { stroke: var(--cian); }
+html[data-mood="dia"] .modo-delta .delta-nombre { font-weight: 300; background: linear-gradient(100deg, #24186a 0%, #4a2fc4 22%, #9a3fc0 30%, #4a2fc4 40%, #1d1450 70%, #24186a 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 2px 10px rgba(106,76,240,.25)); }
+html[data-mood="dia"] .menu-grupo { opacity: 1; color: var(--tenue); }
+html[data-mood="dia"] .menu-item { color: #3a3366; }
+html[data-mood="dia"] .hud-card h2 { color: var(--cian); }
+html[data-mood="dia"] .burbuja.assistant { color: var(--texto); }
+html[data-mood="dia"] .seccion.inicio .form-chat #texto::placeholder { color: #6d6794; }
+html[data-mood="dia"] .hud-clima svg { stroke: var(--cian); filter: drop-shadow(0 0 4px rgba(82,50,216,.3)); }
+html[data-mood="dia"] .hud-tile b, html[data-mood="dia"] .hud-reloj span, html[data-mood="dia"] .hud-clima b, html[data-mood="dia"] .hud-saludo h1 { font-weight: 300; }
+html[data-mood="dia"] .orbe .logo-orbe { filter: drop-shadow(0 0 3px rgba(255,255,255,1)) drop-shadow(0 0 12px rgba(230,222,255,.95)); }

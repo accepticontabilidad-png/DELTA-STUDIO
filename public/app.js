@@ -1473,6 +1473,8 @@ const orbe = (() => {
     const [r, g, b] = color.map(Math.round);
     const dia = document.documentElement.dataset.mood === "dia";
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
+    // De día los trazos (anillos, marcas, cometa) van en un violeta más profundo y firme para que se lean sobre el fondo claro
+    const tinta = dia ? (a) => `rgba(${Math.round(r * 0.55)},${Math.round(g * 0.45)},${Math.round(b * 0.85)},${Math.min(1, a * 2.1)})` : rgba;
 
     // Resplandor de fondo: núcleo violeta y un borde rosado muy tenue
     const halo = ctx.createRadialGradient(C, C, W * 0.05, C, C, W * 0.5);
@@ -1516,13 +1518,13 @@ const orbe = (() => {
     const giro0 = t * 0.00012 * (1 + energia * 2);
     const conico = ctx.createConicGradient ? ctx.createConicGradient(giro0, C, C) : null;
     if (conico) {
-      conico.addColorStop(0, rgba(0.05));
-      conico.addColorStop(0.35, rgba(0.55 + 0.35 * energia));
-      conico.addColorStop(0.5, `rgba(255,158,232,${0.35 + 0.3 * energia})`);
-      conico.addColorStop(0.7, rgba(0.08));
-      conico.addColorStop(1, rgba(0.05));
+      conico.addColorStop(0, tinta(0.05));
+      conico.addColorStop(0.35, tinta(0.55 + 0.35 * energia));
+      conico.addColorStop(0.5, dia ? `rgba(200,64,158,${0.55 + 0.3 * energia})` : `rgba(255,158,232,${0.35 + 0.3 * energia})`);
+      conico.addColorStop(0.7, tinta(0.08));
+      conico.addColorStop(1, tinta(0.05));
     }
-    ctx.strokeStyle = conico || rgba(0.35);
+    ctx.strokeStyle = conico || tinta(0.35);
     ctx.lineWidth = 1.2 * e;
     ctx.beginPath(); ctx.arc(C, C, W * 0.445, 0, Math.PI * 2); ctx.stroke();
 
@@ -1531,7 +1533,7 @@ const orbe = (() => {
     for (let k = 0; k < 120; k++) {
       const a = (k / 120) * Math.PI * 2 - giro0 * 0.6;
       const largo = k % 10 ? 0.008 : 0.02;
-      ctx.strokeStyle = rgba(k % 10 ? 0.14 : 0.32);
+      ctx.strokeStyle = tinta(k % 10 ? 0.14 : 0.32);
       ctx.beginPath();
       ctx.moveTo(C + Math.cos(a) * W * 0.465, C + Math.sin(a) * W * 0.465);
       ctx.lineTo(C + Math.cos(a) * W * (0.465 + largo), C + Math.sin(a) * W * (0.465 + largo));
@@ -1541,7 +1543,7 @@ const orbe = (() => {
     // Cometa: un punto de luz que recorre el anillo dejando estela
     const ac = t * 0.0006 * (1 + energia * 1.5);
     for (let k = 0; k < 24; k++) {
-      ctx.strokeStyle = rgba((1 - k / 24) * (0.5 + 0.4 * energia));
+      ctx.strokeStyle = tinta((1 - k / 24) * (0.5 + 0.4 * energia));
       ctx.lineWidth = (2.2 - k * 0.07) * e;
       ctx.beginPath();
       ctx.arc(C, C, W * 0.445, ac - (k + 1) * 0.02, ac - k * 0.02);
@@ -1550,17 +1552,17 @@ const orbe = (() => {
     const cx = C + Math.cos(ac) * W * 0.445, cy = C + Math.sin(ac) * W * 0.445;
     const punta = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10 * e);
     punta.addColorStop(0, "rgba(255,255,255,0.95)");
-    punta.addColorStop(0.4, rgba(0.6));
-    punta.addColorStop(1, rgba(0));
+    punta.addColorStop(0.4, tinta(0.6));
+    punta.addColorStop(1, tinta(0));
     ctx.fillStyle = punta;
     ctx.beginPath(); ctx.arc(cx, cy, 10 * e, 0, Math.PI * 2); ctx.fill();
 
     // Dos arcos finos que giran en sentidos contrarios
     [[0.395, -0.0005, 0.9], [0.375, 0.0008, 0.5]].forEach(([rad, vel, largo]) => {
       const g = t * vel * (1 + energia);
-      ctx.strokeStyle = rgba(0.22 + 0.45 * energia);
+      ctx.strokeStyle = tinta(0.22 + 0.45 * energia);
       ctx.lineWidth = 1.3 * e;
-      ctx.shadowColor = rgba(0.8);
+      ctx.shadowColor = tinta(0.8);
       ctx.shadowBlur = 8 * energia * e;
       for (let k = 0; k < 2; k++) {
         ctx.beginPath();
@@ -1573,7 +1575,7 @@ const orbe = (() => {
     // Anillo de puntos
     for (let k = 0; k < 90; k++) {
       const a = (k / 90) * Math.PI * 2 + t * 0.00007;
-      ctx.fillStyle = rgba(0.12 + 0.1 * Math.abs(Math.sin(k / 4 + t / 1300)));
+      ctx.fillStyle = tinta(0.12 + 0.1 * Math.abs(Math.sin(k / 4 + t / 1300)));
       ctx.beginPath();
       ctx.arc(C + Math.cos(a) * W * 0.352, C + Math.sin(a) * W * 0.352, 0.9 * e, 0, Math.PI * 2);
       ctx.fill();
@@ -1591,7 +1593,7 @@ const orbe = (() => {
           : Math.abs(Math.sin(k * 0.9 + t / 140) * Math.sin(k * 0.37 - t / 330));
         const largo = W * (0.012 + v * 0.07 * energia);
         const r1 = W * 0.318;
-        ctx.strokeStyle = rgba(0.18 + 0.6 * v * energia);
+        ctx.strokeStyle = tinta(0.18 + 0.6 * v * energia);
         ctx.beginPath();
         ctx.moveTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1);
         ctx.lineTo(C + Math.cos(a) * (r1 + largo), C + Math.sin(a) * (r1 + largo));
@@ -1610,7 +1612,7 @@ const orbe = (() => {
         const x = C + Math.cos(a) * rad, y = C + Math.sin(a) * rad;
         k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
       }
-      ctx.strokeStyle = rgba((0.08 + 0.5 * Math.max(0, energia - 0.25)) * alfa);
+      ctx.strokeStyle = tinta((0.08 + 0.5 * Math.max(0, energia - 0.25)) * alfa);
       ctx.lineWidth = 1 * e;
       ctx.stroke();
     }
