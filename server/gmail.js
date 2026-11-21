@@ -116,6 +116,15 @@ async function gmail(ruta, opciones = {}) {
 
 const cabecera = (msg, nombre) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === nombre.toLowerCase())?.value || "";
 
+/** Gmail entrega la vista previa con entidades HTML (&#39;, &amp;…): se convierten a texto normal. */
+export function decodificarEntidades(t = "") {
+  return String(t)
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
 function resumen(msg) {
   return {
     id: msg.id,
@@ -124,7 +133,7 @@ function resumen(msg) {
     para: cabecera(msg, "To"),
     asunto: cabecera(msg, "Subject"),
     fecha: msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : cabecera(msg, "Date"),
-    vista_previa: msg.snippet,
+    vista_previa: decodificarEntidades(msg.snippet),
     sin_leer: (msg.labelIds || []).includes("UNREAD"),
     importante: (msg.labelIds || []).includes("IMPORTANT"),
   };

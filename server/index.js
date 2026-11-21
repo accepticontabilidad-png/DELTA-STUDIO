@@ -199,6 +199,17 @@ api.get("/noticias/videos", envolver(() => panorama.videos()));
 api.get("/noticias/resumen", envolver(() => panorama.resumen(false)));
 api.post("/noticias/resumen", envolver(() => panorama.resumen(true)));
 api.get("/correo", envolver(() => correo.recientes(25)));
+api.get("/correo/mensaje", envolver((req) => correo.leerCorreo(String(req.query.id || ""))));
+const datosCorreo = (b = {}) => {
+  const texto = (x, max) => (x == null ? undefined : String(x).slice(0, max));
+  return {
+    cuenta: b.cuenta === "outlook" ? "outlook" : b.cuenta === "gmail" ? "gmail" : undefined,
+    para: texto(b.para, 1000), cc: texto(b.cc, 1000), asunto: texto(b.asunto, 300),
+    cuerpo: texto(b.cuerpo, 50000), responder_a: texto(b.responder_a, 300) || undefined,
+  };
+};
+api.post("/correo/borrador", envolver((req) => correo.crearBorrador(datosCorreo(req.body))));
+api.post("/correo/enviar", envolver((req) => correo.enviarAhora(datosCorreo(req.body))));
 
 // ---------- Voz natural (ElevenLabs) ----------
 api.get("/voz", envolver(() => voz.estadoVoz()));

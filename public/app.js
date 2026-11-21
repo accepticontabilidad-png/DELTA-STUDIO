@@ -148,6 +148,7 @@ async function cargarMercadosYNoticias() {
 
 async function cargarCorreo() {
   ultimoCorreo = await api("/correo");
+  for (const k of BANDEJAS) if (ultimoCorreo.cuentas?.[k]) correoConectado[k] = Boolean(ultimoCorreo.cuentas[k].conectado);
   pintarBandeja();
 }
 
@@ -172,7 +173,7 @@ function pintarBandeja() {
     ? `${c.cuenta || nombre} · No pude revisarlo ahora: ${c.error}`
     : `${c.cuenta || nombre} · bandeja de entrada, últimos 2 días`;
   $("#lista-correos").innerHTML = c.correos.length
-    ? c.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b> · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
+    ? c.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}" data-abrir-correo="${esc(m.id)}" tabindex="0" role="button"><div class="cuerpo"><b>${esc(remitente(m))}</b> · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
     : c.error ? "" : `<li class="vacio">Sin correos recientes en ${nombre}.</li>`;
 }
 
@@ -180,6 +181,131 @@ document.addEventListener("click", (e) => {
   const a = e.target.closest?.("[data-abrir-bandeja]");
   if (a) { bandeja = a.dataset.abrirBandeja; try { localStorage.setItem("delta_bandeja", bandeja); } catch { /* sin almacenamiento */ } }
 });
+// ---------- Leer, escribir y contestar correos ----------
+let correoAbierto = null;
+const soloCorreo = (t = "") => (String(t).match(/<([^>]+)>/)?.[1] || String(t)).trim();
+
+async function abrirCorreo(id) {
+  const dlg = $("#dlg-correo");
+  $("#co-cuenta").textContent = "Abriendo…";
+  $("#co-asunto").textContent = "";
+  $("#co-de").textContent = "";
+  $("#co-para").textContent = "";
+  $("#co-fecha").textContent = "";
+  $("#co-adjuntos").hidden = true;
+  $("#co-texto").textContent = "";
+  correoAbierto = null;
+  if (!dlg.open) dlg.showModal();
+  try {
+    const m = await api(`/correo/mensaje?id=${encodeURIComponent(id)}`);
+    correoAbierto = m;
+    $("#co-cuenta").textContent = `${NOMBRE_CUENTA[m.origen] || "Correo"} · ${m.cuenta || ""}`;
+    $("#co-asunto").textContent = m.asunto || "(sin asunto)";
+    $("#co-de").textContent = `De: ${m.de}`;
+    $("#co-para").textContent = m.para ? `Para: ${m.para}` : "";
+    $("#co-fecha").textContent = `${fmtDia(m.fecha)} ${fmtHora(m.fecha)}`;
+    if (m.adjuntos?.length) { $("#co-adjuntos").hidden = false; $("#co-adjuntos").textContent = `📎 ${m.adjuntos.join(", ")}`; }
+    $("#co-texto").textContent = m.texto || m.vista_previa || "(Sin texto)";
+  } catch (err) {
+    $("#co-cuenta").textContent = "Correo";
+    $("#co-texto").textContent = `No pude abrir este correo: ${err.message}`;
+  }
+}
+
+function abrirRedactar({ responder } = {}) {
+  const conectadas = ["gmail", "outlook"].filter((k) => correoConectado[k]);
+  if (!conectadas.length) { burbuja("aviso", "Primero conecte Gmail o Hotmail en ⚙ Ajustes."); return; }
+  const sel = $("#rd-cuenta");
+  sel.innerHTML = conectadas.map((k) => `<option value="${k}">${NOMBRE_CUENTA[k]}</option>`).join("");
+  sel.value = responder?.origen && conectadas.includes(responder.origen) ? responder.origen : conectadas.includes(bandeja) ? bandeja : conectadas[0];
+  sel.disabled = Boolean(responder);
+  $("#rd-responder").value = responder?.id || "";
+  $("#rd-titulo").textContent = responder ? "Responder" : "Nuevo correo";
+  $("#rd-para").value = responder ? soloCorreo(responder.de) : "";
+  $("#rd-cc").value = "";
+  $("#rd-asunto").value = responder ? (/^(re|rv|fw|fwd):/i.test(responder.asunto || "") ? responder.asunto : `Re: ${responder.asunto || ""}`) : "";
+  $("#rd-cuerpo").value = "";
+  $("#rd-msg").hidden = true;
+  $("#rd-msg").classList.remove("ok");
+  rdConfirmar = false;
+  $("#rd-enviar").textContent = "Enviar";
+  $("#dlg-redactar").showModal();
+  setTimeout(() => (responder ? $("#rd-cuerpo") : $("#rd-para")).focus(), 50);
+}
+
+let rdConfirmar = false;
+const datosRedactar = () => ({
+  cuenta: $("#rd-cuenta").value,
+  para: $("#rd-para").value.trim(),
+  cc: $("#rd-cc").value.trim(),
+  asunto: $("#rd-asunto").value.trim(),
+  cuerpo: $("#rd-cuerpo").value,
+  responder_a: $("#rd-responder").value || undefined,
+});
+const avisoRedactar = (texto, ok = false) => { $("#rd-msg").hidden = false; $("#rd-msg").textContent = texto; $("#rd-msg").classList.toggle("ok", ok); };
+
+$("#btn-redactar").addEventListener("click", () => abrirRedactar());
+$("#co-cerrar").addEventListener("click", () => $("#dlg-correo").close());
+$("#co-responder").addEventListener("click", () => {
+  if (!correoAbierto) return;
+  const m = correoAbierto;
+  $("#dlg-correo").close();
+  abrirRedactar({ responder: m });
+});
+$("#co-delta").addEventListener("click", () => {
+  if (!correoAbierto) return;
+  const m = correoAbierto;
+  $("#dlg-correo").close();
+  if (!conDelta()) location.hash = "#/delta";
+  enviar(`Ayúdame a contestar este correo de ${NOMBRE_CUENTA[m.origen]} (id ${m.id}) de ${m.de}, asunto "${m.asunto || "(sin asunto)"}". Léelo, dime en una frase qué pide y prepárame un borrador de respuesta para que lo revise antes de enviar.`);
+});
+$("#rd-cancelar").addEventListener("click", () => $("#dlg-redactar").close());
+$("#rd-borrador").addEventListener("click", async () => {
+  const d = datosRedactar();
+  if (!d.para && !d.responder_a) return avisoRedactar("Falta a quién va el correo.");
+  try {
+    $("#rd-borrador").disabled = true;
+    await api("/correo/borrador", { method: "POST", body: d });
+    avisoRedactar(`Guardado en Borradores de ${NOMBRE_CUENTA[d.cuenta]}. No se envió.`, true);
+  } catch (err) { avisoRedactar(err.message); } finally { $("#rd-borrador").disabled = false; }
+});
+$("#rd-enviar").addEventListener("click", async () => {
+  const d = datosRedactar();
+  if (!d.para && !d.responder_a) return avisoRedactar("Falta a quién va el correo.");
+  if (!d.cuerpo.trim()) return avisoRedactar("El mensaje está vacío.");
+  // Doble toque para enviar: el primero muestra a quién va, el segundo lo manda.
+  if (!rdConfirmar) {
+    rdConfirmar = true;
+    $("#rd-enviar").textContent = "Sí, enviar";
+    return avisoRedactar(`Se enviará desde ${NOMBRE_CUENTA[d.cuenta]} a ${d.para || "quien escribió el correo"}. Toque "Sí, enviar" para confirmar.`, true);
+  }
+  try {
+    $("#rd-enviar").disabled = true;
+    const r = await api("/correo/enviar", { method: "POST", body: d });
+    $("#dlg-redactar").close();
+    sonar("accion");
+    burbuja("aviso", `Correo enviado desde ${NOMBRE_CUENTA[d.cuenta]}${r.para ? ` a ${r.para}` : ""}.`);
+    hud.extraEn = 0;
+    cargarCorreo().catch(() => {});
+  } catch (err) {
+    rdConfirmar = false;
+    $("#rd-enviar").textContent = "Enviar";
+    avisoRedactar(`No se pudo enviar: ${err.message}`);
+  } finally { $("#rd-enviar").disabled = false; }
+});
+for (const id of ["#rd-para", "#rd-cc", "#rd-asunto", "#rd-cuerpo"]) {
+  $(id).addEventListener("input", () => { if (rdConfirmar) { rdConfirmar = false; $("#rd-enviar").textContent = "Enviar"; $("#rd-msg").hidden = true; } });
+}
+document.addEventListener("click", (e) => {
+  const li = e.target.closest?.("[data-abrir-correo]");
+  if (li) abrirCorreo(li.dataset.abrirCorreo);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const li = e.target.closest?.("[data-abrir-correo]");
+  if (li) abrirCorreo(li.dataset.abrirCorreo);
+});
+
 document.querySelectorAll("[data-bandeja]").forEach((b) => b.addEventListener("click", () => {
   bandeja = b.dataset.bandeja;
   try { localStorage.setItem("delta_bandeja", bandeja); } catch { /* sin almacenamiento */ }
