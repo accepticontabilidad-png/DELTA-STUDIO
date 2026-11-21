@@ -1368,7 +1368,7 @@ const orbe = (() => {
     for (let i = 2; i < 60; i++) suma += freq[i];
     return Math.min(1, suma / (58 * 150));
   }
-  const chispas = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
+  const chispas = Array.from({ length: 55 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
 
   // El lienzo se ajusta al tamaño real del orbe para que se vea nítido aunque esté muy grande.
   function ajustarLienzo() {
@@ -1392,59 +1392,115 @@ const orbe = (() => {
     const [r, g, b] = color.map(Math.round);
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
 
-    // Resplandor de fondo
-    const halo = ctx.createRadialGradient(C, C, W * 0.04, C, C, W * 0.48);
-    halo.addColorStop(0, rgba(0.32 * energia + 0.12));
-    halo.addColorStop(0.55, rgba(0.06));
+    // Resplandor de fondo: núcleo violeta y un borde rosado muy tenue
+    const halo = ctx.createRadialGradient(C, C, W * 0.05, C, C, W * 0.5);
+    halo.addColorStop(0, rgba(0.26 * energia + 0.1));
+    halo.addColorStop(0.5, rgba(0.05 + 0.04 * energia));
+    halo.addColorStop(0.78, `rgba(255,158,232,${0.025 + 0.03 * energia})`);
     halo.addColorStop(1, rgba(0));
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, W, W);
 
-    // Partículas orbitando (como polvo de estrellas)
+    // Esfera de cristal detrás del logo (con un reflejo arriba a la izquierda)
+    const R = W * (0.305 + 0.006 * Math.sin(t / 1600) + 0.01 * energia);
+    const cristal = ctx.createRadialGradient(C - R * 0.3, C - R * 0.35, R * 0.1, C, C, R);
+    cristal.addColorStop(0, "rgba(201,191,255,0.10)");
+    cristal.addColorStop(0.6, "rgba(60,40,150,0.10)");
+    cristal.addColorStop(0.92, rgba(0.16 + 0.12 * energia));
+    cristal.addColorStop(1, rgba(0));
+    ctx.fillStyle = cristal;
+    ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(233,230,255,${0.1 + 0.15 * energia})`;
+    ctx.lineWidth = 1 * e;
+    ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 2 * e;
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(C, C, R * 0.9, Math.PI * 1.12, Math.PI * 1.38); ctx.stroke();
+
+    // Polvo de estrellas que orbita
     for (const p of chispas) {
       p.a += p.v * (1 + energia * 3);
       const rr = W * (p.r + 0.01 * Math.sin(t / 900 + p.t));
-      const brillo = 0.25 + 0.6 * Math.abs(Math.sin(t / 700 + p.t));
-      ctx.fillStyle = `rgba(233,230,255,${brillo * (0.4 + energia * 0.6)})`;
+      const brillo = 0.2 + 0.7 * Math.pow(Math.abs(Math.sin(t / 900 + p.t)), 3);
+      ctx.fillStyle = `rgba(233,230,255,${brillo * (0.35 + energia * 0.6)})`;
       ctx.beginPath();
-      ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, 1.4 * e, 0, Math.PI * 2);
+      ctx.arc(C + Math.cos(p.a) * rr, C + Math.sin(p.a) * rr, (0.7 + p.t * 0.25) * e, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Anillos de neón
-    const anillos = [[0.44, 1.2, 0.0005, 0.55], [0.39, 2.2, -0.0008, 0.8], [0.345, 1, 0.0012, 0.35]];
-    anillos.forEach(([rad, grosor, vel, largo], i) => {
-      const giro = t * vel * (1 + energia);
-      ctx.strokeStyle = rgba(0.3 + 0.45 * energia);
-      ctx.lineWidth = grosor * 2 * e;
-      ctx.shadowColor = rgba(0.9);
-      ctx.shadowBlur = 12 * energia * e;
-      for (let k = 0; k < 3; k++) {
+    // Anillo exterior muy fino con degradado que gira
+    const giro0 = t * 0.00012 * (1 + energia * 2);
+    const conico = ctx.createConicGradient ? ctx.createConicGradient(giro0, C, C) : null;
+    if (conico) {
+      conico.addColorStop(0, rgba(0.05));
+      conico.addColorStop(0.35, rgba(0.55 + 0.35 * energia));
+      conico.addColorStop(0.5, `rgba(255,158,232,${0.35 + 0.3 * energia})`);
+      conico.addColorStop(0.7, rgba(0.08));
+      conico.addColorStop(1, rgba(0.05));
+    }
+    ctx.strokeStyle = conico || rgba(0.35);
+    ctx.lineWidth = 1.2 * e;
+    ctx.beginPath(); ctx.arc(C, C, W * 0.445, 0, Math.PI * 2); ctx.stroke();
+
+    // Marcas finas tipo instrumento
+    ctx.lineWidth = 1 * e;
+    for (let k = 0; k < 120; k++) {
+      const a = (k / 120) * Math.PI * 2 - giro0 * 0.6;
+      const largo = k % 10 ? 0.008 : 0.02;
+      ctx.strokeStyle = rgba(k % 10 ? 0.14 : 0.32);
+      ctx.beginPath();
+      ctx.moveTo(C + Math.cos(a) * W * 0.465, C + Math.sin(a) * W * 0.465);
+      ctx.lineTo(C + Math.cos(a) * W * (0.465 + largo), C + Math.sin(a) * W * (0.465 + largo));
+      ctx.stroke();
+    }
+
+    // Cometa: un punto de luz que recorre el anillo dejando estela
+    const ac = t * 0.0006 * (1 + energia * 1.5);
+    for (let k = 0; k < 24; k++) {
+      ctx.strokeStyle = rgba((1 - k / 24) * (0.5 + 0.4 * energia));
+      ctx.lineWidth = (2.2 - k * 0.07) * e;
+      ctx.beginPath();
+      ctx.arc(C, C, W * 0.445, ac - (k + 1) * 0.02, ac - k * 0.02);
+      ctx.stroke();
+    }
+    const cx = C + Math.cos(ac) * W * 0.445, cy = C + Math.sin(ac) * W * 0.445;
+    const punta = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10 * e);
+    punta.addColorStop(0, "rgba(255,255,255,0.95)");
+    punta.addColorStop(0.4, rgba(0.6));
+    punta.addColorStop(1, rgba(0));
+    ctx.fillStyle = punta;
+    ctx.beginPath(); ctx.arc(cx, cy, 10 * e, 0, Math.PI * 2); ctx.fill();
+
+    // Dos arcos finos que giran en sentidos contrarios
+    [[0.395, -0.0005, 0.9], [0.375, 0.0008, 0.5]].forEach(([rad, vel, largo]) => {
+      const g = t * vel * (1 + energia);
+      ctx.strokeStyle = rgba(0.22 + 0.45 * energia);
+      ctx.lineWidth = 1.3 * e;
+      ctx.shadowColor = rgba(0.8);
+      ctx.shadowBlur = 8 * energia * e;
+      for (let k = 0; k < 2; k++) {
         ctx.beginPath();
-        const ini = giro + (k * Math.PI * 2) / 3;
-        ctx.arc(C, C, W * rad, ini, ini + largo * Math.PI * 0.6);
+        ctx.arc(C, C, W * rad, g + k * Math.PI, g + k * Math.PI + largo * Math.PI * 0.55);
         ctx.stroke();
       }
       ctx.shadowBlur = 0;
-      if (i === 0) { // marcas tipo instrumento
-        ctx.strokeStyle = rgba(0.18);
-        ctx.lineWidth = 2 * e;
-        for (let k = 0; k < 72; k++) {
-          const a = (k / 72) * Math.PI * 2 - giro * 0.3;
-          const r1 = W * 0.465, r2 = W * (k % 6 ? 0.475 : 0.488);
-          ctx.beginPath();
-          ctx.moveTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1);
-          ctx.lineTo(C + Math.cos(a) * r2, C + Math.sin(a) * r2);
-          ctx.stroke();
-        }
-      }
     });
+
+    // Anillo de puntos
+    for (let k = 0; k < 90; k++) {
+      const a = (k / 90) * Math.PI * 2 + t * 0.00007;
+      ctx.fillStyle = rgba(0.12 + 0.1 * Math.abs(Math.sin(k / 4 + t / 1300)));
+      ctx.beginPath();
+      ctx.arc(C + Math.cos(a) * W * 0.352, C + Math.sin(a) * W * 0.352, 0.9 * e, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Barras de audio en círculo (tipo ecualizador) mientras DELTA habla o escucha
     if (energia > 0.4 && estado !== "reposo") {
       const barras = 64;
       ctx.lineCap = "round";
-      ctx.lineWidth = 3 * e;
+      ctx.lineWidth = 2 * e;
       for (let k = 0; k < barras; k++) {
         const a = (k / barras) * Math.PI * 2 - Math.PI / 2;
         const v = nivel != null
@@ -1460,19 +1516,21 @@ const orbe = (() => {
       }
     }
 
-    // Onda de voz alrededor del logo
-    ctx.beginPath();
-    const puntos = 120;
-    for (let k = 0; k <= puntos; k++) {
-      const a = (k / puntos) * Math.PI * 2;
-      const onda = Math.sin(a * 7 + t / 230) * Math.sin(a * 3 - t / 380) * 14 * energia * e;
-      const rad = W * 0.29 + onda;
-      const x = C + Math.cos(a) * rad, y = C + Math.sin(a) * rad;
-      k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    // Dos ondas de voz muy finas alrededor del logo (solo se notan cuando hay energía)
+    for (const [fase, alfa] of [[0, 1], [1.7, 0.5]]) {
+      ctx.beginPath();
+      const puntos = 140;
+      for (let k = 0; k <= puntos; k++) {
+        const a = (k / puntos) * Math.PI * 2;
+        const onda = Math.sin(a * 7 + t / 230 + fase) * Math.sin(a * 3 - t / 380) * 16 * energia * e;
+        const rad = R * 0.94 + onda;
+        const x = C + Math.cos(a) * rad, y = C + Math.sin(a) * rad;
+        k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = rgba((0.08 + 0.5 * Math.max(0, energia - 0.25)) * alfa);
+      ctx.lineWidth = 1 * e;
+      ctx.stroke();
     }
-    ctx.strokeStyle = rgba(0.25 + 0.5 * energia);
-    ctx.lineWidth = 1.5 * e;
-    ctx.stroke();
 
     // En reposo y con "reducir movimiento" se dibuja más lento para cuidar la batería.
     if (reducir && estado === "reposo") setTimeout(() => requestAnimationFrame(dibujar), 250);
