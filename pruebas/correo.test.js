@@ -81,7 +81,11 @@ test("correo unificado: los ids de Hotmail llevan su marca y los de Gmail no", (
 
 test("correo unificado: sin cuentas conectadas lo dice claro", async () => {
   assert.deepEqual(correo.conectados(), []);
-  assert.deepEqual(await correo.recientes(), { conectado: false, cuentas: [] });
+  const r = await correo.recientes();
+  assert.equal(r.conectado, false);
+  assert.deepEqual(Object.keys(r.cuentas), ["gmail", "outlook"]);
+  assert.equal(r.cuentas.outlook.nombre, "Hotmail");
+  assert.deepEqual(r.cuentas.gmail.correos, []);
   await assert.rejects(correo.buscarCorreos({}), /Conecte Gmail o Hotmail/);
   assert.equal(await correo.pendientesDeHoy(), null);
 });

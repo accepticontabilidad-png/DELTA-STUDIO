@@ -1,4 +1,4 @@
-// Correo unificado: junta Gmail y Hotmail/Outlook para que DELTA los maneje como una sola bandeja.
+// Correo: Gmail y Hotmail/Outlook, cada uno en su propia bandeja. Este módulo reparte cada pedido a la cuenta que toca.
 // Los ids de Hotmail llevan el prefijo "o:" para saber a qué cuenta pertenece cada correo o borrador.
 import * as gmail from "./gmail.js";
 import * as outlook from "./outlook.js";
@@ -36,38 +36,40 @@ function cuentasPedidas(cuenta) {
   return [cuenta];
 }
 
-/** Junta resultados de varias cuentas: más recientes primero. Si una falla, se avisa y sigue con la otra. */
-async function juntar(cuentas, llamar, max) {
+/** Pide lo mismo a varias cuentas y lo devuelve SEPARADO por cuenta. Si una falla, se avisa y sigue con la otra. */
+async function porCuenta(cuentas, llamar) {
   const res = await Promise.allSettled(cuentas.map((k) => llamar(proveedores[k].mod, k)));
-  const correos = [];
-  const errores = [];
+  const salida = {};
   res.forEach((r, i) => {
     const k = cuentas[i];
-    if (r.status === "fulfilled" && r.value) correos.push(...r.value.correos.map(etiquetar(k)));
-    else if (r.status === "rejected") errores.push(`${NOMBRES[k]}: ${r.reason?.message || r.reason}`);
+    const base = { nombre: NOMBRES[k], cuenta: proveedores[k].cuenta() || null };
+    if (r.status === "fulfilled") salida[k] = { ...base, correos: (r.value?.correos || []).map(etiquetar(k)) };
+    else salida[k] = { ...base, correos: [], error: String(r.reason?.message || r.reason) };
   });
-  if (errores.length === cuentas.length && errores.length) throw new Error(errores.join(" · "));
-  correos.sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha));
-  return { correos: correos.slice(0, max), ...(errores.length ? { errores } : {}) };
+  const errores = Object.values(salida).filter((c) => c.error);
+  if (errores.length && errores.length === cuentas.length) throw new Error(errores.map((c) => c.error).join(" · "));
+  return salida;
 }
 
-/** Busca en una cuenta o en las dos. La consulta usa la sintaxis de Gmail; para Hotmail se traduce lo básico. */
+/** Busca en una cuenta o en las dos; el resultado viene separado por cuenta. La consulta usa la sintaxis de Gmail; para Hotmail se traduce lo básico. */
 export async function buscarCorreos({ cuenta, consulta, max = 10 } = {}) {
   const n = Math.max(1, Math.min(25, Number(max) || 10));
-  return juntar(
-    cuentasPedidas(cuenta),
-    (mod, k) => mod.buscarCorreos({ consulta: consulta || (k === "gmail" ? "in:inbox newer_than:2d" : ""), max: n }),
-    n,
-  );
+  return porCuenta(cuentasPedidas(cuenta), (mod, k) => mod.buscarCorreos({ consulta: consulta || (k === "gmail" ? "in:inbox newer_than:2d" : ""), max: n }));
 }
 
-/** La bandeja del panel: lo de los últimos 2 días de todas las cuentas conectadas. */
+/** Las bandejas del panel, cada cuenta por su lado: lo de los últimos 2 días. */
 export async function recientes(max = 20) {
   const est = estado();
-  const cuentas = conectados().map((k) => ({ origen: k, nombre: NOMBRES[k], cuenta: est[k].cuenta }));
-  if (!cuentas.length) return { conectado: false, cuentas: [] };
-  const r = await juntar(conectados(), (mod, k) => mod.buscarCorreos({ consulta: k === "gmail" ? "in:inbox newer_than:2d" : "", max }), max);
-  return { conectado: true, cuentas, cuenta: cuentas.map((c) => c.cuenta || c.nombre).join(" y "), ...r };
+  const activas = conectados();
+  const datos = activas.length
+    ? await porCuenta(activas, (mod, k) => mod.buscarCorreos({ consulta: k === "gmail" ? "in:inbox newer_than:2d" : "", max })).catch((e) =>
+      Object.fromEntries(activas.map((k) => [k, { correos: [], error: e.message }])))
+    : {};
+  const cuentas = {};
+  for (const k of Object.keys(proveedores)) {
+    cuentas[k] = { nombre: NOMBRES[k], conectado: est[k].conectado, disponible: est[k].disponible, cuenta: est[k].cuenta, correos: [], ...(datos[k] || {}) };
+  }
+  return { conectado: activas.length > 0, cuentas };
 }
 
 export async function leerCorreo(idCompleto) {
@@ -94,9 +96,9 @@ export async function enviarBorrador(idCompleto) {
   return { ...r, desde: proveedores[origen].cuenta() || NOMBRES[origen] };
 }
 
-/** Para el resumen de la mañana: no leídos de las últimas 24 h de todas las cuentas. */
+/** Para el resumen de la mañana: no leídos de las últimas 24 h, separados por cuenta. */
 export async function pendientesDeHoy() {
   const cuentas = conectados();
   if (!cuentas.length) return null;
-  return juntar(cuentas, (mod) => mod.pendientesDeHoy(), 10);
+  return porCuenta(cuentas, (mod) => mod.pendientesDeHoy());
 }

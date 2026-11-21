@@ -17,7 +17,7 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 
 ## Fase 2: correo, bolsa y noticias
 
-- **Correo (Gmail y Hotmail):** las dos cuentas en una sola bandeja. "¿Qué correos importantes tengo?", "Resúmeme lo que mandó Acme", "Contéstale que sí el jueves". DELTA lee, resume, saca citas y tareas, y escribe borradores. **Nunca envía sin que usted lo vea y diga "envíalo".**
+- **Correo (Gmail y Hotmail):** cada cuenta en su propia bandeja (pestañas Gmail y Hotmail). "¿Qué correos importantes tengo?", "Resúmeme lo que mandó Acme", "Contéstale que sí el jueves". DELTA lee, resume, saca citas y tareas, y escribe borradores. **Nunca envía sin que usted lo vea y diga "envíalo".**
 - **Bolsa:** "¿Cómo va la bolsa?", "¿Cómo le fue a Nvidia este año?", "Agrega Tesla a mi lista", "Dame ideas para invertir". Lista inicial: S&P 500, Nasdaq, IPC, dólar/peso, Apple, Microsoft, Nvidia, Amazon, Walmart de México y Bitcoin. Avisa si algo se mueve más de 3 % en el día. Solo informa: no compra ni vende, y sus ideas no son asesoría financiera.
 - **Noticias:** "¿Qué hay de nuevo en cine?", "Agrega fútbol a mis noticias". Temas iniciales: marketing, tendencias, IA, ciencia, arte, cine, economía mundial y política en México.
 - **Resumen de la mañana** ahora incluye correos sin leer, mercados y un titular por tema.
@@ -126,7 +126,7 @@ También una sola vez (unos 15 minutos). Microsoft pide que la "app" de DELTA vi
 6. En Railway (pestaña Variables) ponga las dos llaves. Opcional: su Hotmail en `OUTLOOK_CUENTA` para que DELTA solo acepte esa cuenta.
 7. En la app: ⚙ → **Conectar Hotmail**, entre con su Hotmail y acepte los permisos.
 
-DELTA lee, resume y hace borradores en las dos cuentas; al contestar un correo, el borrador sale de la cuenta que lo recibió. Nunca envía sin que usted lo vea y diga "envíalo".
+DELTA lee, resume y hace borradores en las dos cuentas, siempre por separado; al contestar un correo, el borrador sale de la cuenta que lo recibió. Nunca envía sin que usted lo vea y diga "envíalo".
 
 ### 6. Conectar WhatsApp
 

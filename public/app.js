@@ -112,8 +112,12 @@ async function cargarPanel() {
 let correoConectado = { gmail: false, outlook: false };
 const NOMBRE_CUENTA = { gmail: "Gmail", outlook: "Hotmail" };
 const remitente = (m) => m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de;
-const marcaCuenta = (m, varias) => (varias ? `<span class="marca-cuenta ${m.origen === "outlook" ? "hotmail" : "gmail"}">${NOMBRE_CUENTA[m.origen] || ""}</span>` : "");
-const variasCuentas = (d) => (d.cuentas || []).length > 1;
+const BANDEJAS = ["gmail", "outlook"];
+const nuevosEn = (c) => (c?.correos || []).filter((m) => m.sin_leer).length;
+const totalSinLeer = (d) => (d?.conectado ? BANDEJAS.reduce((n, k) => n + nuevosEn(d.cuentas[k]), 0) : null);
+let bandeja = (() => { try { return localStorage.getItem("delta_bandeja") || "gmail"; } catch { return "gmail"; } })();
+if (!BANDEJAS.includes(bandeja)) bandeja = "gmail";
+let ultimoCorreo = null;
 const filaMercado = (d) => {
         const c = d.cambio_dia_pct;
         const clase = c > 0 ? "sube" : c < 0 ? "baja" : "";
@@ -141,21 +145,44 @@ async function cargarMercadosYNoticias() {
 }
 
 async function cargarCorreo() {
-  const d = await api("/correo");
-  if (!d.conectado) {
-    $("#correo-estado").textContent = "Todavía no hay correo conectado. Conecte Gmail y Hotmail en ⚙ Ajustes.";
+  ultimoCorreo = await api("/correo");
+  pintarBandeja();
+}
+
+function pintarBandeja() {
+  const d = ultimoCorreo;
+  if (!d) return;
+  document.querySelectorAll("[data-bandeja]").forEach((x) => x.classList.toggle("activa", x.dataset.bandeja === bandeja));
+  for (const k of BANDEJAS) {
+    const n = nuevosEn(d.cuentas[k]);
+    $(`#n-${k}`).textContent = n ? n : "";
+  }
+  const c = d.cuentas[bandeja];
+  const nombre = NOMBRE_CUENTA[bandeja];
+  if (!c.conectado) {
+    $("#correo-estado").textContent = c.disponible
+      ? `${nombre} todavía no está conectado. Conéctelo en ⚙ Ajustes → Conectar ${nombre}.`
+      : `${nombre} todavía no está conectado: faltan sus llaves en Railway (vea la guía), y luego ⚙ Ajustes → Conectar ${nombre}.`;
     $("#lista-correos").innerHTML = "";
     return;
   }
-  const varias = variasCuentas(d);
-  const falta = ["gmail", "outlook"].filter((k) => !d.cuentas.some((c) => c.origen === k)).map((k) => NOMBRE_CUENTA[k]);
-  $("#correo-estado").textContent = `${d.cuenta} · bandeja de entrada, últimos 2 días`
-    + (falta.length ? ` · ${falta.join(" y ")} sin conectar` : "")
-    + (d.errores?.length ? ` · No pude revisar ${d.errores.map((e) => e.split(":")[0]).join(" ni ")} ahora` : "");
-  $("#lista-correos").innerHTML = d.correos.length
-    ? d.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b>${marcaCuenta(m, varias)} · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
-    : `<li class="vacio">Sin correos recientes.</li>`;
+  $("#correo-estado").textContent = c.error
+    ? `${c.cuenta || nombre} · No pude revisarlo ahora: ${c.error}`
+    : `${c.cuenta || nombre} · bandeja de entrada, últimos 2 días`;
+  $("#lista-correos").innerHTML = c.correos.length
+    ? c.correos.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b> · ${esc(m.asunto || "(sin asunto)")}<span class="sub">${esc(m.vista_previa)}</span></div><span class="tenue hora">${fmtDia(m.fecha)} ${fmtHora(m.fecha)}</span></li>`).join("")
+    : c.error ? "" : `<li class="vacio">Sin correos recientes en ${nombre}.</li>`;
 }
+
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("[data-abrir-bandeja]");
+  if (a) { bandeja = a.dataset.abrirBandeja; try { localStorage.setItem("delta_bandeja", bandeja); } catch { /* sin almacenamiento */ } }
+});
+document.querySelectorAll("[data-bandeja]").forEach((b) => b.addEventListener("click", () => {
+  bandeja = b.dataset.bandeja;
+  try { localStorage.setItem("delta_bandeja", bandeja); } catch { /* sin almacenamiento */ }
+  pintarBandeja();
+}));
 
 
 // ---------------- Mood de día y de noche ----------------
@@ -199,7 +226,7 @@ const horaEn = (fecha) => Number(new Intl.DateTimeFormat("en-US", { timeZone: zo
 function pintarMosaicos() {
   const p = hud.panel;
   if (!p) return;
-  const sinLeer = hud.correo?.conectado ? hud.correo.correos.filter((m) => m.sin_leer).length : null;
+  const sinLeer = totalSinLeer(hud.correo);
   const mosaicos = [
     { ir: "agenda", icono: ICONOS.cita, n: p.hoy.eventos, txt: p.hoy.eventos === 1 ? "cita hoy" : "citas hoy" },
     { ir: "tareas", icono: ICONOS.tarea, n: p.hoy.pendientes, txt: "pendientes", alerta: p.hoy.vencidas ? `${p.hoy.vencidas} atrasada${p.hoy.vencidas === 1 ? "" : "s"}` : "" },
@@ -323,17 +350,24 @@ async function cargarHudExtra() {
   hud.correo = correo.status === "fulfilled" ? correo.value : null;
   hud.noticias = notas.status === "fulfilled" ? notas.value : null;
   const c = hud.correo;
+  const filaMini = (m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b><span class="sub">${esc(m.asunto || "(sin asunto)")}</span></div><span class="tenue hora">${fmtHora(m.fecha)}</span></li>`;
+  const bloque = (k) => {
+    const x = c.cuentas[k];
+    const nombre = NOMBRE_CUENTA[k];
+    let filas;
+    if (!x.conectado) filas = `<li class="vacio">Conéctelo en ⚙ Ajustes.</li>`;
+    else if (x.error) filas = `<li class="vacio">No pude revisarlo ahora.</li>`;
+    else {
+      const nuevos = x.correos.filter((m) => m.sin_leer);
+      const ver = (nuevos.length ? nuevos : x.correos).slice(0, 2);
+      filas = ver.length ? ver.map(filaMini).join("") : `<li class="vacio">Bandeja tranquila.</li>`;
+    }
+    const n = nuevosEn(x);
+    return `<a href="#/correo" class="hud-bandeja" data-abrir-bandeja="${k}"><span>${nombre}</span>${n ? `<b>${n} sin leer</b>` : ""}</a><ul class="lista correos-mini">${filas}</ul>`;
+  };
   $("#hud-correo").innerHTML = !c
-    ? `<li class="vacio">No pude revisar el correo ahora.</li>`
-    : !c.conectado
-      ? `<li class="vacio">Conecte Gmail y Hotmail en ⚙ Ajustes y aquí verá lo nuevo.</li>`
-      : (() => {
-        const nuevos = c.correos.filter((m) => m.sin_leer);
-        const ver = (nuevos.length ? nuevos : c.correos).slice(0, 3);
-        return ver.length
-          ? ver.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(remitente(m))}</b><span class="sub">${marcaCuenta(m, variasCuentas(c))}${esc(m.asunto || "(sin asunto)")}</span></div><span class="tenue hora">${fmtHora(m.fecha)}</span></li>`).join("")
-          : `<li class="vacio">Bandeja tranquila.</li>`;
-      })();
+    ? `<ul class="lista correos-mini"><li class="vacio">No pude revisar el correo ahora.</li></ul>`
+    : BANDEJAS.map(bloque).join("");
   const titulares = (hud.noticias || []).flatMap((t) => (t.noticias || []).slice(0, 1).map((n) => ({ ...n, tema: t.tema }))).slice(0, 4);
   $("#hud-noticias").innerHTML = titulares.length
     ? titulares.map((n) => `<li><div class="cuerpo"><span class="hud-tema">${esc(n.tema)}</span><a href="${esc(/^https:\/\//.test(n.enlace) ? n.enlace : "#")}" target="_blank" rel="noopener noreferrer">${esc(n.titulo)}</a><span class="sub">${esc(n.fuente || "")}</span></div></li>`).join("")
@@ -404,8 +438,10 @@ function textoSaludo() {
   else frases.push("Hoy ya no tienes citas.");
   if (p.hoy.pendientes) frases.push(`Llevas ${plural(p.hoy.pendientes, "pendiente", "pendientes")}${p.hoy.vencidas ? `, y ${p.hoy.vencidas === 1 ? "uno está atrasado" : `${p.hoy.vencidas} están atrasados`}` : ""}.`);
   else frases.push("Y no tienes pendientes, vas impecable.");
-  const sinLeer = hud.correo?.conectado ? hud.correo.correos.filter((m) => m.sin_leer).length : 0;
-  if (sinLeer) frases.push(`Tienes ${plural(sinLeer, "correo nuevo", "correos nuevos")}.`);
+  const nG = hud.correo?.conectado ? nuevosEn(hud.correo.cuentas.gmail) : 0;
+  const nH = hud.correo?.conectado ? nuevosEn(hud.correo.cuentas.outlook) : 0;
+  if (nG && nH) frases.push(`Tienes ${plural(nG, "correo nuevo", "correos nuevos")} en Gmail y ${nH} en Hotmail.`);
+  else if (nG || nH) frases.push(`Tienes ${plural(nG || nH, "correo nuevo", "correos nuevos")} en ${nG ? "Gmail" : "Hotmail"}.`);
   if (p.aprobaciones_pendientes) frases.push(`La agencia te dejó ${plural(p.aprobaciones_pendientes, "cosa", "cosas")} para aprobar.`);
   frases.push("¿Por dónde empezamos?");
   return frases.join(" ");

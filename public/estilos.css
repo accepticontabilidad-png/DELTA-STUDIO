@@ -101,9 +101,10 @@ button[type=submit], .primario, .botones button {
 .correos li.sin-leer { border-left-color: var(--cian); }
 .correos li .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .correos .hora { white-space: nowrap; font-size: 12px; }
-.marca-cuenta { display: inline-block; margin: 0 6px; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; border: 1px solid var(--borde); color: var(--lila); background: var(--cian-suave); }
-.marca-cuenta.hotmail { color: var(--dorado); border-color: color-mix(in srgb, var(--dorado) 35%, transparent); background: color-mix(in srgb, var(--dorado) 12%, transparent); }
-.correos-mini .marca-cuenta { margin: 0 6px 0 0; font-size: 9px; }
+.cuenta-n:not(:empty) { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 10.5px; background: var(--cian); color: #fff; }
+.correos-hud .hud-bandeja { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--tenue); text-decoration: none; }
+.correos-hud .hud-bandeja:first-child { margin-top: 0; }
+.correos-hud .hud-bandeja b { color: var(--lila); letter-spacing: .04em; text-transform: none; font-size: 11px; }
 .aj-sub { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--tenue); margin: 18px 0 8px; font-weight: 600; }
 .mini-orbe { position: fixed; right: 22px; bottom: 22px; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle, rgba(139,115,255,.35), rgba(16,12,42,.92) 70%); border: 1px solid rgba(183,166,255,.5); box-shadow: 0 0 22px rgba(123,92,255,.55); z-index: 5; }
 .mini-orbe img { width: 30px; height: 30px; filter: drop-shadow(0 0 6px rgba(183,166,255,.9)); }

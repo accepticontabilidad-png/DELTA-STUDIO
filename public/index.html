@@ -142,7 +142,7 @@
         <aside class="hud-tablero hud-der" id="panel-der">
           <article class="hud-card">
             <h2><a href="#/correo" class="ver-mas">Correo <span>›</span></a></h2>
-            <ul id="hud-correo" class="lista correos-mini"></ul>
+            <div id="hud-correo" class="correos-hud"></div>
           </article>
           <article class="hud-card">
             <h2><a href="#/mercados" class="ver-mas">Mercados <span>›</span></a></h2>
@@ -196,7 +196,13 @@
         <div class="ag-cabeza">
           <h2>Correo</h2>
           <div class="ag-botones">
-            <button type="button" class="ag-agregar" data-pedir="Resúmeme mi correo de hoy: qué es importante y qué necesita respuesta.">Resumir con DELTA</button>
+            <button type="button" class="ag-agregar" data-pedir="Resúmeme mi correo de hoy, cada cuenta por separado: qué es importante y qué necesita respuesta.">Resumir con DELTA</button>
+          </div>
+        </div>
+        <div class="ag-control">
+          <div class="segmento" role="tablist" aria-label="Cuenta de correo">
+            <button type="button" data-bandeja="gmail" class="activa">Gmail <span class="cuenta-n" id="n-gmail"></span></button>
+            <button type="button" data-bandeja="outlook">Hotmail <span class="cuenta-n" id="n-outlook"></span></button>
           </div>
         </div>
         <p id="correo-estado" class="tenue"></p>

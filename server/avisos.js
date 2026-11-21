@@ -82,10 +82,12 @@ export async function extrasDelResumen() {
   ]);
   const partes = [];
   if (mail.status === "fulfilled" && mail.value) {
-    const c = mail.value.correos;
-    partes.push(c.length ? `\n📧 ${c.length} correo(s) sin leer:` : "\n📧 Sin correos nuevos importantes.");
-    const varias = new Set(c.map((m) => m.origen)).size > 1;
-    for (const m of c.slice(0, 5)) partes.push(`• ${m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}${varias ? ` (${correo.NOMBRES[m.origen]})` : ""}`);
+    for (const c of Object.values(mail.value)) {
+      const titulo = `\n📧 ${c.nombre}${c.cuenta ? ` (${c.cuenta})` : ""}`;
+      if (c.error) { partes.push(`${titulo}: no pude revisarlo ahora.`); continue; }
+      partes.push(c.correos.length ? `${titulo}: ${c.correos.length} sin leer` : `${titulo}: sin correos nuevos importantes.`);
+      for (const m of c.correos.slice(0, 4)) partes.push(`• ${m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de}: ${m.asunto || "(sin asunto)"}`);
+    }
   }
   if (bolsa.status === "fulfilled") {
     const ok = bolsa.value.filter((d) => !d.error).slice(0, 6);
