@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db, getAjuste, setAjuste } from "./db.js";
 import * as agenda from "./agenda.js";
+import * as gasto from "./gasto.js";
 import { hablarConDelta, inicioConversacion, nuevaConversacion } from "./cerebro.js";
 import { iniciarVigilante, suscribirPantalla, avisar } from "./avisos.js";
 import { whatsappConfigurado, verificarWebhook, crearReceptorWebhook } from "./whatsapp.js";
@@ -160,6 +161,7 @@ api.get("/panel", envolver(() => {
       higgsfield: higgsfield.higgsfieldDisponible(),
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
+    gasto: gasto.estado(),
   };
 }));
 
@@ -183,6 +185,10 @@ api.post("/ajustes", envolver((req) => {
   }
   return { ok: true };
 }));
+
+// ---------- Gasto de Claude (medidor y tope) ----------
+api.get("/gasto", envolver(() => gasto.estado()));
+api.post("/gasto", envolver((req) => gasto.guardarAjustes(req.body || {})));
 
 api.get("/gmail/conectar", envolver((req) => ({ url: gmail.urlConexion(req) })));
 api.post("/gmail/desconectar", envolver(() => { gmail.desconectar(); return { ok: true }; }));

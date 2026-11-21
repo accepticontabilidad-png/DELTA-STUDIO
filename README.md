@@ -30,6 +30,7 @@ DELTA es un asistente estilo JARVIS que maneja tu agenda, tus tareas y tus aviso
 - **DELTA es el director:** "Delta, que Video me haga 3 guiones de reels para Dermatología Luz". Encarga el trabajo y sigue platicando; el departamento trabaja en segundo plano y avisa al terminar.
 - **Aprobaciones:** todo lo que tenga que salir de la agencia o cueste dinero (publicar, mandar algo a un cliente, gastar en anuncios, facturar) llega a la bandeja para aprobar o rechazar con un toque. Aprobar todavía no publica ni envía nada solo: eso llega al conectar Meta y WhatsApp.
 - **Rutina:** cada lunes a las 9:00, Tendencias prepara el reporte semanal para sus clientes activos.
+- Medidor de gasto: cada llamada a Claude se anota con sus tokens y el precio de su modelo. En Inicio se ve lo gastado en el mes contra el tope; al 80 % avisa y pasa al modelo económico, y al llegar al tope deja de usar a Claude hasta el mes siguiente (el tope y el modo se cambian en Ajustes).
 - Los departamentos usan un modelo más económico que el director (`DELTA_MODELO_DEPTOS`, por defecto `claude-sonnet-5-5`). Con `DELTA_BUSQUEDA_WEB=no` se apaga la búsqueda en internet.
 
 ## Diseño: carruseles, posts, historias y videos
@@ -189,6 +190,8 @@ Lo que te toca a ti:
 | `HORA_RESUMEN` | Hora del resumen de la mañana (también desde ⚙) | `08:00` |
 | `DELTA_MODELO` | Modelo de Claude | `claude-opus-5-5` |
 | `DELTA_ESFUERZO` | Cuánto "piensa" antes de responder: `low`, `medium`, `high` | `medium` |
+| `DELTA_MODELO_ECONOMICO` | Modelo barato para lo sencillo (agenda, tareas, recordatorios) | `claude-haiku-5-5` |
+| `DELTA_TOPE_USD` | Tope mensual inicial de gasto en Claude (luego se cambia en Ajustes) | `90` |
 
 ---
 

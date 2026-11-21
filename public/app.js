@@ -105,9 +105,57 @@ async function cargarPanel() {
   $("#btn-outlook").textContent = c.outlook ? "Desconectar Hotmail" : "Conectar Hotmail";
 
   if (p.voz) { vozNatural = p.voz; pintarVoz(); }
+  if (p.gasto) pintarGasto(p.gasto);
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
 }
+
+// ---------------- Medidor de gasto de Claude ----------------
+let gastoActual = null;
+const dolares = (n) => `USD ${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const topeCorto = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const nombreMes = (mes) => MESES[Number(mes.slice(5, 7)) - 1] || "";
+const estadoGasto = (g) => (g.bloqueado ? "tope" : g.ahorro ? "alerta" : "");
+function notaGasto(g) {
+  if (g.bloqueado) return `Llegó al tope. DELTA ya no usa a Claude hasta el 1 de ${MESES[Number(g.mes.slice(5, 7)) % 12]} o hasta que suba el tope.`;
+  const queda = Math.max(0, g.tope - g.gastado);
+  if (g.ahorro) return `Queda ${dolares(queda)}. Modo ahorro: casi todo con el modelo económico.`;
+  return `Queda ${dolares(queda)} del tope de ${nombreMes(g.mes)}.${g.ultimas_24h ? ` Últimas 24 horas: ${dolares(g.ultimas_24h)}.` : ""}`;
+}
+function medidorGasto(g) {
+  const p = Math.min(100, g.porcentaje);
+  return `<div class="gasto-medidor ${estadoGasto(g)}" data-p="${p}">
+    <div class="gasto-cifras"><b>${dolares(g.gastado)}</b><span>de ${dolares(g.tope)}<br>${Math.round(g.porcentaje)} %</span></div>
+    <div class="gasto-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p)}" aria-label="Gasto del mes"><i></i></div>
+    <p class="gasto-nota">${esc(notaGasto(g))}</p>
+  </div>`;
+}
+function pintarGasto(g) {
+  gastoActual = g;
+  const pastilla = $("#pastilla-gasto");
+  pastilla.hidden = false;
+  pastilla.className = `pastilla gasto-pastilla ${estadoGasto(g)}`;
+  pastilla.style.setProperty("--p", Math.min(100, g.porcentaje));
+  $("#pastilla-gasto-txt").innerHTML = `${dolares(g.gastado)}<span class="gasto-de"> de ${topeCorto(g.tope)}</span>`;
+  $("#tarjeta-gasto").hidden = false;
+  $("#hud-gasto").innerHTML = medidorGasto(g);
+  $("#aj-gasto-medidor").innerHTML = medidorGasto(g);
+  // La política de seguridad no deja estilos en línea: el avance de la barra se pone desde aquí.
+  document.querySelectorAll(".gasto-medidor[data-p]").forEach((m) => m.style.setProperty("--p", m.dataset.p));
+  if (document.activeElement !== $("#aj-gasto-tope")) $("#aj-gasto-tope").value = g.tope;
+  $("#aj-gasto-modo").value = g.modo;
+  const filas = g.por_modelo.map((f) => `<li><span>${esc(f.nombre)} <span class="sub">${f.llamadas} ${f.llamadas === 1 ? "llamada" : "llamadas"}</span></span><b>${dolares(f.costo)}</b></li>`);
+  if (g.ajuste_manual) filas.push(`<li><span>Antes del medidor <span class="sub">según la consola de Claude</span></span><b>${dolares(g.ajuste_manual)}</b></li>`);
+  $("#aj-gasto-desglose").innerHTML = filas.length ? filas.join("") : `<li class="vacio">Aún no hay gasto este mes.</li>`;
+}
+function abrirGasto(e) {
+  e?.preventDefault();
+  $("#btn-ajustes").click();
+  setTimeout(() => $("#aj-gasto-titulo").scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+}
+$("#pastilla-gasto").addEventListener("click", abrirGasto);
+document.querySelector("[data-abrir-gasto]").addEventListener("click", abrirGasto);
 
 let correoConectado = { gmail: false, outlook: false };
 const NOMBRE_CUENTA = { gmail: "Gmail", outlook: "Hotmail" };
@@ -1805,6 +1853,9 @@ $("#aj-guardar").addEventListener("click", async () => {
   pintarManos();
   try {
     await api("/ajustes", { method: "POST", body: { zona_horaria: $("#aj-zona").value.trim(), hora_resumen: $("#aj-resumen").value } });
+    const real = $("#aj-gasto-real").value.trim();
+    pintarGasto(await api("/gasto", { method: "POST", body: { tope: $("#aj-gasto-tope").value.trim(), modo: $("#aj-gasto-modo").value, ...(real ? { ya_gastado: real } : {}) } }));
+    $("#aj-gasto-real").value = "";
     cargarPanel();
   } catch (e) { burbuja("aviso", e.message); }
   if (manosLibres && !escuchando) escuchar();
