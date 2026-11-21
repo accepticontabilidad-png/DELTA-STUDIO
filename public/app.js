@@ -62,18 +62,12 @@ async function cargarPanel() {
   const p = await api("/panel");
   zona = p.zona_horaria || zona;
 
-  const resumen = `
-    <div><b>${p.hoy.eventos}</b><span>citas hoy</span></div>
-    <div><b>${p.hoy.pendientes}</b><span>pendientes</span></div>
-    <div><b class="${p.hoy.vencidas ? "alerta" : ""}">${p.hoy.vencidas}</b><span>atrasadas</span></div>`;
-  $("#resumen-hoy").innerHTML = resumen;
-  $("#hoy-mini").innerHTML = resumen;
+  hud.panel = p;
+  pintarMosaicos();
+  pintarSiguiente();
 
   if (seccionActual === "agenda") cargarAgenda().catch(() => {});
 
-  $("#hoy-citas").innerHTML = p.eventos.length
-    ? p.eventos.slice(0, 4).map((e) => `<li><div class="cuerpo">${esc(e.titulo)}<span class="sub">${fmtDia(e.inicio)} ${fmtHora(e.inicio)}${e.lugar ? " · " + esc(e.lugar) : ""}</span></div></li>`).join("")
-    : `<li class="vacio">Sin citas en los próximos 7 días.</li>`;
 
   const ahora = new Date().toISOString();
   const filaTarea = (t) => {
@@ -100,6 +94,7 @@ async function cargarPanel() {
     ? p.avisos.slice(0, 4).map((a) => `<li><div class="cuerpo">${esc(a.texto)}<span class="sub">${fmtDia(a.fecha)} ${fmtHora(a.fecha)}</span></div></li>`).join("")
     : `<li class="vacio">Sin avisos todavía.</li>`;
 
+  pintarFrase();
   const n = p.aprobaciones_pendientes || 0;
   $("#badge-aprob").hidden = !n;
   $("#badge-aprob").textContent = n;
@@ -123,6 +118,7 @@ const sinBolsa = `<li class="vacio">Sin datos de bolsa por ahora.</li>`;
 async function cargarMercadosMini() {
   const ok = (await api("/mercados")).filter((d) => !d.error);
   $("#lista-mercados").innerHTML = ok.length ? ok.slice(0, 5).map(filaMercado).join("") : sinBolsa;
+  pintarTicker(ok);
 }
 
 async function cargarMercadosYNoticias() {
@@ -151,6 +147,281 @@ async function cargarCorreo() {
     : `<li class="vacio">Sin correos recientes.</li>`;
 }
 
+
+// ---------------- Inicio tipo centro de mando (HUD) ----------------
+const hud = { panel: null, correo: null, noticias: null, extraEn: 0 };
+const ICONOS = {
+  cita: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  tarea: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>',
+  correo: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  aprob: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+};
+const horaEn = (fecha) => Number(new Intl.DateTimeFormat("en-US", { timeZone: zona, hour: "numeric", hourCycle: "h23" }).format(fecha));
+
+function pintarMosaicos() {
+  const p = hud.panel;
+  if (!p) return;
+  const sinLeer = hud.correo?.conectado ? hud.correo.correos.filter((m) => m.sin_leer).length : null;
+  const mosaicos = [
+    { ir: "agenda", icono: ICONOS.cita, n: p.hoy.eventos, txt: p.hoy.eventos === 1 ? "cita hoy" : "citas hoy" },
+    { ir: "tareas", icono: ICONOS.tarea, n: p.hoy.pendientes, txt: "pendientes", alerta: p.hoy.vencidas ? `${p.hoy.vencidas} atrasada${p.hoy.vencidas === 1 ? "" : "s"}` : "" },
+    { ir: "correo", icono: ICONOS.correo, n: sinLeer, txt: sinLeer == null ? "correo" : "sin leer" },
+    { ir: "aprobaciones", icono: ICONOS.aprob, n: p.aprobaciones_pendientes || 0, txt: "por aprobar" },
+  ];
+  const html = mosaicos.map((m) => `<a class="hud-tile" href="#/${m.ir}"><span class="hud-tile-icono">${m.icono}</span><b data-cuenta="${m.n ?? ""}">${m.n ?? "–"}</b><span>${m.txt}</span>${m.alerta ? `<em>${m.alerta}</em>` : ""}</a>`).join("");
+  for (const sel of ["#resumen-hoy", "#hoy-mini"]) {
+    const caja = $(sel);
+    const antes = [...caja.querySelectorAll("b")].map((b) => b.textContent);
+    caja.innerHTML = html;
+    caja.querySelectorAll("b[data-cuenta]").forEach((b, i) => { if (b.dataset.cuenta !== "" && antes[i] !== b.dataset.cuenta) contar(b, Number(b.dataset.cuenta)); });
+  }
+}
+
+// Los números suben de 0 a su valor (rápido y suave).
+function contar(el, hasta) {
+  if (!hasta || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = hasta; return; }
+  const ini = performance.now(), dur = 700;
+  const paso = (t) => {
+    const k = Math.min(1, (t - ini) / dur);
+    el.textContent = Math.round(hasta * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(paso);
+  };
+  requestAnimationFrame(paso);
+}
+
+function faltaPara(iso) {
+  const min = Math.round((new Date(iso) - Date.now()) / 60000);
+  if (min <= 0) return "ahora";
+  if (min < 60) return `en ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h < 24) return `en ${h} h${m ? ` ${m} min` : ""}`;
+  return fmtDia(iso).toLowerCase();
+}
+
+function pintarSiguiente() {
+  const p = hud.panel;
+  const caja = $("#hud-siguiente");
+  if (!p || !caja) return;
+  const prox = p.eventos.find((e) => new Date(e.fin || e.inicio) > Date.now()) || null;
+  caja.innerHTML = prox
+    ? `<span class="hud-etiqueta">Siguiente</span><b>${esc(prox.titulo)}</b><span class="sub">${fmtDia(prox.inicio)} ${fmtHora(prox.inicio)}${prox.lugar ? " · " + esc(prox.lugar) : ""}</span><span class="hud-cuenta">${faltaPara(prox.inicio)}</span>`
+    : `<span class="hud-etiqueta">Siguiente</span><b>Agenda libre</b><span class="sub">No tienes citas en los próximos días.</span>`;
+  const resto = p.eventos.filter((e) => e !== prox && new Date(e.fin || e.inicio) > Date.now()).slice(0, 3);
+  $("#hoy-citas").innerHTML = resto.map((e) => `<li><div class="cuerpo">${esc(e.titulo)}<span class="sub">${fmtDia(e.inicio)} ${fmtHora(e.inicio)}${e.lugar ? " · " + esc(e.lugar) : ""}</span></div></li>`).join("");
+}
+
+function momentoDelDia(h = horaEn(new Date())) {
+  return h < 12 && h >= 5 ? "Buenos días" : h < 19 && h >= 12 ? "Buenas tardes" : "Buenas noches";
+}
+
+function pintarFrase() {
+  const p = hud.panel;
+  if (!p) return;
+  $("#hud-saludo").textContent = momentoDelDia();
+  const prox = p.eventos.find((e) => new Date(e.inicio) > Date.now());
+  const partes = [];
+  if (prox && new Date(prox.inicio) - Date.now() < 864e5) partes.push(`Tu siguiente cita es ${faltaPara(prox.inicio)}: ${prox.titulo}.`);
+  else partes.push("Sin citas por delante hoy.");
+  if (p.hoy.vencidas) partes.push(`Ojo: ${p.hoy.vencidas} pendiente${p.hoy.vencidas === 1 ? "" : "s"} atrasado${p.hoy.vencidas === 1 ? "" : "s"}.`);
+  else if (!p.hoy.pendientes) partes.push("Todo al día.");
+  $("#hud-frase").textContent = partes.join(" ");
+}
+
+function relojHud() {
+  const ahora = new Date();
+  const partes = Object.fromEntries(new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }).formatToParts(ahora).map((x) => [x.type, x.value]));
+  if (!$("#hud-hora")) return;
+  $("#hud-hora").textContent = `${partes.hour}:${partes.minute}`;
+  $("#hud-seg").textContent = partes.second;
+  $("#hud-ampm").textContent = (partes.dayPeriod || "").replace(/\s/g, "").toLowerCase();
+  $("#hud-fecha").textContent = new Intl.DateTimeFormat("es-MX", { timeZone: zona, weekday: "long", day: "numeric", month: "long" }).format(ahora);
+  // Barra fina con cuánto del día ya pasó
+  const h = horaEn(ahora), m = Number(partes.minute);
+  $("#hud-progreso").style.width = `${((h * 60 + m) / 1440) * 100}%`;
+  if (partes.second === "00") { pintarFrase(); pintarSiguiente(); }
+}
+
+const CLIMA = [
+  [[0], "Despejado", "sol"], [[1], "Casi despejado", "sol"], [[2], "Parcialmente nublado", "nube-sol"], [[3], "Nublado", "nube"],
+  [[45, 48], "Neblina", "nube"], [[51, 53, 55, 56, 57], "Llovizna", "lluvia"], [[61, 63, 65, 66, 67, 80, 81, 82], "Lluvia", "lluvia"],
+  [[71, 73, 75, 77, 85, 86], "Nieve", "nube"], [[95, 96, 99], "Tormenta", "tormenta"],
+];
+const ICONO_CLIMA = {
+  sol: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/>',
+  luna: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  "nube-sol": '<path d="M8 4.5v1.6M3.6 8.6h1.6M4.9 5.4l1.1 1.1M11.6 5.4l-1.1 1.1"/><path d="M5.6 11a3 3 0 0 1 5.3-2.2"/><path d="M8 19h9a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1A3 3 0 0 0 8 19z"/>',
+  nube: '<path d="M7 19h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 19z"/>',
+  lluvia: '<path d="M7 15h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  tormenta: '<path d="M7 15h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 15z"/><path d="m12 15-2 4h3l-2 4"/>',
+};
+function pintarClima(d) {
+  const c = d?.current;
+  if (!c) return;
+  const [, texto, icono] = CLIMA.find(([codigos]) => codigos.includes(c.weather_code)) || [null, "", "nube"];
+  const ico = !c.is_day && icono === "sol" ? "luna" : icono;
+  const max = d.daily?.temperature_2m_max?.[0], min = d.daily?.temperature_2m_min?.[0];
+  $("#hud-clima").innerHTML = `<svg viewBox="0 0 24 24">${ICONO_CLIMA[ico]}</svg><div><b>${Math.round(c.temperature_2m)}°</b><span>${texto}${max != null ? ` · ${Math.round(max)}° / ${Math.round(min)}°` : ""}</span></div>`;
+  $("#hud-clima").hidden = false;
+}
+
+function pintarTicker(lista) {
+  const caja = $("#hud-ticker-caja");
+  if (!lista.length) { caja.hidden = true; return; }
+  const item = (d) => {
+    const c = d.cambio_dia_pct;
+    return `<span class="tk"><b>${esc(d.nombre)}</b> ${esc(d.precio?.toLocaleString("es-MX") ?? "")} <i class="${c > 0 ? "sube" : c < 0 ? "baja" : ""}">${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%</i></span>`;
+  };
+  const fila = lista.map(item).join("");
+  $("#hud-ticker").innerHTML = fila + fila; // dos veces para que el carrusel no tenga corte
+  $("#hud-ticker").style.animationDuration = `${Math.max(30, lista.length * 6)}s`;
+  caja.hidden = false;
+}
+
+// Correo y noticias del inicio: cada 5 minutos como máximo.
+async function cargarHudExtra() {
+  if (Date.now() - hud.extraEn < 290e3) return;
+  hud.extraEn = Date.now();
+  const [correo, notas] = await Promise.allSettled([api("/correo"), api("/noticias")]);
+  hud.correo = correo.status === "fulfilled" ? correo.value : null;
+  hud.noticias = notas.status === "fulfilled" ? notas.value : null;
+  const c = hud.correo;
+  $("#hud-correo").innerHTML = !c
+    ? `<li class="vacio">No pude revisar el correo ahora.</li>`
+    : !c.conectado
+      ? `<li class="vacio">Conecta Gmail en ⚙ Ajustes y aquí verás lo nuevo.</li>`
+      : (() => {
+        const nuevos = c.correos.filter((m) => m.sin_leer);
+        const ver = (nuevos.length ? nuevos : c.correos).slice(0, 3);
+        return ver.length
+          ? ver.map((m) => `<li class="${m.sin_leer ? "sin-leer" : ""}"><div class="cuerpo"><b>${esc(m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de)}</b><span class="sub">${esc(m.asunto || "(sin asunto)")}</span></div><span class="tenue hora">${fmtHora(m.fecha)}</span></li>`).join("")
+          : `<li class="vacio">Bandeja tranquila.</li>`;
+      })();
+  const titulares = (hud.noticias || []).flatMap((t) => (t.noticias || []).slice(0, 1).map((n) => ({ ...n, tema: t.tema }))).slice(0, 4);
+  $("#hud-noticias").innerHTML = titulares.length
+    ? titulares.map((n) => `<li><div class="cuerpo"><span class="hud-tema">${esc(n.tema)}</span><a href="${esc(/^https:\/\//.test(n.enlace) ? n.enlace : "#")}" target="_blank" rel="noopener noreferrer">${esc(n.titulo)}</a><span class="sub">${esc(n.fuente || "")}</span></div></li>`).join("")
+    : `<li class="vacio">Sin titulares por ahora.</li>`;
+  pintarMosaicos();
+}
+
+// Brillo que sigue al cursor sobre las tarjetas
+document.addEventListener("pointermove", (e) => {
+  const card = e.target.closest?.(".hud-card, .hud-tile");
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+  card.style.setProperty("--my", `${e.clientY - r.top}px`);
+}, { passive: true });
+
+// ---- Conversación: "pensando" y respuesta que se va escribiendo ----
+const FRASES_PENSANDO = ["Déjame ver", "Revisando", "Un segundito", "Ya casi"];
+function burbujaPensando() {
+  const b = burbuja("assistant pensando", "");
+  b.innerHTML = `<span class="pensando-texto">${FRASES_PENSANDO[0]}</span><span class="puntos"><i></i><i></i><i></i></span>`;
+  let i = 0;
+  b._frases = setInterval(() => {
+    const t = b.querySelector(".pensando-texto");
+    if (!t) return clearInterval(b._frases);
+    i = (i + 1) % FRASES_PENSANDO.length;
+    t.textContent = FRASES_PENSANDO[i];
+  }, 2200);
+  return b;
+}
+function escribir(el, texto) {
+  clearInterval(el._frases);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || texto.length > 1800) { el.textContent = texto; return; }
+  const conv = $("#conversacion");
+  const ini = performance.now();
+  const dur = Math.min(2200, 300 + texto.length * 12);
+  el.classList.add("escribiendo");
+  const paso = (t) => {
+    const k = Math.min(1, (t - ini) / dur);
+    el.textContent = texto.slice(0, Math.ceil(texto.length * k));
+    conv.scrollTop = conv.scrollHeight;
+    if (k < 1) requestAnimationFrame(paso);
+    else el.classList.remove("escribiendo");
+  };
+  requestAnimationFrame(paso);
+}
+
+// ---- Saludo con el resumen del día (una vez al día, al abrir) ----
+const NUMEROS = ["doce", "una", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once"];
+function horaHablada(iso) {
+  const f = new Date(iso);
+  const h = horaEn(f);
+  const m = Number(new Intl.DateTimeFormat("en-US", { timeZone: zona, minute: "2-digit" }).format(f));
+  const n = NUMEROS[h % 12];
+  const min = m === 0 ? "" : m === 15 ? " y cuarto" : m === 30 ? " y media" : ` y ${m}`;
+  const parte = h < 6 ? "de la madrugada" : h < 12 ? "de la mañana" : h < 20 ? "de la tarde" : "de la noche";
+  return `${h % 12 === 1 ? "la" : "las"} ${n}${min} ${parte}`;
+}
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+
+function textoSaludo() {
+  const p = hud.panel;
+  if (!p) return null;
+  const frases = [`${momentoDelDia()}.`];
+  const hoyClave = claveDia(new Date());
+  const deHoy = p.eventos.filter((e) => claveDia(new Date(e.inicio)) === hoyClave && new Date(e.inicio) > Date.now());
+  if (deHoy.length) frases.push(`${deHoy.length === 1 ? "Te queda una cita" : `Te quedan ${deHoy.length} citas`} hoy; ${deHoy.length === 1 ? "es" : "la siguiente es"} ${deHoy[0].titulo}, a ${horaHablada(deHoy[0].inicio)}.`);
+  else frases.push("Hoy ya no tienes citas.");
+  if (p.hoy.pendientes) frases.push(`Llevas ${plural(p.hoy.pendientes, "pendiente", "pendientes")}${p.hoy.vencidas ? `, y ${p.hoy.vencidas === 1 ? "uno está atrasado" : `${p.hoy.vencidas} están atrasados`}` : ""}.`);
+  else frases.push("Y no tienes pendientes, vas impecable.");
+  const sinLeer = hud.correo?.conectado ? hud.correo.correos.filter((m) => m.sin_leer).length : 0;
+  if (sinLeer) frases.push(`Tienes ${plural(sinLeer, "correo nuevo", "correos nuevos")}.`);
+  if (p.aprobaciones_pendientes) frases.push(`La agencia te dejó ${plural(p.aprobaciones_pendientes, "cosa", "cosas")} para aprobar.`);
+  frases.push("¿Por dónde empezamos?");
+  return frases.join(" ");
+}
+const saludoPendiente = () => guardado.get("delta_saludo") !== "0" && guardado.get("delta_saludo_dia") !== claveDia(new Date()) && !!hud.panel;
+async function saludoDelDia(conVoz) {
+  if (!saludoPendiente()) return;
+  guardado.set("delta_saludo_dia", claveDia(new Date()));
+  // Espera un poco al correo para incluir los no leídos (sin pasar de 3 segundos).
+  if (!hud.correo) await Promise.race([cargarHudExtra().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+  const texto = textoSaludo();
+  if (!texto) return;
+  escribir(burbuja("assistant", ""), texto);
+  if (conVoz) hablar(texto);
+}
+
+// ---- Accesos rápidos, manos libres y "mantén espacio para hablar" ----
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-rellenar]");
+  if (!b) return;
+  const t = $("#texto");
+  t.value = b.dataset.rellenar;
+  t.focus();
+  t.setSelectionRange(t.value.length, t.value.length);
+});
+function pintarManos() {
+  const b = $("#btn-manos");
+  b.setAttribute("aria-pressed", manosLibres ? "true" : "false");
+  b.classList.toggle("on", manosLibres);
+}
+$("#btn-manos").addEventListener("click", () => {
+  manosLibres = !manosLibres;
+  guardado.set("delta_manos", manosLibres ? "1" : "0");
+  pintarManos();
+  sonar(manosLibres ? "escuchar" : "fin_escuchar");
+  if (manosLibres) {
+    burbuja("aviso", "Manos libres encendido: empieza tu frase con «Delta» u «Oye Delta».");
+    if (!escuchando) escuchar();
+  } else if (escuchando) reconocedor?.stop();
+});
+let espacioHablando = false;
+const escribiendoEn = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(el.tagName));
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || escribiendoEn(e.target) || document.querySelector("dialog[open]") || $("#app").hidden) return;
+  e.preventDefault();
+  if (seccionActual !== "inicio") location.hash = "#/inicio";
+  espacioHablando = true;
+  if (!escuchando) escuchar();
+});
+addEventListener("keyup", (e) => {
+  if (e.code !== "Space" || !espacioHablando) return;
+  espacioHablando = false;
+  if (escuchando && !manosLibres) setTimeout(() => reconocedor?.stop(), 250); // deja terminar la última palabra
+});
 
 // ---------------- Agencia ----------------
 const dinero = (n) => (n ? "$" + Number(n).toLocaleString("es-MX", { maximumFractionDigits: 0 }) : "–");
@@ -447,7 +718,7 @@ $("#btn-pedir-diseno").addEventListener("click", () => setTimeout(() => document
 // ---------------- Secciones ----------------
 // Cada sección carga sus datos solo cuando se abre (y se refresca si ya pasó un rato).
 const SECCIONES = {
-  inicio: { cargar: () => Promise.all([cargarPanel(), cargarMercadosMini()]), cada: 60e3 },
+  inicio: { cargar: () => Promise.all([cargarPanel(), cargarMercadosMini(), cargarHudExtra()]), cada: 60e3 },
   agenda: { cargar: () => cargarAgenda(), cada: 60e3 },
   tareas: { cargar: () => cargarPanel(), cada: 60e3 },
   correo: { cargar: () => cargarCorreo(), cada: 120e3 },
@@ -474,6 +745,7 @@ function mostrarSeccion(nombre) {
   document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === nombre));
   document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("activa", x.dataset.ir === nombre));
   $("#mini-orbe").hidden = nombre === "inicio";
+  document.body.dataset.seccion = nombre;
   cerrarMenu();
   refrescar(nombre);
   if (nombre === "inicio") $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
@@ -790,20 +1062,21 @@ async function enviar(texto, canal = "app") {
   sonar("enviar");
   adjuntos = adjuntos.filter((a) => !a.id && !a.error);
   pintarAdjuntos();
-  const espera = burbuja("assistant pensando", "Déjame ver…");
+  const espera = burbujaPensando(texto);
   orbe.estado("pensando");
   try {
     const { respuesta, hizo_cambio, abrir } = await api("/chat", { method: "POST", body: { texto, canal, archivos } });
     if (abrir && SECCIONES[abrir]) setTimeout(() => { location.hash = "#/" + abrir; }, 900);
     sonar(hizo_cambio || archivos.length ? "accion" : "respuesta");
     espera.className = "burbuja assistant";
-    espera.textContent = respuesta;
+    escribir(espera, respuesta);
     if (canal === "voz" || guardado.get("delta_voz") === "1") hablar(respuesta);
     else orbe.estado("reposo");
     cargarPanel();
     if (seccionActual === "agenda") cargarAgenda().catch(() => {});
   } catch (err) {
     sonar("error");
+    clearInterval(espera._frases);
     espera.className = "burbuja aviso";
     espera.textContent = "Uy, no pude con eso: " + err.message;
     orbe.estado("reposo");
@@ -943,9 +1216,13 @@ function salaDeEco() {
       }
     }
     eco.buffer = ir;
+    const medidor = ctx.createAnalyser(); // para que el orbe "baile" con la voz real
+    medidor.fftSize = 256;
+    medidor.smoothingTimeConstant = 0.7;
+    fuente.connect(medidor);
     fuente.connect(seco).connect(ctx.destination);
     fuente.connect(filtro).connect(eco).connect(humedo).connect(ctx.destination);
-    sala = { ctx, seco, humedo };
+    sala = { ctx, seco, humedo, medidor };
     ajustarEco();
     return sala;
   } catch (e) {
@@ -967,7 +1244,7 @@ function despertarReproductor() {
   removeEventListener("pointerdown", despertarReproductor, true);
   removeEventListener("keydown", despertarReproductor, true);
   if (!reproductor.src || reproductor.src === SILENCIO) { reproductor.src = SILENCIO; reproductor.play().catch(() => {}); }
-  if (vozNatural.activa && ecoActivo()) salaDeEco()?.ctx.resume().catch(() => {});
+  if (vozNatural.activa) salaDeEco()?.ctx.resume().catch(() => {});
 }
 addEventListener("pointerdown", despertarReproductor, true);
 addEventListener("keydown", despertarReproductor, true);
@@ -999,8 +1276,8 @@ async function decir(texto, opciones = {}) {
       if (urlAudio) URL.revokeObjectURL(urlAudio);
       urlAudio = URL.createObjectURL(audio);
       reproductor.src = urlAudio;
-      if (ecoActivo() || sala) {
-        const s = salaDeEco();
+      {
+        const s = salaDeEco(); // siempre: además del eco, mide la voz para animar el orbe
         if (s && s.ctx.state !== "running") await s.ctx.resume().catch(() => {});
       }
       reproductor.onplaying = () => opciones.alEmpezar?.();
@@ -1041,6 +1318,7 @@ function escuchar() {
     let parcial = "";
     for (const r of ev.results) (r.isFinal ? (final = r[0].transcript) : (parcial += r[0].transcript));
     $("#texto").value = final || parcial;
+    orbe.pulso();
   };
   reconocedor.onerror = (ev) => { if (ev.error === "not-allowed") burbuja("aviso", "Necesito permiso para usar el micrófono."); };
   reconocedor.onend = () => {
@@ -1070,16 +1348,35 @@ const orbe = (() => {
   const ctx = lienzo.getContext("2d");
   let estado = "reposo";
   let energia = 0.2;
-  const textos = { reposo: "Toque para hablar", escuchando: "Escuchando", pensando: "Pensando…", hablando: "Hablando" };
+  const textos = { reposo: "Toca para hablar", escuchando: "Escuchando", pensando: "Pensando…", hablando: "Hablando" };
   const colores = { reposo: [139, 115, 255], escuchando: [255, 158, 232], pensando: [183, 166, 255], hablando: [160, 135, 255] };
   let color = [...colores.reposo];
+  let empuje = 0; // golpes de energía cuando la persona habla
+  const freq = new Uint8Array(128);
+  const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Nivel real de la voz de DELTA (0 a 1) cuando suena la voz natural.
+  function nivelVoz() {
+    const m = sala?.medidor;
+    if (!m || reproductor.paused) return null;
+    m.getByteFrequencyData(freq);
+    let suma = 0;
+    for (let i = 2; i < 60; i++) suma += freq[i];
+    return Math.min(1, suma / (58 * 150));
+  }
   const chispas = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.28, v: (Math.random() - 0.5) * 0.002, t: Math.random() * 3 }));
 
   function dibujar(t) {
     const W = lienzo.width, C = W / 2;
     ctx.clearRect(0, 0, W, W);
-    const objetivo = { reposo: 0.25, escuchando: 0.85, pensando: 0.55, hablando: 0.65 + 0.35 * Math.abs(Math.sin(t / 120)) }[estado];
-    energia += (objetivo - energia) * 0.06;
+    const nivel = estado === "hablando" ? nivelVoz() : null;
+    empuje *= 0.94;
+    const objetivo = {
+      reposo: 0.25 + 0.04 * Math.sin(t / 1400),
+      escuchando: 0.6 + 0.4 * empuje,
+      pensando: 0.5 + 0.12 * Math.sin(t / 260),
+      hablando: nivel != null ? 0.38 + nivel * 0.9 : 0.65 + 0.35 * Math.abs(Math.sin(t / 120)),
+    }[estado];
+    energia += (objetivo - energia) * (nivel != null ? 0.25 : 0.06);
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
@@ -1132,6 +1429,26 @@ const orbe = (() => {
       }
     });
 
+    // Barras de audio en círculo (tipo ecualizador) mientras DELTA habla o escucha
+    if (energia > 0.4 && estado !== "reposo") {
+      const barras = 64;
+      ctx.lineCap = "round";
+      ctx.lineWidth = 3;
+      for (let k = 0; k < barras; k++) {
+        const a = (k / barras) * Math.PI * 2 - Math.PI / 2;
+        const v = nivel != null
+          ? freq[2 + (k < barras / 2 ? k : barras - k)] / 255
+          : Math.abs(Math.sin(k * 0.9 + t / 140) * Math.sin(k * 0.37 - t / 330));
+        const largo = W * (0.012 + v * 0.07 * energia);
+        const r1 = W * 0.318;
+        ctx.strokeStyle = rgba(0.18 + 0.6 * v * energia);
+        ctx.beginPath();
+        ctx.moveTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1);
+        ctx.lineTo(C + Math.cos(a) * (r1 + largo), C + Math.sin(a) * (r1 + largo));
+        ctx.stroke();
+      }
+    }
+
     // Onda de voz alrededor del logo
     ctx.beginPath();
     const puntos = 120;
@@ -1146,11 +1463,14 @@ const orbe = (() => {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    requestAnimationFrame(dibujar);
+    // En reposo y con "reducir movimiento" se dibuja más lento para cuidar la batería.
+    if (reducir && estado === "reposo") setTimeout(() => requestAnimationFrame(dibujar), 250);
+    else requestAnimationFrame(dibujar);
   }
   requestAnimationFrame(dibujar);
   return {
     estado(e) { estado = e; $("#estado-orbe").textContent = textos[e]; $("#orbe").dataset.estado = e; },
+    pulso() { empuje = Math.min(1, empuje + 0.55); },
   };
 })();
 
@@ -1195,16 +1515,20 @@ const orbe = (() => {
 // ---------------- Reloj y clima ----------------
 function reloj() {
   $("#reloj").textContent = new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "2-digit", minute: "2-digit" }).format(new Date());
+  relojHud();
 }
 setInterval(reloj, 10_000);
+// En el inicio, el reloj grande lleva segundos.
+setInterval(() => { if (seccionActual === "inicio" && !document.hidden) relojHud(); }, 1000);
 
 async function clima() {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(async ({ coords }) => {
     try {
-      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(2)}&longitude=${coords.longitude.toFixed(2)}&current=temperature_2m`);
+      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude.toFixed(2)}&longitude=${coords.longitude.toFixed(2)}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`);
       const d = await r.json();
       $("#clima").textContent = `${Math.round(d.current.temperature_2m)}°C`;
+      pintarClima(d);
     } catch {}
   }, () => {}, { maximumAge: 3600e3 });
 }
@@ -1257,6 +1581,7 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#aj-voz").checked = guardado.get("delta_voz") === "1";
   $("#aj-sonidos").checked = sonidosActivos();
   $("#aj-manos").checked = manosLibres;
+  $("#aj-saludo").checked = guardado.get("delta_saludo") !== "0";
   $("#aj-msg").textContent = "";
   $("#voz-msg").textContent = "";
   $("#hab-msg").textContent = "";
@@ -1320,6 +1645,8 @@ $("#aj-guardar").addEventListener("click", async () => {
   guardado.set("delta_voz", $("#aj-voz").checked ? "1" : "0");
   manosLibres = $("#aj-manos").checked;
   guardado.set("delta_manos", manosLibres ? "1" : "0");
+  guardado.set("delta_saludo", $("#aj-saludo").checked ? "1" : "0");
+  pintarManos();
   try {
     await api("/ajustes", { method: "POST", body: { zona_horaria: $("#aj-zona").value.trim(), hora_resumen: $("#aj-resumen").value } });
     cargarPanel();
@@ -1432,7 +1759,9 @@ function vozMujer() {
 }
 
 function bienvenida() {
-  decir("Bienvenido, señor.", { voz: vozMujer, rate: 0.9, pitch: 1.05 });
+  // Después del "Bienvenido", DELTA cuenta cómo viene el día (una vez al día).
+  const siguiente = saludoPendiente() ? () => setTimeout(() => saludoDelDia(true), 350) : undefined;
+  decir("Bienvenido, señor.", { voz: vozMujer, rate: 0.9, pitch: 1.05, alTerminar: siguiente });
 }
 
 function arranque(conToque) {
@@ -1492,7 +1821,11 @@ async function iniciar(conToque = false) {
   }
   $("#entrada").hidden = true;
   $("#app").hidden = false;
-  arranque(conToque);
+  arranque(conToque).then(() => {
+    // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
+    setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);
+  });
+  pintarManos();
   // La primera vez, DELTA adopta la zona horaria de este equipo.
   if (!guardado.get("delta_zona_enviada")) {
     const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1504,6 +1837,7 @@ async function iniciar(conToque = false) {
   conectarVivo();
   cargadaEn.inicio = cargadaEn.tareas = Date.now(); // el panel ya se cargó arriba
   cargarMercadosMini().catch(() => {});
+  cargarHudExtra().catch(() => {});
   mostrarSeccion(seccionDeLaDireccion());
   // Cada minuto se refresca solo lo que está a la vista.
   setInterval(() => { cargarPanel().catch(() => {}); refrescar(seccionActual); }, 60_000);
