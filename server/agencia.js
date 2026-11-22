@@ -81,6 +81,27 @@ export function fichaCliente(clave) {
       por_plataforma: db.prepare("SELECT plataforma, monto, fuente, actualizado FROM gasto_anuncios WHERE cliente_id = ? AND mes = ? ORDER BY monto DESC").all(c.id, mes),
       historial: historialGasto(c.id, 6),
     },
+    meta: metaDeCliente(c.id),
+  };
+}
+
+// ---------- Meta (Facebook, Instagram y anuncios), lo que dejó la última actualización ----------
+/** Los números de Meta del cliente: la foto más reciente y cuánto cambió contra hace ~30 días. */
+export function metaDeCliente(clienteId) {
+  const activos = db.prepare("SELECT id, tipo, nombre FROM meta_activos WHERE cliente_id = ? ORDER BY tipo, nombre").all(clienteId);
+  if (!activos.length) return null;
+  const hoy = db.prepare("SELECT fecha, datos, actualizado FROM meta_fotos WHERE cliente_id = ? ORDER BY fecha DESC LIMIT 1").get(clienteId);
+  if (!hoy) return { activos, actualizado: null };
+  const antes = db.prepare("SELECT fecha, datos FROM meta_fotos WHERE cliente_id = ? AND fecha <= date(?, '-28 days') ORDER BY fecha DESC LIMIT 1").get(clienteId, hoy.fecha)
+    || db.prepare("SELECT fecha, datos FROM meta_fotos WHERE cliente_id = ? AND fecha < ? ORDER BY fecha LIMIT 1").get(clienteId, hoy.fecha);
+  const d = JSON.parse(hoy.datos);
+  const a = antes ? JSON.parse(antes.datos) : null;
+  const cambio = (red) => (a?.[red] && d[red] && Number.isFinite(a[red].seguidores) ? d[red].seguidores - a[red].seguidores : null);
+  return {
+    activos,
+    actualizado: hoy.actualizado,
+    ...d,
+    seguidores_cambio: { facebook: cambio("facebook"), instagram: cambio("instagram"), desde: antes?.fecha || null },
   };
 }
 

@@ -10,6 +10,7 @@ import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as agencia from "./agencia.js";
+import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
@@ -52,7 +53,7 @@ Tu propia app (para que puedas guiar al usuario):
 - Botón de engranaje ⚙ (arriba a la derecha): conexiones activas, zona horaria, hora del resumen diario, respuestas en voz alta, manos libres, activar avisos en el equipo, instalar la app, conectar o desconectar Gmail y Hotmail, empezar conversación nueva y cerrar sesión.
 - Para hablar contigo: tocar el orbe o el micrófono.
 
-Lo que puedes hacer hoy (sus actividades diarias). Más adelante tendrás acceso a las cuentas y estadísticas de sus clientes; si te piden algo de eso, explica que llegará pronto.
+Lo que puedes hacer hoy (sus actividades diarias). Las redes y anuncios de Meta de sus clientes los ves con redes_cliente (TikTok y Google todavía no están conectados; si te piden eso, explica que llegará pronto).
 - Tareas: crear, listar, completar, cambiar y borrar.
 - Calendario: agendar citas y reuniones, moverlas, consultarlas.
 - Recordatorios y avisos: programar avisos a una hora concreta, únicos o repetidos.
@@ -73,7 +74,8 @@ La agencia (eres su directora):
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
 - Pantallas de la agencia: Panel general (resumen y alertas del día), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
 - Salud de cada cliente (semáforo): rojo si tiene entregas atrasadas o los anuncios se pasaron del tope; amarillo si una entrega vence en menos de 2 días, algo espera aprobación más de 2 días, los anuncios van arriba del 85 % del tope o lleva un mes sin movimiento; si no, verde. El dueño puede marcarla a mano (salud_manual) con una nota. Cuando pregunte cómo van sus clientes, usa tablero_agencia o ver_cliente y explica los motivos en palabras sencillas.
-- Gasto en anuncios: Meta, Google y TikTok todavía no están conectados; el gasto se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto. Para una junta con un cliente, crea el evento con el campo cliente lleno.
+- Meta (Facebook, Instagram y anuncios de los clientes): se conecta en Ajustes ⚙ → "Conectar Meta". Ya conectado, DELTA lee sola cada 6 horas los seguidores, alcance y publicaciones de las páginas e Instagram de cada cliente, y el gasto y resultados de sus cuentas de anuncios; el gasto de Meta se anota solo (no uses registrar_gasto_anuncios para Meta salvo que Meta no esté conectado). Para hablar de las redes o los anuncios de un cliente usa redes_cliente; si los números son viejos o pide lo más reciente, usa actualizar_meta. Si una página o cuenta no está asignada al cliente correcto, usa asignar_meta. Solo LEES: no publicas ni cambias campañas.
+- Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
 
 Reglas:
 - Honestidad ante todo. Solo puedes decir que hiciste algo (agendar, anotar, programar, mover, completar, borrar, guardar) si llamaste la herramienta en ESTE turno y respondió bien. Si una herramienta falla, dilo tal cual.
@@ -590,6 +592,51 @@ herramientasBase.push(
 );
 herramientasBase.push(
   betaTool({
+    name: "redes_cliente",
+    description: "Números de Meta de un cliente (de la última actualización): seguidores de Facebook e Instagram y cuánto cambiaron, alcance de 28 días, publicaciones e interacciones del mes, su mejor publicación, y de sus anuncios el gasto del mes, alcance, clics, conversaciones, prospectos, compras y campañas activas.",
+    inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id" } }, required: ["cliente"], additionalProperties: false },
+    run: ({ cliente }) => {
+      const c = agencia.clienteRequerido(cliente);
+      return json(agencia.metaDeCliente(c.id) || { nota: `${c.nombre} no tiene páginas, Instagram ni cuentas de anuncios de Meta asignadas. Se asignan en Cuentas → Meta.` });
+    },
+  }),
+  betaTool({
+    name: "actualizar_meta",
+    description: "Pide a Meta los números más recientes. Con cliente, solo los de ese cliente (rápido); sin cliente, busca páginas y cuentas nuevas y actualiza a todos.",
+    inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id (opcional)" } }, additionalProperties: false },
+    run: async ({ cliente }) => {
+      if (!meta.metaConectado()) throw new Error("Meta no está conectado. Se conecta en Ajustes ⚙ → Conectar Meta.");
+      if (cliente) {
+        const c = agencia.clienteRequerido(cliente);
+        await meta.sincronizarCliente(c.id);
+        return json(agencia.metaDeCliente(c.id));
+      }
+      return json(await meta.actualizarTodo());
+    },
+  }),
+  betaTool({
+    name: "asignar_meta",
+    description: "Dice de qué cliente es una página de Facebook, un Instagram o una cuenta de anuncios de Meta (o la quita con cliente vacío). Sin datos, lista lo que hay y a quién está asignado.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        activo: { type: "string", description: "id (act_…, page:…, ig:…) o nombre de la página/cuenta" },
+        cliente: { type: "string", description: "Nombre o id del cliente; vacío para quitarla" },
+      },
+      additionalProperties: false,
+    },
+    run: ({ activo, cliente }) => {
+      const e = meta.estado();
+      if (!activo) return json(e.activos.map(({ id, tipo_nombre, nombre, cliente }) => ({ id, tipo: tipo_nombre, nombre, cliente })));
+      const t = String(activo).toLowerCase();
+      const a = e.activos.find((x) => x.id === activo) || e.activos.find((x) => x.nombre.toLowerCase() === t) || e.activos.find((x) => x.nombre.toLowerCase().includes(t));
+      if (!a) throw new Error(`No encuentro "${activo}" entre lo conectado de Meta`);
+      return json(meta.ligar(a.id, cliente || null));
+    },
+  }),
+);
+herramientasBase.push(
+  betaTool({
     name: "abrir_seccion",
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
@@ -612,6 +659,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
   "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
+  "asignar_meta",
 ]);
 
 /**
