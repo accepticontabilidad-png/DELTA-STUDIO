@@ -105,6 +105,8 @@ async function cargarPanel() {
   $("#badge-aprob").textContent = n;
   $("#badge-finanzas").hidden = !p.pagos_vencidos;
   $("#badge-finanzas").textContent = p.pagos_vencidos || "";
+  $("#badge-contenido").hidden = !p.contenido_atrasado;
+  $("#badge-contenido").textContent = p.contenido_atrasado || "";
   $("#badge-paidmedia").hidden = !p.anuncios_sin_resultados;
   $("#badge-paidmedia").textContent = p.anuncios_sin_resultados || "";
   correoConectado = { gmail: c.gmail, outlook: c.outlook };
@@ -916,6 +918,7 @@ const SECCIONES = {
   mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
   agencia: { cargar: () => cargarTablero(), cada: 30e3 },
   finanzas: { cargar: () => agenciaTableros().cargarFinanzas(), cada: 60e3 },
+  contenido: { cargar: () => agenciaTableros().cargarContenido(), cada: 30e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
@@ -1841,8 +1844,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
-    if (d.tipo === "agencia" && ["agencia", "finanzas", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
-    if (d.tipo === "aviso" && ["agencia", "finanzas", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "agencia" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "aviso" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
   };
 }
 

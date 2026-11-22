@@ -13,6 +13,7 @@ import { db } from "./db.js";
 import { ahoraLocalISO, rangoDelDia } from "./tiempo.js";
 import * as agencia from "./agencia.js";
 import { avisosParaPulso } from "./paidmedia.js";
+import { listarContenido } from "./contenido.js";
 
 // Las tablas cobros y gastos_agencia se crean en db.js.
 
@@ -328,6 +329,14 @@ export function pulso() {
   const cerca = activos.filter((c) => c.presupuesto_anuncios && c.gasto_mes <= c.presupuesto_anuncios && c.gasto_mes / c.presupuesto_anuncios >= 0.85);
   meter("anuncios_pasados", pasados.length, "rojo", pasados.length === 1 ? "cliente pasado del tope de anuncios" : "clientes pasados del tope de anuncios", "#/cuentas", nombres(pasados));
   meter("anuncios_cerca", cerca.length, "amarillo", cerca.length === 1 ? "cliente cerca del tope de anuncios" : "clientes cerca del tope de anuncios", "#/cuentas", nombres(cerca));
+
+  const piezas = listarContenido();
+  const kAtr = piezas.filter((p) => p.atrasada).sort((a, b) => b.dias_atraso - a.dias_atraso);
+  meter("contenido_atrasado", kAtr.length, "rojo", kAtr.length === 1 ? "pieza de contenido atrasada" : "piezas de contenido atrasadas", "#/contenido", kAtr.slice(0, 3).map((p) => `${p.titulo} (${p.cliente})`));
+  const kEsp = piezas.filter((p) => p.espera_cliente_larga);
+  meter("contenido_cliente", kEsp.length, "amarillo", kEsp.length === 1 ? "pieza lleva 2 días o más esperando al cliente" : "piezas llevan 2 días o más esperando al cliente", "#/contenido", nombres(kEsp, "cliente"));
+  const kPronto = piezas.filter((p) => p.dias_para_publicar !== null && p.dias_para_publicar <= 1 && !["aprobado", "publicado"].includes(p.etapa));
+  meter("contenido_pronto", kPronto.length, "amarillo", kPronto.length === 1 ? "pieza sale hoy o mañana y aún no está aprobada" : "piezas salen hoy o mañana y aún no están aprobadas", "#/contenido", kPronto.slice(0, 3).map((p) => `${p.titulo} (${p.cliente})`));
 
   const pm = avisosParaPulso();
   meter("anuncios_sin_resultados", pm.sin_resultados.length, "rojo", pm.sin_resultados.length === 1 ? "campaña gastando sin resultados" : "campañas gastando sin resultados", "#/paidmedia",

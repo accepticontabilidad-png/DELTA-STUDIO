@@ -22,6 +22,7 @@ import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
 import * as finanzas from "./finanzas.js";
 import * as paidmedia from "./paidmedia.js";
+import * as contenido from "./contenido.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -179,6 +180,7 @@ api.get("/panel", envolver(() => {
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
     pagos_vencidos: (finanzas.generarMensualidades(), finanzas.listarCobros({ estado: "vencido" }).length),
+    contenido_atrasado: (() => { try { return contenido.listarContenido().filter((p) => p.atrasada).length; } catch { return 0; } })(),
     anuncios_sin_resultados: (() => { try { return paidmedia.avisosParaPulso().sin_resultados.length; } catch { return 0; } })(),
   };
 }));
@@ -263,6 +265,14 @@ api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
 // ---------- Finanzas de la agencia y Pulso ----------
 api.get("/finanzas", envolver((req) => finanzas.finanzas(req.query.mes ? String(req.query.mes) : undefined)));
 api.get("/pulso", envolver(() => finanzas.pulso()));
+api.get("/contenido", envolver((req) => contenido.tableroContenido({ cliente: req.query.cliente ? String(req.query.cliente) : undefined, mes: req.query.mes ? String(req.query.mes) : undefined })));
+api.post("/contenido", envolver((req) => contenido.crearContenido(req.body || {})));
+api.patch("/contenido/:id", envolver((req) => {
+  const b = req.body || {};
+  if (b.mover) return contenido.moverContenido(Number(req.params.id), Number(b.mover));
+  return contenido.actualizarContenido(Number(req.params.id), b);
+}));
+api.delete("/contenido/:id", envolver((req) => contenido.borrarContenido(Number(req.params.id))));
 api.get("/paidmedia", envolver((req) => paidmedia.paidMedia(req.query.mes ? String(req.query.mes) : undefined)));
 api.put("/paidmedia/resultados", envolver((req) => paidmedia.registrarResultados(req.body || {})));
 api.delete("/paidmedia/resultados", envolver((req) => paidmedia.borrarResultados({ cliente: req.query.cliente, mes: req.query.mes })));
