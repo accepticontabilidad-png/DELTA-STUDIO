@@ -13,32 +13,7 @@ import { db } from "./db.js";
 import { ahoraLocalISO, rangoDelDia } from "./tiempo.js";
 import * as agencia from "./agencia.js";
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS cobros (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
-  tipo TEXT NOT NULL DEFAULT 'extra',            -- mensualidad | extra
-  concepto TEXT NOT NULL,
-  monto REAL NOT NULL,
-  mes TEXT NOT NULL,                             -- AAAA-MM: mes al que corresponde el ingreso
-  vence TEXT NOT NULL,                           -- AAAA-MM-DD (local)
-  pagado TEXT,                                   -- AAAA-MM-DD (local) cuando llegó el dinero
-  notas TEXT,
-  creado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS cobros_mensualidad ON cobros (cliente_id, mes) WHERE tipo = 'mensualidad';
-CREATE TABLE IF NOT EXISTS gastos_agencia (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  concepto TEXT NOT NULL,
-  categoria TEXT NOT NULL DEFAULT 'otros',
-  monto REAL NOT NULL,
-  fecha TEXT NOT NULL,                           -- AAAA-MM-DD (local)
-  fijo INTEGER NOT NULL DEFAULT 0,               -- 1 = se repite cada mes desde su fecha
-  baja TEXT,                                     -- AAAA-MM: último mes en que cuenta un gasto fijo
-  cliente_id INTEGER REFERENCES clientes(id),    -- si el gasto es por un cliente (para su rentabilidad)
-  creado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-`);
+// Las tablas cobros y gastos_agencia se crean en db.js.
 
 export const CATEGORIAS = {
   nomina: "Nómina y colaboradores",

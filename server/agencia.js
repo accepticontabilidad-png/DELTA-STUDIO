@@ -1,6 +1,7 @@
 // La agencia: clientes, proyectos, trabajos de los departamentos y aprobaciones.
 import { db } from "./db.js";
 import { localAUTC, ahoraLocalISO } from "./tiempo.js";
+import { deltaScore } from "./score.js";
 
 const ESTADOS_CLIENTE = ["activo", "pausado", "prospecto", "terminado"];
 const ESTADOS_PROYECTO = ["pendiente", "en_proceso", "revision", "entregado", "cancelado"];
@@ -69,9 +70,12 @@ export function actualizarCliente(clave, cambios) {
 export function fichaCliente(clave) {
   const c = clienteRequerido(clave);
   const mes = mesActual();
+  const meta = metaDeCliente(c.id);
+  const { salud, score } = evaluarCliente(c, { meta });
   return {
     ...c,
-    salud: saludCliente(c),
+    salud,
+    score,
     proyectos: db.prepare("SELECT * FROM proyectos WHERE cliente_id = ? ORDER BY estado IN ('entregado','cancelado'), entrega IS NULL, entrega").all(c.id),
     trabajos_recientes: db.prepare("SELECT id, departamento, encargo, estado, creado FROM trabajos WHERE cliente_id = ? ORDER BY id DESC LIMIT 8").all(c.id),
     aprobaciones_pendientes: db.prepare("SELECT id, tipo, titulo, creada FROM aprobaciones WHERE cliente_id = ? AND estado = 'pendiente' ORDER BY id").all(c.id),
@@ -83,7 +87,7 @@ export function fichaCliente(clave) {
       por_plataforma: db.prepare("SELECT plataforma, monto, fuente, actualizado FROM gasto_anuncios WHERE cliente_id = ? AND mes = ? ORDER BY monto DESC").all(c.id, mes),
       historial: historialGasto(c.id, 6),
     },
-    meta: metaDeCliente(c.id),
+    meta,
   };
 }
 
@@ -172,6 +176,14 @@ export function saludCliente(c) {
   if (pronto.length) amarillo.push(pronto.length === 1 ? `Entrega pronto: ${pronto[0].titulo}` : `${pronto.length} entregas en los próximos 2 días`);
   const esperando = db.prepare("SELECT COUNT(*) n FROM aprobaciones WHERE cliente_id = ? AND estado = 'pendiente' AND creada < ?").get(c.id, iso(ahora - 2 * DIA)).n;
   if (esperando) amarillo.push(`${esperando === 1 ? "1 cosa espera" : `${esperando} cosas esperan`} tu aprobación hace más de 2 días`);
+  // Pagos: más de 30 días de retraso es rojo; más de 7, amarillo.
+  const hoyL = ahoraLocalISO().slice(0, 10);
+  const vencido = db.prepare("SELECT MIN(vence) v FROM cobros WHERE cliente_id = ? AND pagado IS NULL AND monto > 0 AND vence < ?").get(c.id, hoyL).v;
+  if (vencido) {
+    const dias = Math.round((Date.parse(hoyL) - Date.parse(vencido)) / DIA);
+    if (dias > 30) rojo.push(`Pago con ${dias} días de retraso`);
+    else if (dias > 7) amarillo.push(`Pago con ${dias} días de retraso`);
+  }
   const gasto = gastoDelMes(c.id);
   const tope = c.presupuesto_anuncios;
   const uso = tope ? gasto / tope : null;
@@ -195,6 +207,23 @@ export function saludCliente(c) {
   return { nivel: automatico, manual: false, automatico, motivos: motivos.length ? motivos : ["Todo en orden"] };
 }
 
+/**
+ * Semáforo y Delta Score juntos. Si la calificación cae abajo de 65 y el semáforo estaba en verde,
+ * el semáforo pasa a amarillo (o a rojo si baja de 50) con el motivo, para que nunca se contradigan.
+ */
+export function evaluarCliente(c, { meta } = {}) {
+  let salud = saludCliente(c);
+  const m = meta === undefined ? metaDeCliente(c.id) : meta;
+  const score = deltaScore(c, { salud, gastoMes: gastoDelMes(c.id), meta: m });
+  if (score.puntos < 65 && salud.automatico === "verde") {
+    const automatico = score.puntos < 50 ? "rojo" : "amarillo";
+    const motivos = salud.motivos.filter((x) => x !== "Todo en orden");
+    motivos.push(`Delta Score bajo (${score.puntos}): ${score.resumen}`);
+    salud = salud.manual ? { ...salud, automatico, motivos } : { ...salud, nivel: automatico, automatico, motivos };
+  }
+  return { salud, score };
+}
+
 /** Las cuentas (clientes que no han terminado) con su semáforo y lo más importante de cada una. */
 export function cuentas() {
   const mes = mesActual();
@@ -205,6 +234,7 @@ export function cuentas() {
     .map((c) => {
       const prox = db.prepare("SELECT titulo, entrega FROM proyectos WHERE cliente_id = ? AND estado NOT IN ('entregado','cancelado') AND entrega IS NOT NULL AND entrega >= ? ORDER BY entrega LIMIT 1").get(c.id, ahora);
       const junta = juntasDeCliente(c, { limite: 1 })[0] || null;
+      const { salud, score } = evaluarCliente(c);
       return {
         id: c.id, nombre: c.nombre, industria: c.industria, estado: c.estado, servicios: c.servicios,
         presupuesto_mensual: c.presupuesto_mensual, presupuesto_anuncios: c.presupuesto_anuncios,
@@ -213,10 +243,11 @@ export function cuentas() {
         gasto_mes: gastoDelMes(c.id, mes),
         proxima_entrega: prox || null,
         proxima_junta: junta,
-        salud: saludCliente(c),
+        salud,
+        score,
       };
     })
-    .sort((a, b) => (a.estado === "activo" ? 0 : 1) - (b.estado === "activo" ? 0 : 1) || orden[a.salud.nivel] - orden[b.salud.nivel] || a.nombre.localeCompare(b.nombre, "es"));
+    .sort((a, b) => (a.estado === "activo" ? 0 : 1) - (b.estado === "activo" ? 0 : 1) || orden[a.salud.nivel] - orden[b.salud.nivel] || a.score.puntos - b.score.puntos || a.nombre.localeCompare(b.nombre, "es"));
 }
 
 /** Lo que hay que atender hoy en la agencia, de lo más urgente a lo informativo. */
@@ -359,6 +390,8 @@ export function tablero() {
     tope_anuncios: activos.reduce((s, c) => s + (c.presupuesto_anuncios || 0), 0),
     gasto_por_plataforma: db.prepare("SELECT plataforma, SUM(monto) monto FROM gasto_anuncios WHERE mes = ? GROUP BY plataforma ORDER BY monto DESC").all(mes),
     gasto_por_cliente: lista.filter((c) => c.gasto_mes || c.presupuesto_anuncios).map((c) => ({ id: c.id, nombre: c.nombre, gasto: c.gasto_mes, tope: c.presupuesto_anuncios })).sort((a, b) => b.gasto - a.gasto),
+    score_promedio: activos.length ? Math.round(activos.reduce((s, c) => s + c.score.puntos, 0) / activos.length) : null,
+    score_clientes: activos.map((c) => ({ id: c.id, nombre: c.nombre, puntos: c.score.puntos, nivel: c.score.nivel, nivel_nombre: c.score.nivel_nombre, color: c.score.color, resumen: c.score.resumen })).sort((a, b) => a.puntos - b.puntos),
     salud: { verde: activos.filter((c) => c.salud.nivel === "verde").length, amarillo: activos.filter((c) => c.salud.nivel === "amarillo").length, rojo: activos.filter((c) => c.salud.nivel === "rojo").length },
     prospectos: lista.filter((c) => c.estado === "prospecto").length,
     alertas: alertasDelDia(lista),
