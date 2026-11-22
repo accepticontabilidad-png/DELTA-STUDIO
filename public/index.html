@@ -74,6 +74,7 @@
         <span class="menu-grupo">Agencia</span>
         <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Panel general</span></a>
         <a href="#/finanzas" class="menu-item" data-ir="finanzas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3.2-1.6M12 5.5v1.5M12 17v1.5"/></svg><span>Finanzas</span><small id="badge-finanzas" class="badge" hidden></small></a>
+        <a href="#/contenido" class="menu-item" data-ir="contenido"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="7" rx="1.5"/></svg><span>Contenido</span><small id="badge-contenido" class="badge" hidden></small></a>
         <a href="#/paidmedia" class="menu-item" data-ir="paidmedia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg><span>Paid media</span><small id="badge-paidmedia" class="badge" hidden></small></a>
         <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
         <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
@@ -424,6 +425,25 @@
         </div>
       </section>
 
+      <!-- Contenido por etapas: cada pieza de cada cliente, de planeado a publicado -->
+      <section class="seccion contenido" data-seccion="contenido">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Contenido</h1>
+          <select id="ct-cliente" class="ct-filtro" aria-label="Cliente"></select>
+          <div class="ag-botones">
+            <button type="button" class="tb-link" id="ct-nueva">+ Pieza</button>
+            <button type="button" class="ag-agregar" data-pedir="¿Cómo va la producción de contenido? Empieza por lo atrasado y lo que lleva días esperando al cliente, luego lo que sale esta semana y dime qué cliente va más atrasado.">Resumen con DELTA</button>
+          </div>
+        </div>
+        <div class="tablero tablero-ct">
+          <div class="tb-kpis fi-kpis ct-kpis" id="ct-kpis"></div>
+          <div class="panel ct-alertas" id="ct-alertas" hidden></div>
+          <div class="segmento chico ct-tabs" id="ct-tabs" role="tablist" aria-label="Etapas"></div>
+          <div class="ct-board" id="ct-board"></div>
+          <p class="tenue chico tb-nota">Arrastra una pieza a otra columna (o usa las flechas) para cambiarla de etapa. Una pieza que ya pasó su fecha y no se ha publicado sale como <b>atrasada</b>, pone al cliente en amarillo y le baja su Delta Score. Díselo a DELTA de viva voz: "ya grabamos el reel de Kardia", "el carrusel de Endo Woman ya lo aprobó el cliente".</p>
+        </div>
+      </section>
+
       <!-- Paid media: inversión en anuncios, costo por contacto, ventas y retorno por cliente -->
       <section class="seccion paidmedia" data-seccion="paidmedia">
         <div class="tb-cabeza">
@@ -621,6 +641,34 @@
       <p id="cl-msg" class="error" hidden></p>
       <div class="botones">
         <button type="button" id="cl-cancelar">Cancelar</button>
+        <button type="submit" class="primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-contenido" class="dialogo">
+    <form id="form-contenido" method="dialog">
+      <h2 id="ct-dlg-titulo">Nueva pieza</h2>
+      <input type="hidden" id="ct-id" />
+      <label>Título <input id="ct-titulo" type="text" required maxlength="200" placeholder="Ej. Reel: 5 señales de alerta del corazón" /></label>
+      <div class="fila-2">
+        <label>Cliente <select id="ct-f-cliente" required></select></label>
+        <label>Etapa <select id="ct-etapa"></select></label>
+      </div>
+      <div class="fila-2">
+        <label>Formato <select id="ct-formato"></select></label>
+        <label>Red <select id="ct-red"></select></label>
+      </div>
+      <div class="fila-2">
+        <label>Se publica <input id="ct-publicar" type="date" /></label>
+        <label>Responsable <input id="ct-responsable" type="text" maxlength="80" placeholder="Ej. Sofi (edición)" /></label>
+      </div>
+      <label>Enlace (borrador o publicación) <input id="ct-enlace" type="text" maxlength="500" placeholder="https://…" /></label>
+      <label>Notas <textarea id="ct-notas" rows="3" maxlength="1000"></textarea></label>
+      <p id="ct-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="ct-borrar" class="peligro" hidden>Quitar</button>
+        <button type="button" id="ct-cancelar">Cancelar</button>
         <button type="submit" class="primario">Guardar</button>
       </div>
     </form>

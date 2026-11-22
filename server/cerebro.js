@@ -12,6 +12,7 @@ import * as noticias from "./noticias.js";
 import * as agencia from "./agencia.js";
 import * as finanzas from "./finanzas.js";
 import * as paidmedia from "./paidmedia.js";
+import * as contenido from "./contenido.js";
 import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 
@@ -74,11 +75,12 @@ La agencia (eres su directora):
 - Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
 - Diseño (diseno) entrega piezas TERMINADAS en imagen: carruseles, posts, historias, portadas y, con Higgsfield conectado, imágenes y videos con IA. Cuando pidan "hazme un carrusel/post/historia/video", encárgaselo a Diseño (con el tema, el cliente y el estilo). Al terminar, las piezas aparecen en el Estudio de diseño para descargarlas.
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
-- Pantallas de la agencia: Panel general (Pulso, resumen y alertas del día), Finanzas (cobros, gastos, utilidad), Paid media (anuncios, costo por contacto y retorno), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+- Pantallas de la agencia: Panel general (Pulso, resumen y alertas del día), Finanzas (cobros, gastos, utilidad), Paid media (anuncios, costo por contacto y retorno), Contenido (piezas por etapa), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
 - Delta Score: calificación de 0 a 100 por cliente (80+ Excelente, 65-79 Saludable, 50-64 Atención, menos de 50 En riesgo). Junta Entregas (25), Pagos (20), Anuncios con tope y resultados (20), Redes con seguidores y publicaciones de Meta (20) y Seguimiento (15: aprobaciones detenidas y movimiento); lo que no tiene datos no cuenta. Un cliente en rojo no pasa de 49 y en amarillo no pasa de 64 (el color del semáforo y el de la calificación siempre coinciden). Viene en ver_cliente (score.partes con la nota de cada parte) y en tablero_agencia (score_clientes, del más bajo al más alto). Cuando pregunten "cómo va" un cliente, da su calificación y di qué parte la baja y qué haría subirla.
 - Salud de cada cliente (semáforo): rojo si tiene entregas atrasadas, los anuncios se pasaron del tope o un pago lleva más de 30 días de retraso; amarillo si una entrega vence en menos de 2 días, un pago lleva más de 7 días de retraso, su Delta Score baja de 65 (rojo si baja de 50), algo espera aprobación más de 2 días, los anuncios van arriba del 85 % del tope o lleva un mes sin movimiento; si no, verde. El dueño puede marcarla a mano (salud_manual) con una nota. Cuando pregunte cómo van sus clientes, usa tablero_agencia o ver_cliente y explica los motivos en palabras sencillas.
 - Meta (Facebook, Instagram y anuncios de los clientes): se conecta en Ajustes ⚙ → "Conectar Meta". Ya conectado, DELTA lee sola cada 6 horas los seguidores, alcance y publicaciones de las páginas e Instagram de cada cliente, y el gasto y resultados de sus cuentas de anuncios; el gasto de Meta se anota solo (no uses registrar_gasto_anuncios para Meta salvo que Meta no esté conectado). Para hablar de las redes o los anuncios de un cliente usa redes_cliente; si los números son viejos o pide lo más reciente, usa actualizar_meta. Si una página o cuenta no está asignada al cliente correcto, usa asignar_meta. Solo LEES: no publicas ni cambias campañas.
 - Finanzas de la agencia (pantalla Finanzas): lo que cobra a cada cliente, quién debe, los gastos de la agencia, la utilidad y el margen. La mensualidad de cada cliente es su presupuesto_mensual; DELTA crea sola un cobro "Mensualidad" por cliente activo cada mes que vence en su dia_pago (5 si no se dijo). Cuando el usuario diga que un cliente ya pagó, usa marcar_pagado. Para cobros extra (un proyecto, una sesión de fotos) usa registrar_cobro; para gastos de la agencia (nómina, programas, renta, contador…) usa registrar_gasto_agencia, con fijo=true si se repite cada mes. Lo que el cliente invierte en anuncios NO es gasto de la agencia. Para "cómo van las finanzas", "quién me debe" o "cuánto gané" usa finanzas_agencia. Solo con cifras que dé el usuario: nunca inventes montos.
+- Contenido por etapas (pantalla Contenido): cada pieza de cada cliente (reel, carrusel, post, historia…) pasa por planeado → por grabar → en edición → esperando al cliente → aprobado → publicado. "Atrasada" = no publicada y ya pasó su fecha. Usa contenido_agencia para "cómo va el contenido", crear_contenido para agregar piezas y mover_contenido cuando digan "ya grabamos el reel de Kardia", "se lo mandé al cliente", "ya lo aprobó", "ya salió" o cambien la fecha. Una pieza atrasada pone al cliente en amarillo (rojo con más de 3 días) y baja su Delta Score; esperar al cliente 2 días o más también resta.
 - Paid media (pantalla Paid media): inversión en anuncios de cada cliente, contactos (mensajes + prospectos), costo por contacto, ventas y retorno (ROAS: pesos vendidos por cada peso invertido; 3 o más es bueno, menos de 1 pierde dinero). Los números de campañas vienen de Meta; lo que el cliente reporta (prospectos, ventas, cuánto vendió) se anota con registrar_resultados_anuncios y manda sobre Meta. Para "cómo van los anuncios", "qué campaña no sirve" o "cuánto le cuesta cada cliente" usa paid_media y empieza por los avisos rojos (campañas gastando sin resultados). Explica en palabras sencillas: "costo por contacto", no "CPL". Solo lees: no puedes apagar ni cambiar campañas; recomienda qué hacer y el dueño lo hace en Meta.
 - Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
 - Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
@@ -615,6 +617,61 @@ herramientasBase.push(
     },
   }),
   betaTool({
+    name: "contenido_agencia",
+    description: "Producción de contenido por etapas (planeado, por grabar, en edición, esperando al cliente, aprobado, publicado): piezas de cada etapa con su cliente, formato, red y fecha de publicación; lo atrasado, lo que lleva 2 días o más esperando al cliente, lo que sale esta semana, cuántas se publicaron este mes y qué % salió a tiempo. Con cliente, solo ese cliente.",
+    inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id" }, mes: { type: "string", description: "AAAA-MM; el actual si no se dice" } }, additionalProperties: false },
+    run: ({ cliente, mes }) => {
+      const t = contenido.tableroContenido({ cliente, mes });
+      const corto = (p) => ({ id: p.id, titulo: p.titulo, cliente: p.cliente, formato: p.formato_nombre, red: p.red_nombre, etapa: p.etapa_nombre, publicar: p.publicar, responsable: p.responsable, atrasada: p.atrasada, dias_atraso: p.dias_atraso, dias_en_etapa: p.dias_en_etapa });
+      return json({ ...t, formatos: undefined, redes: undefined, etapas: t.etapas.map((e) => ({ etapa: e.nombre, n: e.piezas.length, piezas: e.piezas.slice(0, 15).map(corto) })), atrasadas: t.atrasadas.map(corto), esperando_cliente: t.esperando_cliente.map(corto), esta_semana: t.esta_semana.map(corto) });
+    },
+  }),
+  betaTool({
+    name: "crear_contenido",
+    description: "Agrega una pieza de contenido de un cliente al tablero (reel, carrusel, post, historia, video, blog). Empieza en 'planeado' si no se dice otra etapa.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string", description: "Nombre o id" },
+        titulo: { type: "string" },
+        formato: { type: "string", enum: Object.keys(contenido.FORMATOS) },
+        red: { type: "string", enum: Object.keys(contenido.REDES) },
+        etapa: { type: "string", enum: contenido.ETAPAS.map((e) => e.clave) },
+        publicar: { type: "string", description: "AAAA-MM-DD: cuándo debe salir" },
+        responsable: { type: "string" },
+        notas: { type: "string" },
+      },
+      required: ["cliente", "titulo"],
+      additionalProperties: false,
+    },
+    run: (i) => json(contenido.crearContenido(i)),
+  }),
+  betaTool({
+    name: "mover_contenido",
+    description: "Cambia una pieza de contenido: su etapa (planeado, grabar, edicion, cliente = esperando al cliente, aprobado, publicado), su fecha de publicación u otros datos. Encuéntrala por id o por parte del título (y cliente). borrar=true la quita.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "integer" },
+        titulo: { type: "string", description: "Parte del título para encontrarla" },
+        cliente: { type: "string", description: "Nombre o id, ayuda a encontrarla" },
+        etapa: { type: "string", enum: contenido.ETAPAS.map((e) => e.clave) },
+        publicar: { type: "string", description: "Nueva fecha AAAA-MM-DD" },
+        nuevo_titulo: { type: "string" },
+        responsable: { type: "string" },
+        notas: { type: "string" },
+        enlace: { type: "string" },
+        borrar: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    run: ({ id, titulo, cliente, borrar, nuevo_titulo, ...cambios }) => {
+      const p = contenido.buscarContenido({ id, titulo, cliente });
+      if (borrar) return json(contenido.borrarContenido(p.id));
+      return json(contenido.actualizarContenido(p.id, { ...cambios, ...(nuevo_titulo ? { titulo: nuevo_titulo } : {}) }));
+    },
+  }),
+  betaTool({
     name: "paid_media",
     description: "Tablero de Paid media de un mes: inversión en anuncios por cliente y total, contactos (mensajes + prospectos), costo por contacto, ventas, lo vendido y retorno (ROAS = pesos vendidos por cada peso invertido), campañas de Meta con sus resultados de este mes y de los últimos 7 días, y avisos (campañas que gastan sin resultados, costo muy alto, público cansado, retorno bajo, topes). Con cliente, solo ese cliente.",
     inputSchema: { type: "object", properties: { mes: { type: "string", description: "AAAA-MM; el actual si no se dice" }, cliente: { type: "string", description: "Nombre o id, para ver solo ese cliente" } }, additionalProperties: false },
@@ -745,7 +802,7 @@ herramientasBase.push(
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "contenido", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },
@@ -763,7 +820,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
   "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
-  "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia", "registrar_resultados_anuncios",
+  "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia", "registrar_resultados_anuncios", "crear_contenido", "mover_contenido",
 ]);
 
 /**

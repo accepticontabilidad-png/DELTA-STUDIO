@@ -2,15 +2,16 @@
 //
 // Junta cinco partes. Cada una da puntos; si de una parte no hay datos (por ejemplo, el cliente
 // no tiene Meta asignado o no paga mensualidad), esa parte no cuenta y el resto se reescala a 100.
-//   Entregas (25)  · ¿va al día con lo que le prometimos?
+//   Entregas (25)  · ¿va al día con lo que le prometimos? (proyectos y piezas de contenido)
 //   Pagos (20)     · ¿nos paga a tiempo?
 //   Anuncios (20)  · ¿el gasto va dentro del tope y está dando resultados (mensajes, prospectos, compras)?
 //   Redes (20)     · ¿sus seguidores crecen y estamos publicando este mes?
-//   Seguimiento (15) · ¿hay cosas esperando aprobación o lleva un mes sin movimiento?
+//   Seguimiento (15) · ¿hay cosas esperando aprobación (nuestra o del cliente) o lleva un mes sin movimiento?
 // El semáforo sigue mandando: un cliente en rojo no pasa de 49 y uno en amarillo no pasa de 64,
 // para que la calificación y el color nunca se contradigan (verde 65+, amarillo 50-64, rojo <50).
 import { db } from "./db.js";
 import { ahoraLocalISO } from "./tiempo.js";
+import { estadoContenido } from "./contenido.js";
 
 const DIA = 864e5;
 export const NIVELES = [
@@ -39,12 +40,17 @@ export function deltaScore(c, { salud, gastoMes = 0, meta = null } = {}) {
     const atrasadas = abiertas.filter((p) => p.entrega && p.entrega < iso(ahora)).length;
     const pronto = abiertas.filter((p) => p.entrega && p.entrega >= iso(ahora) && p.entrega <= iso(ahora + 2 * DIA)).length;
     const hechas = db.prepare("SELECT COUNT(*) n FROM proyectos WHERE cliente_id = ? AND estado = 'entregado'").get(c.id).n;
-    if (abiertas.length || hechas) {
-      const pts = Math.max(0, 25 - atrasadas * 12 - pronto * 3);
+    // El contenido (reels, carruseles, posts…) también es entrega: cada pieza atrasada resta.
+    const k = estadoContenido(c.id);
+    const kAtrasadas = k.atrasadas.length;
+    if (abiertas.length || hechas || k.hay) {
+      const pts = Math.max(0, 25 - atrasadas * 12 - pronto * 3 - Math.min(15, kAtrasadas * 5));
+      const notas = [];
+      if (atrasadas) notas.push(plural(atrasadas, "entrega atrasada", "entregas atrasadas"));
+      if (kAtrasadas) notas.push(plural(kAtrasadas, "pieza de contenido atrasada", "piezas de contenido atrasadas"));
+      if (!notas.length && pronto) notas.push(plural(pronto, "entrega vence en 2 días", "entregas vencen en 2 días"));
       partes.push({ clave: "entregas", nombre: "Entregas", max: 25, pts,
-        nota: atrasadas ? plural(atrasadas, "entrega atrasada", "entregas atrasadas")
-          : pronto ? plural(pronto, "entrega vence en 2 días", "entregas vencen en 2 días")
-          : abiertas.length ? "Todo al día" : "Sin entregas abiertas" });
+        nota: notas.join(" · ") || (abiertas.length || k.hay ? "Todo al día" : "Sin entregas abiertas") });
     }
   }
 
@@ -109,6 +115,8 @@ export function deltaScore(c, { salud, gastoMes = 0, meta = null } = {}) {
     const notas = [];
     const esperando = db.prepare("SELECT COUNT(*) n FROM aprobaciones WHERE cliente_id = ? AND estado = 'pendiente' AND creada < ?").get(c.id, iso(ahora - 2 * DIA)).n;
     if (esperando) { pts -= Math.min(8, esperando * 4); notas.push(`${plural(esperando, "cosa espera", "cosas esperan")} aprobación hace más de 2 días`); }
+    const kEsperando = estadoContenido(c.id).esperando.length;
+    if (kEsperando) { pts -= Math.min(6, kEsperando * 3); notas.push(`${plural(kEsperando, "pieza espera", "piezas esperan")} al cliente hace 2 días o más`); }
     if ((salud?.motivos || []).some((m) => /Sin movimiento/.test(m))) { pts -= 7; notas.push("Un mes sin movimiento"); }
     partes.push({ clave: "atencion", nombre: "Seguimiento", max: 15, pts: Math.max(0, pts), nota: notas.join(" · ") || "Al día" });
   }

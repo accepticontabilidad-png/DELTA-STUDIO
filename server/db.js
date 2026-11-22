@@ -238,6 +238,27 @@ CREATE TABLE IF NOT EXISTS resultados_anuncios (
 );
 `);
 
+// Producción de contenido por etapas (ver contenido.js): cada pieza (reel, carrusel, post…) de cada cliente.
+db.exec(`
+CREATE TABLE IF NOT EXISTS contenidos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  titulo TEXT NOT NULL,
+  formato TEXT NOT NULL DEFAULT 'post',          -- reel | carrusel | post | historia | video | blog | otro
+  red TEXT,                                      -- instagram | facebook | tiktok | youtube | linkedin | web | otra
+  etapa TEXT NOT NULL DEFAULT 'planeado',        -- planeado | grabar | edicion | cliente | aprobado | publicado
+  publicar TEXT,                                 -- AAAA-MM-DD (local): cuándo debe salir
+  responsable TEXT,
+  notas TEXT,
+  enlace TEXT,                                   -- borrador o publicación
+  etapa_desde TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  publicado TEXT,                                -- AAAA-MM-DD (local) en que salió
+  creado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  actualizado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS contenidos_cliente ON contenidos (cliente_id, etapa);
+`);
+
 export function getAjuste(clave, porDefecto = null) {
   const fila = db.prepare("SELECT valor FROM ajustes WHERE clave = ?").get(clave);
   return fila ? fila.valor : porDefecto;

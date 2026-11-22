@@ -7,6 +7,7 @@ const SALUD_TXT = { verde: "Verde", amarillo: "Amarillo", rojo: "Rojo" };
 const SALUD_FRASE = { verde: "Todo en orden", amarillo: "Hay que echarle ojo", rojo: "Necesita atención hoy" };
 const PLATAFORMA = { meta: "Meta", google: "Google", tiktok: "TikTok", otra: "Otra" };
 const ESTADO_CL = { activo: "Activo", prospecto: "Prospecto", pausado: "Pausado", terminado: "Terminado" };
+const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export function iniciarAgencia(h) {
@@ -734,6 +735,219 @@ export function iniciarAgencia(h) {
   });
 
   // =====================================================================
+  //  CONTENIDO POR ETAPAS
+  // =====================================================================
+  let ultimaCt = null;
+  let etapaCel = "planeado"; // en el celular se ve una columna a la vez
+  let clienteCt = guardado.get("delta_ct_cliente") || "";
+  const FMT_ICONO = { reel: "▶", video: "▶", carrusel: "▤", post: "▢", historia: "◔", blog: "✎", otro: "•" };
+
+  async function cargarContenido() {
+    if (!clientesFi.length) await prepararFinanzas();
+    const q = clienteCt ? `?cliente=${encodeURIComponent(clienteCt)}` : "";
+    let t;
+    try { t = await api(`/contenido${q}`); }
+    catch (err) { if (!clienteCt) throw err; clienteCt = ""; guardado.set("delta_ct_cliente", ""); t = await api("/contenido"); }
+    ultimaCt = t;
+    pintarContenido(t);
+  }
+
+  const fechaPieza = (p) => {
+    if (p.etapa === "publicado") return p.publicado ? `salió el ${fechaCorta(p.publicado)}` : "publicado";
+    if (!p.publicar) return "sin fecha";
+    if (p.atrasada) return `${p.dias_atraso} día${p.dias_atraso === 1 ? "" : "s"} atrasada`;
+    if (p.dias_para_publicar === 0) return "sale hoy";
+    if (p.dias_para_publicar === 1) return "sale mañana";
+    return `sale el ${fechaCorta(p.publicar)}`;
+  };
+
+  function tarjetaPieza(p, i, ultima) {
+    const n = p.atrasada ? "rojo" : p.espera_cliente_larga || (p.dias_para_publicar !== null && p.dias_para_publicar <= 1 && p.etapa !== "aprobado") ? "amarillo" : "";
+    return `<article class="ct-pieza ${n ? "n-" + n : ""}" draggable="true" data-pieza-ct="${p.id}" tabindex="0" aria-label="${esc(p.titulo)}">
+      <div class="ct-p-cabeza"><span class="ct-fmt" title="${esc(p.formato_nombre)}">${FMT_ICONO[p.formato] || "•"} ${esc(p.formato_nombre)}${p.red_nombre ? ` · ${esc(p.red_nombre)}` : ""}</span></div>
+      <b class="ct-p-titulo">${esc(p.titulo)}</b>
+      ${clienteCt ? "" : `<span class="ct-p-cliente">${esc(p.cliente)}</span>`}
+      <div class="ct-p-pie">
+        <span class="ct-p-fecha ${n ? "t-" + n : "tenue"}">${esc(fechaPieza(p))}${p.etapa === "cliente" && p.dias_en_etapa ? ` · lleva ${p.dias_en_etapa} día${p.dias_en_etapa === 1 ? "" : "s"}` : ""}</span>
+        ${p.responsable ? `<span class="ct-p-resp tenue" title="Responsable">${esc(p.responsable)}</span>` : ""}
+      </div>
+      <div class="ct-p-mover">
+        <button type="button" data-ct-mover="-1" aria-label="Etapa anterior" ${i === 0 ? "disabled" : ""}>‹</button>
+        <button type="button" data-ct-mover="1" aria-label="Siguiente etapa" ${ultima ? "disabled" : ""}>›</button>
+      </div>
+    </article>`;
+  }
+
+  function pintarContenido(t) {
+    // Filtro de cliente
+    const sel = $("#ct-cliente");
+    sel.innerHTML = `<option value="">Todos los clientes</option>` + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCt) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
+
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi" ${k.ir ? `data-ct-ir="${k.ir}" role="button" tabindex="0"` : ""}>
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
+        <b>${esc(k.valor)}</b>
+        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
+        <span class="pg-kpi-pie">${k.pie || ""}</span>
+      </div>`;
+    const abiertas = t.etapas.filter((e) => e.clave !== "publicado").reduce((s, e) => s + e.piezas.length, 0);
+    const mesNombre = MESES_LARGOS[Number(t.mes.slice(5)) - 1];
+    $("#ct-kpis").innerHTML = [
+      { nombre: `Publicadas en ${mesNombre}`, valor: `${t.publicadas_mes}${t.total_mes ? ` de ${t.total_mes}` : ""}`, extra: t.total_mes ? "con fecha este mes" : "pon fecha a las piezas del mes",
+        pie: t.total_mes ? `<span class="pg-barra verde"><i data-ancho="${Math.round((t.publicadas_mes / t.total_mes) * 100)}"></i></span>` : "" },
+      { nombre: "A tiempo", valor: t.a_tiempo_pct === null ? "–" : `${t.a_tiempo_pct} %`, chip: t.a_tiempo_pct === null ? null : [t.a_tiempo_pct >= 90 ? "verde" : t.a_tiempo_pct >= 70 ? "amarillo" : "rojo", t.a_tiempo_pct >= 90 ? "Muy bien" : t.a_tiempo_pct >= 70 ? "Regular" : "Bajo"], extra: "de lo publicado este mes" },
+      { nombre: "Atrasadas", valor: String(t.atrasadas.length), chip: t.atrasadas.length ? ["rojo", "Revisar hoy"] : ["verde", "Al día"], extra: t.atrasadas.length ? "ya pasó su fecha" : "nada fuera de fecha", ir: t.atrasadas.length ? "atrasadas" : null },
+      { nombre: "Con el cliente", valor: String(t.etapas.find((e) => e.clave === "cliente").piezas.length), chip: t.esperando_cliente.length ? ["amarillo", "Insistir"] : null, extra: t.esperando_cliente.length ? `${t.esperando_cliente.length} lleva${t.esperando_cliente.length === 1 ? "" : "n"} 2 días o más · ${abiertas} en proceso` : `${abiertas} pieza${abiertas === 1 ? "" : "s"} en proceso · ${t.esta_semana.length} sale${t.esta_semana.length === 1 ? "" : "n"} esta semana`, ir: "cliente" },
+    ].map(kpi).join("");
+
+    // Alertas: lo atrasado y lo que espera al cliente
+    const alertas = [
+      ...t.atrasadas.map((p) => ({ p, nivel: "rojo", txt: `${p.dias_atraso} día${p.dias_atraso === 1 ? "" : "s"} atrasada · etapa: ${p.etapa_nombre.toLowerCase()}` })),
+      ...t.esperando_cliente.filter((p) => !p.atrasada).map((p) => ({ p, nivel: "amarillo", txt: `lleva ${p.dias_en_etapa} días esperando al cliente` })),
+    ];
+    $("#ct-alertas").hidden = !alertas.length;
+    $("#ct-alertas").innerHTML = alertas.length
+      ? `<div class="ag-cabeza"><h2>Para hoy</h2><span class="tb-hora">${alertas.length} pieza${alertas.length === 1 ? "" : "s"}</span></div>
+        <ul class="pm-avisos ct-avisos">${alertas.slice(0, 8).map(({ p, nivel, txt }) => `<li class="pm-aviso n-${nivel}" data-pieza-ct="${p.id}" tabindex="0">${foco(nivel)}<span class="pg-linea-txt"><b>${esc(p.titulo)}</b><small>${esc(p.cliente)} · ${esc(txt)}</small></span></li>`).join("")}</ul>`
+      : "";
+
+    // Pestañas (celular) y columnas
+    $("#ct-tabs").innerHTML = t.etapas.map((e) => `<button type="button" data-ct-tab="${e.clave}" class="${e.clave === etapaCel ? "activa" : ""}">${esc(e.nombre)} <small>${e.piezas.length}</small></button>`).join("");
+    $("#ct-board").innerHTML = t.etapas.map((e, i) => `<section class="ct-col ${e.clave === etapaCel ? "sel" : ""}" data-ct-etapa="${e.clave}">
+        <header class="ct-col-cabeza"><span>${esc(e.nombre)}</span><small>${e.piezas.length}</small>${e.clave === "planeado" ? `<button type="button" class="ct-mas" data-ct-nueva="planeado" aria-label="Nueva pieza">+</button>` : ""}</header>
+        <div class="ct-col-piezas">${e.piezas.length ? e.piezas.map((p) => tarjetaPieza(p, i, i === t.etapas.length - 1)).join("") : `<p class="ct-vacia">${e.clave === "publicado" ? "Lo publicado este mes aparece aquí" : "Nada aquí"}</p>`}</div>
+      </section>`).join("");
+    medidas($('[data-seccion="contenido"]'));
+  }
+
+  // Diálogo para crear o editar una pieza
+  function abrirPiezaCt(p = null, etapa = "planeado") {
+    const t = ultimaCt;
+    if (!t) return;
+    $("#ct-dlg-titulo").textContent = p ? "Editar pieza" : "Nueva pieza";
+    $("#ct-id").value = p?.id || "";
+    $("#ct-titulo").value = p?.titulo || "";
+    $("#ct-f-cliente").innerHTML = clientesFi.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("") || `<option value="">Primero da de alta un cliente</option>`;
+    $("#ct-f-cliente").value = String(p?.cliente_id || clienteCt || clientesFi[0]?.id || "");
+    $("#ct-etapa").innerHTML = t.etapas.map((e) => `<option value="${e.clave}">${esc(e.nombre)}</option>`).join("");
+    $("#ct-etapa").value = p?.etapa || etapa;
+    $("#ct-formato").innerHTML = Object.entries(t.formatos).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("#ct-formato").value = p?.formato || "reel";
+    $("#ct-red").innerHTML = `<option value="">—</option>` + Object.entries(t.redes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("#ct-red").value = p?.red || "instagram";
+    $("#ct-publicar").value = p?.publicar || "";
+    $("#ct-responsable").value = p?.responsable || "";
+    $("#ct-enlace").value = p?.enlace || "";
+    $("#ct-notas").value = p?.notas || "";
+    $("#ct-msg").hidden = true;
+    $("#ct-borrar").hidden = !p;
+    $("#ct-borrar").textContent = "Quitar";
+    $("#ct-borrar").classList.remove("seguro");
+    $("#dlg-contenido").showModal();
+    setTimeout(() => $("#ct-titulo").focus(), 50);
+  }
+  const piezaPorId = (id) => ultimaCt?.etapas.flatMap((e) => e.piezas).find((p) => p.id === Number(id))
+    || ultimaCt?.atrasadas.find((p) => p.id === Number(id));
+
+  $("#form-contenido").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("#ct-id").value;
+    const datos = {
+      titulo: $("#ct-titulo").value.trim(), cliente: $("#ct-f-cliente").value, etapa: $("#ct-etapa").value,
+      formato: $("#ct-formato").value, red: $("#ct-red").value || null, publicar: $("#ct-publicar").value || null,
+      responsable: $("#ct-responsable").value.trim() || null, enlace: $("#ct-enlace").value.trim() || null, notas: $("#ct-notas").value.trim() || null,
+    };
+    try {
+      await api(id ? `/contenido/${id}` : "/contenido", { method: id ? "PATCH" : "POST", body: datos });
+      sonar("accion");
+      $("#dlg-contenido").close();
+      await cargarContenido();
+    } catch (err) { $("#ct-msg").textContent = err.message; $("#ct-msg").hidden = false; }
+  });
+  $("#ct-cancelar").addEventListener("click", () => $("#dlg-contenido").close());
+  $("#ct-borrar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Seguro? Toca otra vez"; return; }
+    try { await api(`/contenido/${$("#ct-id").value}`, { method: "DELETE" }); sonar("accion"); $("#dlg-contenido").close(); await cargarContenido(); }
+    catch (err) { $("#ct-msg").textContent = err.message; $("#ct-msg").hidden = false; }
+  });
+  $("#ct-nueva").addEventListener("click", () => abrirPiezaCt(null, matchMedia("(max-width: 900px)").matches ? etapaCel : "planeado"));
+  $("#ct-cliente").addEventListener("change", (e) => {
+    clienteCt = e.target.value;
+    guardado.set("delta_ct_cliente", clienteCt);
+    cargarContenido().catch((err) => avisar(err.message));
+  });
+
+  async function moverPieza(id, cambio) {
+    try {
+      await api(`/contenido/${id}`, { method: "PATCH", body: cambio });
+      sonar("accion");
+    } catch (err) { avisar(err.message); }
+    await cargarContenido().catch(() => {});
+  }
+
+  const seccionCt = $('[data-seccion="contenido"]');
+  seccionCt.addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-ct-tab]");
+    if (tab) {
+      etapaCel = tab.dataset.ctTab;
+      seccionCt.querySelectorAll("[data-ct-tab]").forEach((x) => x.classList.toggle("activa", x === tab));
+      seccionCt.querySelectorAll(".ct-col").forEach((x) => x.classList.toggle("sel", x.dataset.ctEtapa === etapaCel));
+      return;
+    }
+    const ir = e.target.closest("[data-ct-ir]");
+    if (ir) {
+      if (ir.dataset.ctIr === "atrasadas") return void $("#ct-alertas").scrollIntoView({ behavior: "smooth", block: "center" });
+      etapaCel = ir.dataset.ctIr;
+      seccionCt.querySelector(`[data-ct-tab="${etapaCel}"]`)?.click();
+      return void seccionCt.querySelector(`.ct-col[data-ct-etapa="${etapaCel}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+    const nueva = e.target.closest("[data-ct-nueva]");
+    if (nueva) return abrirPiezaCt(null, nueva.dataset.ctNueva);
+    const mover = e.target.closest("[data-ct-mover]");
+    const tarjeta = e.target.closest("[data-pieza-ct]");
+    if (mover && tarjeta) {
+      mover.disabled = true;
+      return void moverPieza(tarjeta.dataset.piezaCt, { mover: Number(mover.dataset.ctMover) });
+    }
+    if (tarjeta) abrirPiezaCt(piezaPorId(tarjeta.dataset.piezaCt));
+  });
+  seccionCt.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches?.("[data-pieza-ct], [data-ct-ir]")) e.target.click();
+  });
+  // Arrastrar y soltar entre columnas (computadora)
+  let arrastrando = null;
+  seccionCt.addEventListener("dragstart", (e) => {
+    const t = e.target.closest?.(".ct-pieza");
+    if (!t) return;
+    arrastrando = t.dataset.piezaCt;
+    t.classList.add("arrastrando");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", arrastrando);
+  });
+  seccionCt.addEventListener("dragend", (e) => {
+    e.target.closest?.(".ct-pieza")?.classList.remove("arrastrando");
+    seccionCt.querySelectorAll(".ct-col.encima").forEach((x) => x.classList.remove("encima"));
+    arrastrando = null;
+  });
+  seccionCt.addEventListener("dragover", (e) => {
+    const col = e.target.closest?.(".ct-col");
+    if (!col || !arrastrando) return;
+    e.preventDefault();
+    seccionCt.querySelectorAll(".ct-col.encima").forEach((x) => x !== col && x.classList.remove("encima"));
+    col.classList.add("encima");
+  });
+  seccionCt.addEventListener("drop", (e) => {
+    const col = e.target.closest?.(".ct-col");
+    if (!col || !arrastrando) return;
+    e.preventDefault();
+    const id = arrastrando;
+    const p = piezaPorId(id);
+    col.classList.remove("encima");
+    if (p && p.etapa !== col.dataset.ctEtapa) moverPieza(id, { etapa: col.dataset.ctEtapa });
+  });
+
+  // =====================================================================
   //  PAID MEDIA
   // =====================================================================
   let mesPm = null; // null = mes actual
@@ -931,5 +1145,5 @@ export function iniciarAgencia(h) {
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }

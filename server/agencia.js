@@ -2,6 +2,7 @@
 import { db } from "./db.js";
 import { localAUTC, ahoraLocalISO } from "./tiempo.js";
 import { deltaScore } from "./score.js";
+import { estadoContenido } from "./contenido.js";
 
 const ESTADOS_CLIENTE = ["activo", "pausado", "prospecto", "terminado"];
 const ESTADOS_PROYECTO = ["pendiente", "en_proceso", "revision", "entregado", "cancelado"];
@@ -174,6 +175,14 @@ export function saludCliente(c) {
   const pronto = abiertos.filter((p) => p.entrega >= iso(ahora) && p.entrega <= iso(ahora + 2 * DIA));
   if (atrasados.length) rojo.push(atrasados.length === 1 ? `Entrega atrasada: ${atrasados[0].titulo}` : `${atrasados.length} entregas atrasadas`);
   if (pronto.length) amarillo.push(pronto.length === 1 ? `Entrega pronto: ${pronto[0].titulo}` : `${pronto.length} entregas en los próximos 2 días`);
+  // Contenido: una pieza atrasada es amarillo; con más de 3 días de atraso, rojo. Esperar al cliente 2 días o más, amarillo.
+  const k = estadoContenido(c.id);
+  if (k.atrasadas.length) {
+    const peor = Math.max(...k.atrasadas.map((p) => p.dias_atraso));
+    const txt = k.atrasadas.length === 1 ? `Contenido atrasado: ${k.atrasadas[0].titulo} (${peor} día${peor === 1 ? "" : "s"})` : `${k.atrasadas.length} piezas de contenido atrasadas`;
+    (peor > 3 ? rojo : amarillo).push(txt);
+  }
+  if (k.esperando.length) amarillo.push(k.esperando.length === 1 ? `Contenido esperando al cliente: ${k.esperando[0].titulo}` : `${k.esperando.length} piezas esperando al cliente`);
   const esperando = db.prepare("SELECT COUNT(*) n FROM aprobaciones WHERE cliente_id = ? AND estado = 'pendiente' AND creada < ?").get(c.id, iso(ahora - 2 * DIA)).n;
   if (esperando) amarillo.push(`${esperando === 1 ? "1 cosa espera" : `${esperando} cosas esperan`} tu aprobación hace más de 2 días`);
   // Pagos: más de 30 días de retraso es rojo; más de 7, amarillo.
@@ -194,6 +203,7 @@ export function saludCliente(c) {
         SELECT creado f FROM proyectos WHERE cliente_id = ?1 UNION ALL
         SELECT creado FROM trabajos WHERE cliente_id = ?1 UNION ALL
         SELECT creada FROM aprobaciones WHERE cliente_id = ?1 UNION ALL
+        SELECT actualizado FROM contenidos WHERE cliente_id = ?1 UNION ALL
         SELECT actualizado FROM gasto_anuncios WHERE cliente_id = ?1 UNION ALL
         SELECT inicio FROM eventos WHERE inicio <= ?2 AND (lower(cliente) = lower(?3) OR titulo LIKE ?4) UNION ALL
         SELECT creado FROM clientes WHERE id = ?1)`).get(c.id, iso(ahora), c.nombre, `%${c.nombre}%`).f;
