@@ -23,6 +23,7 @@ import * as agencia from "./agencia.js";
 import * as finanzas from "./finanzas.js";
 import * as paidmedia from "./paidmedia.js";
 import * as contenido from "./contenido.js";
+import * as reportes from "./reportes.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -103,9 +104,25 @@ app.get("/oauth/meta", async (req, res) => {
   }
 });
 
+// ---------- Reporte mensual para el cliente (link que el dueño crea y puede quitar) ----------
+app.get("/r/:token", (req, res) => {
+  let d = null;
+  try { d = reportes.porToken(req.params.token); } catch (e) { console.error("[reportes]", e.message); }
+  res.setHeader("Cache-Control", "no-store");
+  if (!d) return res.status(404).type("html").send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reporte</title><link rel="stylesheet" href="/reporte.css"><body class="rp-pagina"><article class="rp"><p class="rp-vacio">Este reporte ya no está disponible. Pídele a tu agencia un link nuevo.</p></article></body>');
+  res.type("html").send(reportes.paginaReporte(d, { imprimir: req.query.imprimir === "1" }));
+});
+
 // ---------- API del panel ----------
 const api = express.Router();
 api.use(seg.protegido);
+
+// La dirección pública de la app (para armar links completos cuando DELTA los da por WhatsApp o por voz).
+function guardarUrlBase(req) {
+  if (process.env.URL_PUBLICA) return;
+  const base = `${req.protocol}://${req.get("host")}`;
+  if (/^https?:\/\/[\w.-]+(:\d+)?$/.test(base) && getAjuste("url_base") !== base) setAjuste("url_base", base);
+}
 
 const envolver = (fn) => async (req, res) => {
   try {
@@ -150,7 +167,8 @@ api.post("/conversacion/nueva", envolver(() => { nuevaConversacion(); return { o
 
 api.get("/agenda", envolver((req) => agenda.agendaRango(String(req.query.desde || ""), String(req.query.hasta || ""))));
 
-api.get("/panel", envolver(() => {
+api.get("/panel", envolver((req) => {
+  guardarUrlBase(req);
   const hoy = agenda.resumenDelDia();
   return {
     zona_horaria: zonaHoraria(),
@@ -265,6 +283,24 @@ api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
 // ---------- Finanzas de la agencia y Pulso ----------
 api.get("/finanzas", envolver((req) => finanzas.finanzas(req.query.mes ? String(req.query.mes) : undefined)));
 api.get("/pulso", envolver(() => finanzas.pulso()));
+api.get("/analitica", envolver((req) => reportes.analitica(req.query.mes ? String(req.query.mes) : undefined)));
+api.get("/reportes", envolver((req) => {
+  const d = reportes.datosReporte(String(req.query.cliente || ""), req.query.mes ? String(req.query.mes) : undefined);
+  return { ...d, html: reportes.htmlReporte(d), link: d.link ? reportes.urlCompleta(d.link) : null };
+}));
+api.get("/reportes/pagina", (req, res) => {
+  try {
+    const d = reportes.datosReporte(String(req.query.cliente || ""), req.query.mes ? String(req.query.mes) : undefined);
+    res.setHeader("Cache-Control", "no-store");
+    res.type("html").send(reportes.paginaReporte(d, { imprimir: req.query.imprimir === "1" }));
+  } catch (e) { res.status(400).type("text").send(e.message); }
+});
+api.patch("/reportes", envolver((req) => reportes.guardarReporte(req.body || {})));
+api.post("/reportes/link", envolver((req) => {
+  guardarUrlBase(req);
+  return reportes.crearLink(req.body || {});
+}));
+api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
 api.get("/contenido", envolver((req) => contenido.tableroContenido({ cliente: req.query.cliente ? String(req.query.cliente) : undefined, mes: req.query.mes ? String(req.query.mes) : undefined })));
 api.post("/contenido", envolver((req) => contenido.crearContenido(req.body || {})));
 api.patch("/contenido/:id", envolver((req) => {
@@ -403,4 +439,5 @@ app.listen(PUERTO, () => {
   iniciarVigilante();
   iniciarRutinas();
   meta.iniciarMeta();
+  reportes.iniciarReportes();
 });

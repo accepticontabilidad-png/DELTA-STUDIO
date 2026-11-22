@@ -735,6 +735,115 @@ export function iniciarAgencia(h) {
   });
 
   // =====================================================================
+  //  ANALÍTICA Y REPORTE MENSUAL
+  // =====================================================================
+  let mesAn = null; // null = el mes pasado (el que se reporta)
+  let clienteAn = Number(guardado.get("delta_an_cliente")) || null;
+  let ultimaAn = null, reporteAn = null;
+  const mesPasado = () => moverMes(new Date().toISOString().slice(0, 7), -1);
+
+  async function cargarAnalitica() {
+    const a = await api(`/analitica${mesAn ? `?mes=${mesAn}` : ""}`);
+    ultimaAn = a;
+    if (!a.clientes.some((c) => c.id === clienteAn)) clienteAn = a.clientes[0]?.id || null;
+    pintarAnalitica(a);
+    if (clienteAn) await cargarReporte();
+    else { $("#an-hoja").innerHTML = `<article class="rp"><p class="rp-vacio">Da de alta a tus clientes para ver sus reportes.</p></article>`; }
+  }
+
+  function pintarAnalitica(a) {
+    const nombre = a.nombre_mes.charAt(0).toUpperCase() + a.nombre_mes.slice(1);
+    $("#an-hoy").textContent = nombre;
+    $("#an-hoy").title = "Volver al mes pasado";
+    $("#an-despues").disabled = a.es_mes_actual;
+    $("#an-n").textContent = a.con_link ? `${a.con_link} con link` : `${a.clientes.length}`;
+    const chip = (n, txt) => (n === null || n === undefined ? `<span class="tenue">–</span>` : txt);
+    $("#an-lista").innerHTML = a.clientes.length
+      ? a.clientes.map((c) => `<button type="button" class="an-cli ${c.id === clienteAn ? "elegida" : ""} ${c.hay_datos ? "" : "sin"}" data-an-cliente="${c.id}">
+          <span class="an-cli-cabeza"><b>${esc(c.nombre)}</b>${c.link ? `<i class="an-ok" title="Tiene link para el cliente">🔗</i>` : ""}<span class="sc-chip c-${c.score_color}" title="Delta Score">${c.score}</span></span>
+          ${c.hay_datos ? `<span class="an-cli-datos">
+            <span><small>Seguidores</small>${chip(c.seguidores_cambio, `${c.seguidores_cambio > 0 ? "+" : c.seguidores_cambio < 0 ? "−" : ""}${Math.abs(c.seguidores_cambio).toLocaleString("es-MX")}`)}</span>
+            <span><small>Publicado</small>${chip(c.publicadas, c.publicadas)}</span>
+            <span><small>Contactos</small>${chip(c.contactos, Number(c.contactos).toLocaleString("es-MX"))}</span>
+            <span><small>Retorno</small>${chip(c.retorno, `${Number(c.retorno).toLocaleString("es-MX", { maximumFractionDigits: 1 })}×`)}</span>
+          </span>` : `<small class="tenue">Sin números este mes</small>`}
+        </button>`).join("")
+      : `<p class="pg-vacio">Aún no hay clientes activos.</p>`;
+  }
+
+  async function cargarReporte() {
+    const mes = ultimaAn?.mes || mesPasado();
+    const r = await api(`/reportes?cliente=${clienteAn}&mes=${mes}`);
+    reporteAn = r;
+    guardado.set("delta_an_cliente", String(clienteAn));
+    $("#an-cliente-titulo").textContent = `Reporte de ${r.cliente.nombre}`;
+    $("#an-estado").textContent = r.link ? "Link activo" : "Sin link";
+    $("#an-estado").className = `tb-hora ${r.link ? "t-verde" : ""}`;
+    $("#an-nota").value = r.nota || "";
+    $("#an-score").checked = r.con_score;
+    $("#an-link-caja").hidden = !r.link;
+    $("#an-link-url").value = r.link ? (r.link.startsWith("http") ? r.link : location.origin + r.link) : "";
+    $("#an-link").textContent = r.link ? "Abrir como lo verá el cliente" : "Crear link para el cliente";
+    $("#an-delta").dataset.pedir = `Prepárame el reporte de ${r.cliente.nombre} de ${r.nombre_mes}: cuéntame en pocas frases cómo le fue, qué le diría y qué deberíamos mejorar el próximo mes. No le envíes nada.`;
+    $("#an-hoja").innerHTML = r.html;
+    $("#an-hoja").querySelectorAll("a[href]").forEach((x) => { x.target = "_blank"; x.rel = "noopener noreferrer"; });
+  }
+
+  $("#an-lista").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-an-cliente]");
+    if (!b) return;
+    clienteAn = Number(b.dataset.anCliente);
+    $("#an-lista").querySelectorAll("[data-an-cliente]").forEach((x) => x.classList.toggle("elegida", x === b));
+    cargarReporte().then(() => { if (matchMedia("(max-width: 1100px)").matches) $(".an-enviar").scrollIntoView({ behavior: "smooth", block: "start" }); }).catch((err) => avisar(err.message));
+  });
+  $("#an-antes").addEventListener("click", () => { mesAn = moverMes(ultimaAn?.mes || mesPasado(), -1); cargarAnalitica().catch((e) => avisar(e.message)); });
+  $("#an-despues").addEventListener("click", () => { if (!ultimaAn || ultimaAn.es_mes_actual) return; mesAn = moverMes(ultimaAn.mes, 1); cargarAnalitica().catch((e) => avisar(e.message)); });
+  $("#an-hoy").addEventListener("click", () => { mesAn = null; cargarAnalitica().catch((e) => avisar(e.message)); });
+  const guardarAn = async (cambio) => {
+    await api("/reportes", { method: "PATCH", body: { cliente: clienteAn, mes: reporteAn.mes, ...cambio } });
+    sonar("accion");
+    await cargarReporte();
+  };
+  $("#an-guardar").addEventListener("click", () => guardarAn({ nota: $("#an-nota").value.trim() }).catch((e) => avisar(e.message)));
+  $("#an-score").addEventListener("change", (e) => guardarAn({ con_score: e.target.checked, nota: $("#an-nota").value.trim() }).catch((err) => avisar(err.message)));
+  $("#an-pdf").addEventListener("click", () => {
+    if (!reporteAn) return;
+    // Primero guarda el mensaje si cambió, para que salga en el PDF.
+    const nota = $("#an-nota").value.trim();
+    const abrir = () => window.open(`/api/reportes/pagina?cliente=${clienteAn}&mes=${reporteAn.mes}&imprimir=1`, "_blank", "noopener");
+    if (nota !== (reporteAn.nota || "")) guardarAn({ nota }).then(abrir).catch((e) => avisar(e.message));
+    else abrir();
+  });
+  $("#an-link").addEventListener("click", async (e) => {
+    if (!reporteAn) return;
+    if (reporteAn.link) return void window.open($("#an-link-url").value, "_blank", "noopener");
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const nota = $("#an-nota").value.trim();
+      if (nota !== (reporteAn.nota || "")) await api("/reportes", { method: "PATCH", body: { cliente: clienteAn, mes: reporteAn.mes, nota } });
+      await api("/reportes/link", { method: "POST", body: { cliente: clienteAn, mes: reporteAn.mes } });
+      sonar("accion");
+      await cargarReporte();
+      await cargarAnalitica();
+    } catch (err) { avisar(err.message); }
+    b.disabled = false;
+  });
+  $("#an-copiar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    try { await navigator.clipboard.writeText($("#an-link-url").value); }
+    catch { $("#an-link-url").select(); document.execCommand?.("copy"); }
+    b.textContent = "¡Copiado!";
+    setTimeout(() => { b.textContent = "Copiar"; }, 1800);
+  });
+  $("#an-quitar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Quitar? El cliente ya no podrá abrirlo"; setTimeout(() => { b.classList.remove("seguro"); b.textContent = "Quitar link"; }, 4000); return; }
+    try { await api(`/reportes/link?cliente=${clienteAn}&mes=${reporteAn.mes}`, { method: "DELETE" }); sonar("accion"); await cargarAnalitica(); }
+    catch (err) { avisar(err.message); }
+  });
+
+  // =====================================================================
   //  CONTENIDO POR ETAPAS
   // =====================================================================
   let ultimaCt = null;
@@ -1145,5 +1254,5 @@ export function iniciarAgencia(h) {
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }
