@@ -21,6 +21,7 @@ import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
 import * as finanzas from "./finanzas.js";
+import * as paidmedia from "./paidmedia.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -178,6 +179,7 @@ api.get("/panel", envolver(() => {
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
     pagos_vencidos: (finanzas.generarMensualidades(), finanzas.listarCobros({ estado: "vencido" }).length),
+    anuncios_sin_resultados: (() => { try { return paidmedia.avisosParaPulso().sin_resultados.length; } catch { return 0; } })(),
   };
 }));
 
@@ -261,6 +263,9 @@ api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
 // ---------- Finanzas de la agencia y Pulso ----------
 api.get("/finanzas", envolver((req) => finanzas.finanzas(req.query.mes ? String(req.query.mes) : undefined)));
 api.get("/pulso", envolver(() => finanzas.pulso()));
+api.get("/paidmedia", envolver((req) => paidmedia.paidMedia(req.query.mes ? String(req.query.mes) : undefined)));
+api.put("/paidmedia/resultados", envolver((req) => paidmedia.registrarResultados(req.body || {})));
+api.delete("/paidmedia/resultados", envolver((req) => paidmedia.borrarResultados({ cliente: req.query.cliente, mes: req.query.mes })));
 api.post("/cobros", envolver((req) => finanzas.registrarCobro(req.body || {})));
 api.patch("/cobros/:id", envolver((req) => {
   const b = req.body || {};

@@ -1455,6 +1455,57 @@ html[data-mood="dia"] .fi-util-p { fill: #0f9a72; }
 html[data-mood="dia"] .fi-reja { stroke: rgba(82,50,216,.14); }
 html[data-mood="dia"] .fi-nuevo summary { color: #5a3fd6; }
 
+/* ---------- Paid media ---------- */
+.tablero-pm { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "kpis kpis" "c1 c2" "nota nota"; align-items: start; }
+.pm-avisos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 460px; overflow: auto; }
+.pm-aviso { display: flex; align-items: flex-start; gap: 4px; padding: 9px 11px; border-radius: 10px; background: rgba(8,5,24,.4); border-left: 3px solid transparent; cursor: pointer; }
+.pm-aviso:hover { background: var(--cian-suave); }
+.pm-aviso.n-rojo { border-left-color: var(--rojo); } .pm-aviso.n-amarillo { border-left-color: var(--amarillo); } .pm-aviso.n-info { border-left-color: var(--cian); }
+.pm-aviso .foco { margin-top: 4px; }
+.pm-aviso .pg-linea-txt { display: grid; gap: 2px; min-width: 0; }
+.pm-aviso .pg-linea-txt b { font-size: 12.5px; font-weight: 600; }
+.pm-aviso .pg-linea-txt small { font-size: 13px; color: var(--texto); line-height: 1.35; }
+.pm-fila { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) 70px; }
+.pm-fila .fi-rent-nombre b { display: flex; align-items: center; }
+.pm-campanas { display: grid; gap: 8px; max-height: 560px; overflow: auto; }
+.pm-camp { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(8,5,24,.4); border-left: 3px solid transparent; cursor: pointer; }
+.pm-camp:hover { background: var(--cian-suave); }
+.pm-camp.n-rojo { border-left-color: var(--rojo); } .pm-camp.n-amarillo { border-left-color: var(--amarillo); }
+.pm-camp-cabeza { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; }
+.pm-camp-cabeza b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pm-camp-cabeza .tenue { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.pm-estado { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: rgba(149,144,192,.45); }
+.pm-estado.on { background: var(--verde); box-shadow: 0 0 6px var(--verde); }
+.pm-camp-datos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; }
+.pm-camp-datos small { display: block; font-size: 10.5px; font-weight: 400; color: var(--tenue); text-transform: uppercase; letter-spacing: .08em; }
+.pm-camp > small { font-size: 12px; }
+.pm-linea { stroke: var(--cian); filter: drop-shadow(0 0 4px rgba(84,214,255,.5)); }
+.pm-punto { fill: var(--cian); }
+.fi-ley i.pm-linea { background: var(--cian); }
+.pm-eje-c { fill: var(--cian); }
+.pm-explica { margin: 0 0 4px; }
+.pm-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 12.5px; }
+.pm-dl dt { font-weight: 600; white-space: nowrap; }
+.pm-dl dd { margin: 0; color: var(--tenue); }
+.badge#badge-paidmedia { background: var(--rojo); color: #fff; box-shadow: 0 0 10px rgba(255,90,122,.6); }
+@media (max-width: 1100px) {
+  .tablero-pm { grid-template-columns: minmax(0, 1fr); grid-template-areas: "kpis" "c1" "c2" "nota"; }
+}
+@media (max-width: 900px) {
+  .pm-fila { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fi-rent-fila.pm-fila > :nth-child(3), .fi-rent-fila.pm-fila > :nth-child(4) { display: none; }
+  .fi-rent-fila.pm-fila > :nth-child(5) { display: block; }
+  .pm-camp-datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pm-avisos, .pm-campanas { max-height: none; overflow: visible; }
+  .pm-dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .pm-dl dd { margin-bottom: 6px; }
+}
+html[data-mood="dia"] .pm-aviso, html[data-mood="dia"] .pm-camp { background: rgba(255,255,255,.75); }
+html[data-mood="dia"] .pm-aviso:hover, html[data-mood="dia"] .pm-camp:hover { background: rgba(106,76,240,.10); }
+html[data-mood="dia"] .pm-linea { stroke: #0a8fb8; filter: none; }
+html[data-mood="dia"] .pm-punto, html[data-mood="dia"] .pm-eje-c { fill: #0a8fb8; }
+html[data-mood="dia"] .fi-ley i.pm-linea { background: #0a8fb8; }
+
 /* ---------- Delta Score ---------- */
 .sc-chip { margin-left: auto; flex-shrink: 0; min-width: 34px; height: 24px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; border: 1px solid currentColor; background: rgba(8,5,24,.5); }
 .sc-chip.c-verde { color: var(--verde); } .sc-chip.c-amarillo { color: var(--amarillo); } .sc-chip.c-rojo { color: var(--rojo); }
