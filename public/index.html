@@ -73,6 +73,7 @@
         <a href="#/mercados" class="menu-item" data-ir="mercados"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Mercados y noticias</span></a>
         <span class="menu-grupo">Agencia</span>
         <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Panel general</span></a>
+        <a href="#/finanzas" class="menu-item" data-ir="finanzas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3.2-1.6M12 5.5v1.5M12 17v1.5"/></svg><span>Finanzas</span><small id="badge-finanzas" class="badge" hidden></small></a>
         <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
         <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
         <a href="#/estudio" class="menu-item" data-ir="estudio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span>Estudio de diseño</span></a>
@@ -315,6 +316,7 @@
           </div>
         </div>
         <div class="tablero tablero-ag">
+          <div class="panel pg-pulso" id="pg-pulso" aria-live="polite"></div>
           <div class="tb-kpis pg-kpis" id="pg-kpis"></div>
           <div class="pg-col pg-col-1">
             <div class="panel pg-alertas-caja">
@@ -349,6 +351,74 @@
             </div>
           </div>
           <p class="tenue chico tb-nota">Con Meta conectado, el gasto de Facebook e Instagram se llena solo cada 6 horas. Google y TikTok se anotan a mano en cada cuenta (o díganselo a DELTA: "Clínica Sonrisa lleva 4,000 en Google este mes").</p>
+        </div>
+      </section>
+
+      <!-- Finanzas de la agencia: cobros, quién debe, gastos, utilidad y margen -->
+      <section class="seccion finanzas" data-seccion="finanzas">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Finanzas</h1>
+          <div class="navegar fi-mes">
+            <button type="button" id="fi-antes" aria-label="Mes anterior">‹</button>
+            <button type="button" id="fi-hoy" class="fi-mes-nombre"></button>
+            <button type="button" id="fi-despues" aria-label="Mes siguiente">›</button>
+          </div>
+          <div class="ag-botones">
+            <button type="button" class="tb-link" data-fi-ir="#fi-form-cobro">+ Cobro</button>
+            <button type="button" class="tb-link" data-fi-ir="#fi-form-gasto">+ Gasto</button>
+            <button type="button" class="ag-agregar" data-pedir="¿Cómo van las finanzas de la agencia este mes? Dime cuánto facturé, cuánto cobré, quién me debe y desde cuándo, mis gastos, la utilidad y el margen, y qué cliente me deja más y cuál menos.">Resumen con DELTA</button>
+          </div>
+        </div>
+        <div class="tablero tablero-fi">
+          <div class="tb-kpis fi-kpis" id="fi-kpis"></div>
+          <div class="pg-col fi-col-1">
+            <div class="panel fi-grafica-caja">
+              <div class="ag-cabeza"><h2>Ingresos, gastos y utilidad</h2><span class="tb-hora">últimos 12 meses</span></div>
+              <div id="fi-grafica" class="fi-grafica"></div>
+            </div>
+            <div class="panel fi-rent-caja">
+              <div class="ag-cabeza"><h2>Rentabilidad por cliente</h2><span class="tb-hora" id="fi-rent-mes"></span></div>
+              <div id="fi-rent" class="fi-rent"></div>
+            </div>
+          </div>
+          <div class="pg-col fi-col-2">
+            <div class="panel fi-cobranza-caja">
+              <div class="ag-cabeza"><h2>Cobranza</h2><span class="tb-hora" id="fi-cobranza-n"></span></div>
+              <ul id="fi-cobranza" class="pg-linea fi-cobros"></ul>
+              <details class="fi-nuevo" id="fi-det-cobro">
+                <summary>+ Anotar un cobro extra</summary>
+                <form class="fi-form" id="fi-form-cobro">
+                  <select id="fi-cobro-cliente" aria-label="Cliente" required></select>
+                  <input id="fi-cobro-concepto" type="text" maxlength="160" placeholder="Concepto (ej. sesión de fotos)" required />
+                  <input id="fi-cobro-monto" type="text" inputmode="decimal" maxlength="14" placeholder="Monto" required />
+                  <label class="tenue chico">Vence <input id="fi-cobro-vence" type="date" /></label>
+                  <button type="submit">Anotar</button>
+                </form>
+              </details>
+              <p class="tenue chico">Las mensualidades se crean solas cada mes con el pago mensual de cada cliente.</p>
+            </div>
+            <div class="panel fi-gastos-caja">
+              <div class="ag-cabeza"><h2>Gastos de la agencia</h2><span class="tb-hora" id="fi-gastos-mes"></span></div>
+              <div id="fi-categorias" class="fi-categorias"></div>
+              <ul id="fi-gastos" class="pg-linea fi-gastos"></ul>
+              <details class="fi-nuevo" id="fi-det-gasto">
+                <summary>+ Anotar un gasto</summary>
+                <form class="fi-form" id="fi-form-gasto">
+                  <input id="fi-gasto-concepto" type="text" maxlength="160" placeholder="Concepto (ej. nómina, Canva, renta)" required />
+                  <input id="fi-gasto-monto" type="text" inputmode="decimal" maxlength="14" placeholder="Monto" required />
+                  <select id="fi-gasto-cat" aria-label="Categoría"></select>
+                  <select id="fi-gasto-cliente" aria-label="¿Fue por un cliente?"></select>
+                  <label class="fi-check"><input id="fi-gasto-fijo" type="checkbox" /> Se repite cada mes</label>
+                  <button type="submit">Anotar</button>
+                </form>
+              </details>
+            </div>
+            <div class="panel fi-pagos-caja">
+              <div class="ag-cabeza"><h2>Pagos recibidos</h2><span class="tb-hora" id="fi-pagos-n"></span></div>
+              <ul id="fi-pagos" class="pg-linea"></ul>
+            </div>
+          </div>
+          <p class="tenue chico tb-nota">Lo que tus clientes invierten en anuncios es dinero de ellos: no cuenta como gasto de la agencia. Díselo a DELTA de viva voz: "Clínica Sonrisa ya pagó", "anota 1,200 de Canva al mes".</p>
         </div>
       </section>
 
@@ -474,7 +544,10 @@
         <label>Correo <input id="cl-correo" type="text" maxlength="160" /></label>
         <label>Pago mensual <input id="cl-presupuesto" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 15000" /></label>
       </div>
-      <label>Tope de anuncios al mes <input id="cl-presupuesto-anuncios" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 8000 (lo que puede gastar en Meta, Google…)" /></label>
+      <div class="fila-2">
+        <label>Día en que te paga <input id="cl-dia-pago" type="text" inputmode="numeric" maxlength="2" placeholder="Del 1 al 28 (5 si lo dejas vacío)" /></label>
+        <label>Tope de anuncios al mes <input id="cl-presupuesto-anuncios" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 8000 (Meta, Google…)" /></label>
+      </div>
       <label>Servicios que le damos <input id="cl-servicios" type="text" maxlength="300" placeholder="Ej. redes, pauta en Meta, SEO" /></label>
       <label>Sitio web y redes <input id="cl-redes" type="text" maxlength="300" /></label>
       <label>Notas <textarea id="cl-notas" rows="3" maxlength="2000"></textarea></label>

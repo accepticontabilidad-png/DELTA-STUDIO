@@ -149,6 +149,7 @@ for (const col of [
   "salud_manual TEXT",          // null = automática | verde | amarillo | rojo
   "salud_nota TEXT",            // por qué se marcó a mano
   "presupuesto_anuncios REAL",  // tope mensual de inversión en anuncios
+  "dia_pago INTEGER",           // Finanzas: día del mes en que vence su mensualidad (5 si no se dice)
 ]) {
   try {
     db.exec(`ALTER TABLE clientes ADD COLUMN ${col}`);

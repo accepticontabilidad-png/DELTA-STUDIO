@@ -4,8 +4,8 @@ import { localAUTC, ahoraLocalISO } from "./tiempo.js";
 
 const ESTADOS_CLIENTE = ["activo", "pausado", "prospecto", "terminado"];
 const ESTADOS_PROYECTO = ["pendiente", "en_proceso", "revision", "entregado", "cancelado"];
-const CAMPOS_CLIENTE = ["nombre", "industria", "contacto", "correo", "telefono", "redes", "servicios", "presupuesto_mensual", "notas", "estado", "salud_manual", "salud_nota", "presupuesto_anuncios"];
-const NUMERICOS = ["presupuesto_mensual", "presupuesto_anuncios"];
+const CAMPOS_CLIENTE = ["nombre", "industria", "contacto", "correo", "telefono", "redes", "servicios", "presupuesto_mensual", "notas", "estado", "salud_manual", "salud_nota", "presupuesto_anuncios", "dia_pago"];
+const NUMERICOS = ["presupuesto_mensual", "presupuesto_anuncios", "dia_pago"];
 const SALUDES = ["verde", "amarillo", "rojo"];
 export const PLATAFORMAS = { meta: "Meta (Facebook e Instagram)", google: "Google", tiktok: "TikTok", otra: "Otra" };
 
@@ -16,9 +16,10 @@ export function crearCliente(datos) {
   if (buscarCliente(nombre, true)) throw new Error(`Ya existe un cliente llamado "${nombre}"`);
   const estado = ESTADOS_CLIENTE.includes(datos.estado) ? datos.estado : "activo";
   const r = db
-    .prepare("INSERT INTO clientes (nombre, industria, contacto, correo, telefono, redes, servicios, presupuesto_mensual, notas, estado, presupuesto_anuncios, salud_manual, salud_nota) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .prepare("INSERT INTO clientes (nombre, industria, contacto, correo, telefono, redes, servicios, presupuesto_mensual, notas, estado, presupuesto_anuncios, salud_manual, salud_nota, dia_pago) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(nombre, datos.industria || null, datos.contacto || null, datos.correo || null, datos.telefono || null, datos.redes || null, datos.servicios || null, numero(datos.presupuesto_mensual), datos.notas || null, estado,
-      numero(datos.presupuesto_anuncios), SALUDES.includes(datos.salud_manual) ? datos.salud_manual : null, datos.salud_nota || null);
+      numero(datos.presupuesto_anuncios), SALUDES.includes(datos.salud_manual) ? datos.salud_manual : null, datos.salud_nota || null,
+      Number.isInteger(Number(datos.dia_pago)) && datos.dia_pago >= 1 && datos.dia_pago <= 28 ? Number(datos.dia_pago) : null);
   return obtenerCliente(Number(r.lastInsertRowid));
 }
 
@@ -60,6 +61,7 @@ export function actualizarCliente(clave, cambios) {
   if (n.salud_manual && !SALUDES.includes(n.salud_manual)) throw new Error("Salud no válida: " + n.salud_manual);
   if (!n.salud_manual) n.salud_nota = null;
   for (const k of NUMERICOS) if (n[k] !== null && !Number.isFinite(n[k])) throw new Error("Debe ser un número: " + k);
+  if (n.dia_pago !== null && (n.dia_pago < 1 || n.dia_pago > 28 || !Number.isInteger(n.dia_pago))) throw new Error("El día de pago va del 1 al 28");
   db.prepare(`UPDATE clientes SET ${CAMPOS_CLIENTE.map((k) => `${k}=?`).join(", ")} WHERE id=?`).run(...CAMPOS_CLIENTE.map((k) => n[k]), c.id);
   return obtenerCliente(c.id);
 }

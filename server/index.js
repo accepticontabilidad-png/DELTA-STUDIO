@@ -20,6 +20,7 @@ import * as panorama from "./panorama.js";
 import * as noticias from "./noticias.js";
 import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
+import * as finanzas from "./finanzas.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -176,6 +177,7 @@ api.get("/panel", envolver(() => {
       meta_usuario: meta.estado().usuario,
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
+    pagos_vencidos: (finanzas.generarMensualidades(), finanzas.listarCobros({ estado: "vencido" }).length),
   };
 }));
 
@@ -256,6 +258,18 @@ api.get("/cuentas", envolver(() => agencia.cuentas()));
 api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
   cliente: agencia.clienteRequerido(req.params.id).id, plataforma: req.body?.plataforma, monto: req.body?.monto, mes: req.body?.mes || undefined,
 })));
+// ---------- Finanzas de la agencia y Pulso ----------
+api.get("/finanzas", envolver((req) => finanzas.finanzas(req.query.mes ? String(req.query.mes) : undefined)));
+api.get("/pulso", envolver(() => finanzas.pulso()));
+api.post("/cobros", envolver((req) => finanzas.registrarCobro(req.body || {})));
+api.patch("/cobros/:id", envolver((req) => {
+  const b = req.body || {};
+  if (b.pagado !== undefined) return finanzas.marcarPagado(Number(req.params.id), b.pagado);
+  return finanzas.actualizarCobro(Number(req.params.id), b);
+}));
+api.delete("/cobros/:id", envolver((req) => finanzas.borrarCobro(Number(req.params.id))));
+api.post("/gastos", envolver((req) => finanzas.registrarGastoAgencia(req.body || {})));
+api.delete("/gastos/:id", envolver((req) => finanzas.borrarGasto(Number(req.params.id))));
 // Junta con el cliente: es un evento normal de la agenda, ligado al cliente (avisa igual que los demás).
 api.post("/clientes/:id/junta", envolver((req) => {
   const c = agencia.clienteRequerido(req.params.id);

@@ -103,6 +103,8 @@ async function cargarPanel() {
   const n = p.aprobaciones_pendientes || 0;
   $("#badge-aprob").hidden = !n;
   $("#badge-aprob").textContent = n;
+  $("#badge-finanzas").hidden = !p.pagos_vencidos;
+  $("#badge-finanzas").textContent = p.pagos_vencidos || "";
   correoConectado = { gmail: c.gmail, outlook: c.outlook };
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
   $("#btn-outlook").textContent = c.outlook ? "Desconectar Hotmail" : "Conectar Hotmail";
@@ -757,6 +759,7 @@ function abrirFormCliente(c) {
   for (const k of CAMPOS_CL) $("#cl-" + k).value = c?.[k] ?? (k === "estado" ? "activo" : "");
   $("#cl-presupuesto").value = c?.presupuesto_mensual ?? "";
   $("#cl-presupuesto-anuncios").value = c?.presupuesto_anuncios ?? "";
+  $("#cl-dia-pago").value = c?.dia_pago ?? "";
   $("#cl-msg").hidden = true;
   $("#dlg-cliente").showModal();
 }
@@ -771,6 +774,9 @@ $("#form-cliente").addEventListener("submit", async (e) => {
   const tope = $("#cl-presupuesto-anuncios").value.replace(/[$,\s]/g, "");
   body.presupuesto_anuncios = tope ? Number(tope) : null;
   if (tope && !Number.isFinite(body.presupuesto_anuncios)) { $("#cl-msg").textContent = "El tope de anuncios debe ser un número."; $("#cl-msg").hidden = false; return; }
+  const dia = $("#cl-dia-pago").value.trim();
+  body.dia_pago = dia ? Number(dia) : null;
+  if (dia && !(Number.isInteger(body.dia_pago) && body.dia_pago >= 1 && body.dia_pago <= 28)) { $("#cl-msg").textContent = "El día de pago va del 1 al 28."; $("#cl-msg").hidden = false; return; }
   try {
     const id = $("#cl-id").value;
     const guardadoCl = await api(id ? `/clientes/${id}` : "/clientes", { method: id ? "PATCH" : "POST", body });
@@ -907,6 +913,7 @@ const SECCIONES = {
   correo: { cargar: () => cargarCorreo(), cada: 120e3 },
   mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
   agencia: { cargar: () => cargarTablero(), cada: 30e3 },
+  finanzas: { cargar: () => agenciaTableros().cargarFinanzas(), cada: 60e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
   aprobaciones: { cargar: () => cargarAprobaciones(), cada: 30e3 },
@@ -1831,8 +1838,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
-    if (d.tipo === "agencia" && ["agencia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
-    if (d.tipo === "aviso" && ["agencia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "agencia" && ["agencia", "finanzas", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "aviso" && ["agencia", "finanzas", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
   };
 }
 
