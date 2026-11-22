@@ -1327,3 +1327,130 @@ html[data-mood="dia"] .mt-lista li { background: rgba(123,92,255,.06); }
   .mt-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mt-lista li { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Delta Pulse (Panel general): lo que necesita atención hoy ---------- */
+.tablero-ag { grid-template-areas: "pulso pulso pulso" "kpis kpis kpis" "c1 c2 c3" "nota nota nota"; }
+.pg-pulso { grid-area: pulso; position: relative; overflow: hidden; border-color: rgba(139,115,255,.4); background: linear-gradient(120deg, rgba(123,92,255,.20), rgba(16,12,42,.62) 45%); }
+.pg-pulso.n-rojo { border-color: rgba(255,90,122,.45); background: linear-gradient(120deg, rgba(255,90,122,.16), rgba(16,12,42,.62) 45%); }
+.pg-pulso.n-verde { border-color: rgba(79,227,176,.35); background: linear-gradient(120deg, rgba(79,227,176,.12), rgba(16,12,42,.62) 45%); }
+.pu-cabeza { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.pu-icono { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--cian-suave); border: 1px solid var(--borde); }
+.pu-icono svg { width: 20px; height: 20px; stroke: var(--lila); }
+.pg-pulso.n-rojo .pu-icono svg { stroke: var(--rojo); animation: latir 1.8s ease-in-out infinite; }
+.pu-titulo { display: grid; line-height: 1.2; }
+.pu-titulo b { font-size: 15px; letter-spacing: .02em; }
+.pu-titulo small { color: var(--tenue); font-size: 12px; }
+.pu-estado { font-size: 13px; font-weight: 600; margin-left: auto; display: inline-flex; align-items: center; }
+.pu-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.pu-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--borde); border-left: 3px solid var(--cian); background: rgba(8,5,24,.45); color: inherit; font: inherit; min-width: 0; transition: transform .15s, background .15s; }
+.pu-item:hover { transform: translateY(-1px); background: var(--cian-suave); }
+.pu-item.n-rojo { border-left-color: var(--rojo); }
+.pu-item.n-amarillo { border-left-color: var(--amarillo); }
+.pu-n { font-size: 26px; font-weight: 300; min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; line-height: 1; }
+.t-info { color: var(--lila); }
+.pu-txt { display: grid; gap: 1px; min-width: 0; font-size: 13px; font-weight: 600; }
+.pu-txt small { font-weight: 400; font-size: 11.5px; color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Finanzas ---------- */
+.fi-mes { align-items: center; }
+.fi-mes-nombre { min-width: 150px; font-weight: 600; }
+.fi-mes button:disabled { opacity: .35; cursor: default; }
+.tablero-fi { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); grid-template-areas: "kpis kpis" "c1 c2" "nota nota"; align-items: start; }
+.fi-col-1 { grid-area: c1; } .fi-col-2 { grid-area: c2; }
+.fi-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.fi-kpi { cursor: default; }
+.fi-kpi[data-fi-ir] { cursor: pointer; }
+.fi-kpi.negativa b { color: var(--rojo); }
+.fi-svg { width: 100%; height: auto; display: block; }
+.fi-reja { stroke: rgba(149,144,192,.18); stroke-width: 1; }
+.fi-eje { fill: var(--tenue); font-size: 10.5px; }
+.fi-eje.sel { fill: var(--texto); font-weight: 700; }
+.fi-zona { fill: transparent; cursor: pointer; }
+.fi-mes-g:hover .fi-zona, .fi-mes-g.sel .fi-zona { fill: rgba(139,115,255,.08); }
+rect.fi-ing { fill: #8b73ff; }
+rect.fi-gas { fill: rgba(255,90,122,.55); }
+.fi-util { fill: none; stroke: var(--verde); stroke-width: 2; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(79,227,176,.5)); }
+.fi-util-p { fill: var(--verde); }
+.fi-ley { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--tenue); margin-top: 6px; }
+.fi-ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.fi-ley i.fi-ing { background: #8b73ff; } .fi-ley i.fi-gas { background: rgba(255,90,122,.7); } .fi-ley i.fi-util { background: var(--verde); height: 3px; vertical-align: 3px; border: none; filter: none; }
+.fi-rent { display: grid; gap: 4px; }
+.fi-rent-fila { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) 62px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; font-variant-numeric: tabular-nums; font-size: 13px; }
+.fi-rent-fila:not(.fi-rent-cabeza) { background: rgba(8,5,24,.4); cursor: pointer; }
+.fi-rent-fila:not(.fi-rent-cabeza):hover { background: var(--cian-suave); }
+.fi-rent-cabeza { font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; padding-top: 0; padding-bottom: 0; }
+.fi-rent-nombre { display: grid; gap: 4px; min-width: 0; }
+.fi-rent-nombre b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fi-rent-nombre small { font-size: 11px; }
+.fi-rent-barra { height: 4px; }
+.fi-aviso { margin: 10px 0 0; }
+.fi-aviso a { color: var(--lila); }
+.fi-cobros li, .fi-gastos li { gap: 10px; }
+.fi-cobros .pg-linea-txt, .fi-gastos .pg-linea-txt, .fi-pagos-caja .pg-linea-txt { flex: 1; min-width: 0; }
+.fi-cobro .pg-linea-txt b { cursor: pointer; }
+.fi-cobro.pagado { border-left-color: var(--verde); }
+.fi-cobro.pagado .pg-fecha b { color: var(--verde); }
+.fi-monto { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.fi-pagar { white-space: nowrap; }
+.fi-quitar { border: 1px solid transparent; background: none; color: var(--tenue); border-radius: 999px; padding: 2px 8px; font-size: 14px; line-height: 1.2; white-space: nowrap; }
+.fi-quitar:hover { color: var(--texto); border-color: var(--borde); }
+.fi-quitar.seguro { color: var(--rojo); border-color: rgba(255,90,122,.5); font-size: 12px; }
+.fi-categorias { display: grid; gap: 8px; margin-bottom: 12px; }
+.fi-cat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; font-size: 12.5px; }
+.fi-cat b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.fi-cat .pg-barra { grid-column: 1 / -1; height: 4px; }
+.fi-nuevo { margin-top: 12px; }
+.fi-nuevo summary { cursor: pointer; color: var(--lila); font-size: 13px; font-weight: 600; list-style: none; }
+.fi-nuevo summary::-webkit-details-marker { display: none; }
+.fi-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 10px; align-items: end; }
+.fi-form input[type=text], .fi-form select, .fi-form input[type=date] { padding: 9px 11px; font-size: 13px; }
+.fi-form label { display: grid; gap: 3px; }
+.fi-form button[type=submit] { padding: 9px 14px; }
+.fi-form .fi-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tenue); }
+.fi-pagos-caja .pg-linea, .fi-cobranza-caja .pg-linea { max-height: 420px; overflow: auto; }
+.badge#badge-finanzas { background: var(--rojo); color: #fff; box-shadow: 0 0 10px rgba(255,90,122,.6); }
+
+@media (max-width: 1280px) {
+  .tablero-ag { grid-template-areas: "pulso pulso" "kpis kpis" "c1 c2" "c1 c3" "nota nota"; }
+}
+@media (max-width: 1100px) {
+  .tablero-fi { grid-template-columns: minmax(0, 1fr); grid-template-areas: "kpis" "c1" "c2" "nota"; }
+  .fi-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .tablero-ag { grid-template-areas: none; }
+  .pg-pulso { order: -1; grid-area: auto; }
+  .pu-estado { margin-left: 0; width: 100%; }
+  .pu-cabeza .tb-link { margin-left: auto; }
+  .pu-items { grid-template-columns: minmax(0, 1fr); }
+  .pu-n { font-size: 22px; }
+  .fi-mes { order: 3; width: 100%; display: flex; }
+  .fi-mes-nombre { flex: 1; }
+  .fi-kpi .tb-chip { position: static; justify-self: start; margin: 2px 0; }
+  .fi-rent-fila { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fi-rent-fila > :nth-child(3), .fi-rent-fila > :nth-child(5) { display: none; }
+  .fi-form { grid-template-columns: minmax(0, 1fr); }
+  .fi-cobro .fi-pagar { padding: 5px 9px; }
+  .fi-cobros li, .fi-pagos-caja .pg-linea li { flex-wrap: wrap; row-gap: 4px; }
+  .fi-cobros .pg-linea-txt, .fi-pagos-caja .pg-linea-txt { flex: 1 1 calc(100% - 60px); }
+  .fi-cobros .fi-monto, .fi-pagos-caja .fi-monto { margin-left: 52px; margin-right: auto; }
+  .fi-pagos-caja .pg-linea, .fi-cobranza-caja .pg-linea { max-height: none; overflow: visible; }
+  .pu-items.corto .pu-item:nth-child(n+6) { display: none; }
+  .pu-mas { display: block; width: 100%; margin-top: 8px; }
+}
+@media (min-width: 901px) { .pu-mas { display: none; } }
+
+/* Día */
+html[data-mood="dia"] .pg-pulso { background: linear-gradient(120deg, rgba(123,92,255,.14), rgba(255,255,255,.8) 45%); }
+html[data-mood="dia"] .pg-pulso.n-rojo { background: linear-gradient(120deg, rgba(217,58,92,.12), rgba(255,255,255,.8) 45%); }
+html[data-mood="dia"] .pg-pulso.n-verde { background: linear-gradient(120deg, rgba(15,154,114,.10), rgba(255,255,255,.8) 45%); }
+html[data-mood="dia"] .pu-item, html[data-mood="dia"] .fi-rent-fila:not(.fi-rent-cabeza) { background: rgba(255,255,255,.75); }
+html[data-mood="dia"] .pu-item:hover, html[data-mood="dia"] .fi-rent-fila:not(.fi-rent-cabeza):hover { background: rgba(106,76,240,.10); }
+html[data-mood="dia"] .pu-n, html[data-mood="dia"] .fi-kpi b { font-weight: 400; }
+html[data-mood="dia"] .t-info { color: #5a3fd6; }
+html[data-mood="dia"] rect.fi-ing { fill: #6a4cf0; }
+html[data-mood="dia"] rect.fi-gas { fill: rgba(217,58,92,.55); }
+html[data-mood="dia"] .fi-util { stroke: #0f9a72; filter: none; }
+html[data-mood="dia"] .fi-util-p { fill: #0f9a72; }
+html[data-mood="dia"] .fi-reja { stroke: rgba(82,50,216,.14); }
+html[data-mood="dia"] .fi-nuevo summary { color: #5a3fd6; }

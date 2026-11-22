@@ -10,6 +10,7 @@ import * as correo from "./correo.js";
 import * as mercados from "./mercados.js";
 import * as noticias from "./noticias.js";
 import * as agencia from "./agencia.js";
+import * as finanzas from "./finanzas.js";
 import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 
@@ -72,9 +73,11 @@ La agencia (eres su directora):
 - Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
 - Diseño (diseno) entrega piezas TERMINADAS en imagen: carruseles, posts, historias, portadas y, con Higgsfield conectado, imágenes y videos con IA. Cuando pidan "hazme un carrusel/post/historia/video", encárgaselo a Diseño (con el tema, el cliente y el estilo). Al terminar, las piezas aparecen en el Estudio de diseño para descargarlas.
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
-- Pantallas de la agencia: Panel general (resumen y alertas del día), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+- Pantallas de la agencia: Panel general (Pulso, resumen y alertas del día), Finanzas (cobros, gastos, utilidad), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
 - Salud de cada cliente (semáforo): rojo si tiene entregas atrasadas o los anuncios se pasaron del tope; amarillo si una entrega vence en menos de 2 días, algo espera aprobación más de 2 días, los anuncios van arriba del 85 % del tope o lleva un mes sin movimiento; si no, verde. El dueño puede marcarla a mano (salud_manual) con una nota. Cuando pregunte cómo van sus clientes, usa tablero_agencia o ver_cliente y explica los motivos en palabras sencillas.
 - Meta (Facebook, Instagram y anuncios de los clientes): se conecta en Ajustes ⚙ → "Conectar Meta". Ya conectado, DELTA lee sola cada 6 horas los seguidores, alcance y publicaciones de las páginas e Instagram de cada cliente, y el gasto y resultados de sus cuentas de anuncios; el gasto de Meta se anota solo (no uses registrar_gasto_anuncios para Meta salvo que Meta no esté conectado). Para hablar de las redes o los anuncios de un cliente usa redes_cliente; si los números son viejos o pide lo más reciente, usa actualizar_meta. Si una página o cuenta no está asignada al cliente correcto, usa asignar_meta. Solo LEES: no publicas ni cambias campañas.
+- Finanzas de la agencia (pantalla Finanzas): lo que cobra a cada cliente, quién debe, los gastos de la agencia, la utilidad y el margen. La mensualidad de cada cliente es su presupuesto_mensual; DELTA crea sola un cobro "Mensualidad" por cliente activo cada mes que vence en su dia_pago (5 si no se dijo). Cuando el usuario diga que un cliente ya pagó, usa marcar_pagado. Para cobros extra (un proyecto, una sesión de fotos) usa registrar_cobro; para gastos de la agencia (nómina, programas, renta, contador…) usa registrar_gasto_agencia, con fijo=true si se repite cada mes. Lo que el cliente invierte en anuncios NO es gasto de la agencia. Para "cómo van las finanzas", "quién me debe" o "cuánto gané" usa finanzas_agencia. Solo con cifras que dé el usuario: nunca inventes montos.
+- Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
 - Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
 
 Reglas:
@@ -442,6 +445,7 @@ const CLIENTE_CAMPOS = {
   servicios: { type: "string", description: "Qué le hace la agencia" },
   presupuesto_mensual: { type: "number", description: "Lo que paga al mes a la agencia" },
   presupuesto_anuncios: { type: "number", description: "Tope mensual de inversión en anuncios del cliente" },
+  dia_pago: { type: "integer", minimum: 1, maximum: 28, description: "Día del mes en que vence su mensualidad (5 si no se dice)" },
   salud_manual: { type: "string", enum: ["auto", "verde", "amarillo", "rojo"], description: "Solo si el dueño quiere marcar la salud a mano; auto la regresa al cálculo automático" },
   salud_nota: { type: "string", description: "Por qué se marcó así la salud" },
   notas: { type: "string" },
@@ -592,6 +596,75 @@ herramientasBase.push(
 );
 herramientasBase.push(
   betaTool({
+    name: "pulso_agencia",
+    description: "Lo que necesita atención hoy en la agencia, contado y ordenado de lo urgente a lo informativo: clientes en rojo o amarillo, pagos vencidos o por vencer, entregas atrasadas o próximas, cosas por aprobar, anuncios pasados del tope, tareas vencidas, juntas de hoy y cuentas perdiendo seguidores.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    run: () => json(finanzas.pulso()),
+  }),
+  betaTool({
+    name: "finanzas_agencia",
+    description: "Finanzas de la agencia de un mes: facturado, cobrado, por cobrar y vencido, gastos, utilidad, margen, ingreso fijo mensual (MRR), ticket promedio, quién debe y cuántos días de atraso, gastos por categoría, rentabilidad por cliente e historia de 12 meses.",
+    inputSchema: { type: "object", properties: { mes: { type: "string", description: "AAAA-MM; si no se dice, el mes actual" } }, additionalProperties: false },
+    run: ({ mes }) => {
+      const f = finanzas.finanzas(mes);
+      const { categorias, cobros_mes, ...resto } = f;
+      return json(resto);
+    },
+  }),
+  betaTool({
+    name: "marcar_pagado",
+    description: "Marca que un cliente ya pagó. Con id marca ese cobro; con cliente marca su cobro pendiente más viejo. pagado = fecha AAAA-MM-DD (hoy si no se dice) o false para regresarlo a pendiente.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "integer", description: "Id del cobro" }, cliente: { type: "string", description: "Nombre o id del cliente" }, pagado: { anyOf: [{ type: "string" }, { type: "boolean" }], description: "AAAA-MM-DD, true (hoy) o false (no ha pagado)" } },
+      additionalProperties: false,
+    },
+    run: ({ id, cliente, pagado = true }) => {
+      if (!id && !cliente) throw new Error("Dime qué cliente pagó o el número de cobro");
+      const cobro = id ? finanzas.obtenerCobro(id) : finanzas.cobroPendienteDe(cliente);
+      if (!cobro) throw new Error(`No existe el cobro ${id}`);
+      return json(finanzas.marcarPagado(cobro.id, pagado));
+    },
+  }),
+  betaTool({
+    name: "registrar_cobro",
+    description: "Anota un cobro EXTRA a un cliente (un proyecto, una sesión de fotos…). Las mensualidades se crean solas; no las anotes aquí. Solo con cifras que dé el usuario.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string", description: "Nombre o id" },
+        concepto: { type: "string" },
+        monto: { type: "number" },
+        mes: { type: "string", description: "AAAA-MM al que corresponde; el actual si no se dice" },
+        vence: { type: "string", description: "AAAA-MM-DD; si no se dice, su día de pago" },
+        pagado: { type: "string", description: "AAAA-MM-DD si ya lo pagó" },
+      },
+      required: ["cliente", "concepto", "monto"],
+      additionalProperties: false,
+    },
+    run: (i) => json(finanzas.registrarCobro(i)),
+  }),
+  betaTool({
+    name: "registrar_gasto_agencia",
+    description: "Anota un gasto de la AGENCIA (no el gasto en anuncios de un cliente). fijo=true si se repite cada mes (nómina, programas, renta). cliente solo si el gasto fue por ese cliente (cuenta en su rentabilidad).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        concepto: { type: "string" },
+        monto: { type: "number" },
+        categoria: { type: "string", enum: Object.keys(finanzas.CATEGORIAS) },
+        fecha: { type: "string", description: "AAAA-MM-DD; hoy si no se dice" },
+        fijo: { type: "boolean" },
+        cliente: { type: "string", description: "Nombre o id, solo si fue por un cliente" },
+      },
+      required: ["concepto", "monto"],
+      additionalProperties: false,
+    },
+    run: (i) => json(finanzas.registrarGastoAgencia(i)),
+  }),
+);
+herramientasBase.push(
+  betaTool({
     name: "redes_cliente",
     description: "Números de Meta de un cliente (de la última actualización): seguidores de Facebook e Instagram y cuánto cambiaron, alcance de 28 días, publicaciones e interacciones del mes, su mejor publicación, y de sus anuncios el gasto del mes, alcance, clics, conversaciones, prospectos, compras y campañas activas.",
     inputSchema: { type: "object", properties: { cliente: { type: "string", description: "Nombre o id" } }, required: ["cliente"], additionalProperties: false },
@@ -641,7 +714,7 @@ herramientasBase.push(
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },
@@ -659,7 +732,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
   "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
-  "asignar_meta",
+  "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia",
 ]);
 
 /**

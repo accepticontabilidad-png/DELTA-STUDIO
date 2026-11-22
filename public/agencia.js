@@ -65,7 +65,8 @@ export function iniciarAgencia(h) {
   //  PANEL GENERAL
   // =====================================================================
   async function cargarPanelGeneral() {
-    const [t, cuentas] = await Promise.all([api("/agencia"), api("/cuentas")]);
+    const [t, cuentas, pulso] = await Promise.all([api("/agencia"), api("/cuentas"), api("/pulso")]);
+    pintarPulso(pulso);
     const urgentes = t.alertas.filter((a) => a.nivel === "rojo").length;
     const pGasto = pct(t.gasto_anuncios_mes, t.tope_anuncios);
     const activos = t.salud.verde + t.salud.amarillo + t.salud.rojo;
@@ -80,7 +81,7 @@ export function iniciarAgencia(h) {
         chip: pGasto !== null ? [nivelGasto(pGasto), `${pGasto} %`] : null, pie: barra(t.gasto_anuncios_mes, t.tope_anuncios) },
       { bajar: "#pg-alertas", nombre: "Alertas de hoy", valor: t.alertas.length, extra: urgentes ? `${urgentes} urgente${urgentes === 1 ? "" : "s"}` : t.alertas.length ? "Nada urgente" : "Día tranquilo",
         chip: urgentes ? ["rojo", "Atender"] : t.alertas.length ? ["amarillo", "Revisar"] : ["verde", "Todo bien"] },
-      { href: "#/cuentas", nombre: "Ingreso mensual", valor: dinero(t.presupuesto_mensual) === "–" ? "$0" : dinero(t.presupuesto_mensual), extra: `${t.proyectos_abiertos} proyecto${t.proyectos_abiertos === 1 ? "" : "s"} abierto${t.proyectos_abiertos === 1 ? "" : "s"}` },
+      { href: "#/finanzas", nombre: "Ingreso mensual", valor: dinero(t.presupuesto_mensual) === "–" ? "$0" : dinero(t.presupuesto_mensual), extra: "Ver finanzas de la agencia" },
     ].map((k) => `<${k.href ? `a href="${k.href}"` : `button type="button" data-bajar="${k.bajar}"`} class="tb-kpi pg-kpi">
         <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
         <b>${esc(k.valor)}</b>
@@ -151,6 +152,30 @@ export function iniciarAgencia(h) {
 
     medidas($('[data-seccion="agencia"]'));
     $("#ag-actividad").innerHTML = t.actividad.length ? t.actividad.slice(0, 6).map(filaTrabajo).join("") : vacio("Los departamentos aún no han trabajado. Encárgueles algo en Departamentos.");
+  }
+
+
+  // ---------- Delta Pulse: lo que necesita atención hoy ----------
+  let pulsoAbierto = false;
+  function pintarPulso(p) {
+    const caja = $("#pg-pulso");
+    const nivel = p.urgentes ? "rojo" : p.total ? "amarillo" : "verde";
+    const frase = p.urgentes ? `${p.urgentes} cosa${p.urgentes === 1 ? "" : "s"} urgente${p.urgentes === 1 ? "" : "s"} hoy`
+      : p.total ? "Nada urgente, pero hay pendientes" : "Todo en orden por hoy";
+    caja.className = `panel pg-pulso n-${nivel}`;
+    caja.innerHTML = `
+      <div class="pu-cabeza">
+        <span class="pu-icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg></span>
+        <span class="pu-titulo"><b>Delta Pulse</b><small>¿Qué necesita mi atención hoy?</small></span>
+        <span class="pu-estado t-${nivel}">${foco(nivel)}${esc(frase)}</span>
+        <button type="button" class="tb-link" data-pedir="¿Qué necesita mi atención hoy en la agencia? Revisa el pulso y dime por dónde empiezo.">Por dónde empiezo</button>
+      </div>
+      ${p.items.length ? `<div class="pu-items ${pulsoAbierto ? "" : "corto"}">${p.items.map((x) => `<button type="button" class="pu-item n-${x.nivel}" data-ir-a="${esc(x.ir)}">
+          <b class="pu-n t-${x.nivel === "info" ? "info" : x.nivel}">${x.n}</b>
+          <span class="pu-txt"><span>${esc(x.texto)}</span>${x.detalle.length ? `<small>${x.detalle.map(esc).join(" · ")}</small>` : ""}</span>
+        </button>`).join("")}</div>${p.items.length > 5 && !pulsoAbierto ? `<button type="button" class="tb-link pu-mas" id="pu-mas">Ver ${p.items.length - 5} más</button>` : ""}`
+        : `<p class="pg-vacio">Sin pagos vencidos, entregas atrasadas ni clientes en rojo. Buen día para adelantar trabajo ✨</p>`}`;
+    $("#pu-mas")?.addEventListener("click", () => { pulsoAbierto = true; pintarPulso(p); });
   }
 
   // =====================================================================
@@ -468,6 +493,212 @@ export function iniciarAgencia(h) {
     } catch (err) { $("#mt-msg").textContent = err.message; }
   });
 
+  // =====================================================================
+  //  FINANZAS
+  // =====================================================================
+  let mesFi = null; // null = mes actual
+  const dinero0 = (n) => (n ? dinero(n) : "$0");
+  const conSignoPct = (n) => (n === null || n === undefined ? null : `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("es-MX", { maximumFractionDigits: 1 })} %`);
+  const fechaCorta = (d) => (d ? `${Number(d.slice(8, 10))} ${MESES[Number(d.slice(5, 7)) - 1]}` : "");
+  const moverMes = (m, n) => { const [a, x] = m.split("-").map(Number); return new Date(Date.UTC(a, x - 1 + n, 1)).toISOString().slice(0, 7); };
+  let ultimaFi = null;
+
+  async function cargarFinanzas() {
+    const f = await api(`/finanzas${mesFi ? `?mes=${mesFi}` : ""}`);
+    ultimaFi = f;
+    pintarFinanzas(f);
+  }
+
+  function pintarFinanzas(f) {
+    const mesLargo = f.nombre_mes.charAt(0).toUpperCase() + f.nombre_mes.slice(1);
+    $("#fi-hoy").textContent = mesLargo;
+    $("#fi-hoy").title = f.es_mes_actual ? "Este mes" : "Volver a este mes";
+    $("#fi-despues").disabled = f.es_mes_actual;
+    const chipCambio = (n, alReves = false) => (n === null ? null : [(n >= 0) !== alReves ? "verde" : "rojo", conSignoPct(n)]);
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi ${k.clase || ""}" ${k.ir ? `data-fi-ir="${k.ir}" role="button" tabindex="0"` : ""}>
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
+        <b>${esc(k.valor)}</b>
+        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
+        <span class="pg-kpi-pie">${k.pie || ""}</span>
+      </div>`;
+    const pCobrado = f.facturado ? Math.round((f.cobrado / f.facturado) * 100) : null;
+    $("#fi-kpis").innerHTML = [
+      { nombre: "Facturación", valor: dinero0(f.facturado), chip: chipCambio(f.cambio.facturado), extra: f.anterior.facturado ? `vs ${dinero0(f.anterior.facturado)} el mes anterior` : "lo que corresponde a este mes" },
+      { nombre: "Cobrado", valor: dinero0(f.cobrado), extra: pCobrado !== null ? `${pCobrado} % de lo facturado` : "dinero que ya llegó", pie: f.facturado ? barra(Math.min(f.cobrado, f.facturado), f.facturado).replace(/pg-barra \w*/, "pg-barra verde") : "" },
+      { nombre: "Por cobrar", valor: dinero0(f.por_cobrar), ir: "#fi-cobranza", chip: f.vencido ? ["rojo", `${dinero0(f.vencido)} vencido`] : f.por_cobrar ? ["amarillo", "Al corriente"] : ["verde", "Nadie debe"], extra: f.cobros_vencidos ? `${f.cobros_vencidos} pago${f.cobros_vencidos === 1 ? "" : "s"} vencido${f.cobros_vencidos === 1 ? "" : "s"}` : "de todos los meses" },
+      { nombre: "Gastos", valor: dinero0(f.gastos), ir: "#fi-gastos", chip: chipCambio(f.cambio.gastos, true), extra: "de la agencia (sin anuncios)" },
+      { nombre: "Utilidad", valor: f.utilidad < 0 ? `−${dinero0(-f.utilidad)}` : dinero0(f.utilidad), clase: f.utilidad < 0 ? "negativa" : "", chip: chipCambio(f.cambio.utilidad), extra: "facturación − gastos" },
+      { nombre: "Margen", valor: f.margen === null ? "–" : `${f.margen.toLocaleString("es-MX", { maximumFractionDigits: 1 })} %`, chip: f.margen === null ? null : [f.margen >= 40 ? "verde" : f.margen >= 15 ? "amarillo" : "rojo", f.margen >= 40 ? "Sano" : f.margen >= 15 ? "Justo" : "Bajo"], extra: "de cada peso facturado" },
+      { nombre: "Ingreso fijo al mes", valor: dinero0(f.mrr), extra: f.clientes_que_pagan ? `${f.clientes_que_pagan} cliente${f.clientes_que_pagan === 1 ? "" : "s"} · promedio ${dinero0(f.ticket_promedio)}` : "Anota el pago mensual de cada cliente" },
+      { nombre: `Acumulado ${f.mes.slice(0, 4)}`, valor: dinero0(f.facturado_anio), extra: `utilidad ${f.utilidad_anio < 0 ? "−" + dinero0(-f.utilidad_anio) : dinero0(f.utilidad_anio)}` },
+    ].map(kpi).join("");
+
+    // Gráfica de 12 meses: barras de ingresos y gastos, línea de utilidad
+    $("#fi-grafica").innerHTML = grafica(f.historia, f.mes);
+
+    // Rentabilidad por cliente
+    $("#fi-rent-mes").textContent = mesLargo;
+    const maxR = Math.max(1, ...f.rentabilidad.map((r) => r.facturado));
+    $("#fi-rent").innerHTML = f.rentabilidad.length
+      ? `<div class="fi-rent-fila fi-rent-cabeza tenue"><span>Cliente</span><span>Facturado</span><span>Gastos</span><span>Utilidad</span><span>Margen</span></div>` +
+        f.rentabilidad.map((r) => `<div class="fi-rent-fila" data-cuenta="${r.id}" tabindex="0">
+          <span class="fi-rent-nombre"><b>${esc(r.nombre)}</b><span class="pg-barra fi-rent-barra"><i data-ancho="${Math.round((r.facturado / maxR) * 100)}"></i></span>${r.pendiente ? `<small class="t-amarillo">debe ${dinero0(r.pendiente)}</small>` : ""}</span>
+          <span>${dinero0(r.facturado)}</span>
+          <span class="tenue">${r.gastos ? dinero0(r.gastos) : "–"}</span>
+          <span class="${r.utilidad < 0 ? "t-rojo" : ""}">${r.utilidad < 0 ? "−" + dinero0(-r.utilidad) : dinero0(r.utilidad)}</span>
+          <span>${r.margen === null ? "–" : `<span class="tb-chip s-${r.margen >= 40 ? "verde" : r.margen >= 15 ? "amarillo" : "rojo"}">${Math.round(r.margen)} %</span>`}</span>
+        </div>`).join("") +
+        (f.clientes_sin_mensualidad.length ? `<p class="tenue chico fi-aviso">Sin pago mensual anotado: ${f.clientes_sin_mensualidad.map((c) => `<a href="#/cuentas" data-cuenta="${c.id}">${esc(c.nombre)}</a>`).join(", ")}. Anótalo en su ficha (Editar datos).</p>` : "")
+      : `<p class="pg-vacio">Aún no hay cobros este mes. Anota el <b>pago mensual</b> de cada cliente en Cuentas → Editar datos y DELTA crea sus mensualidades sola.</p>`;
+
+    // Cobranza (todo lo pendiente, de cualquier mes)
+    $("#fi-cobranza-n").textContent = f.pendientes.length ? `${f.pendientes.length} pendiente${f.pendientes.length === 1 ? "" : "s"}` : "";
+    $("#fi-cobranza").innerHTML = f.pendientes.length
+      ? f.pendientes.map((c) => filaCobro(c)).join("")
+      : vacio("Nadie te debe. Todo cobrado ✨");
+
+    // Gastos
+    $("#fi-gastos-mes").textContent = mesLargo;
+    const maxG = Math.max(1, ...f.gastos_por_categoria.map((g) => g.monto));
+    $("#fi-categorias").innerHTML = f.gastos_por_categoria.map((g) => `<div class="fi-cat"><span>${esc(g.nombre)}</span><b>${dinero0(g.monto)}</b><span class="pg-barra"><i data-ancho="${Math.round((g.monto / maxG) * 100)}"></i></span></div>`).join("");
+    $("#fi-gastos").innerHTML = f.gastos_detalle.length
+      ? f.gastos_detalle.map((g) => `<li>
+          <span class="pg-fecha"><b>${g.fijo ? "↻" : Number(g.fecha.slice(8, 10))}</b><small>${g.fijo ? "fijo" : MESES[Number(g.fecha.slice(5, 7)) - 1]}</small></span>
+          <span class="pg-linea-txt"><b>${esc(g.concepto)}</b><small>${[f.categorias[g.categoria], g.cliente ? `por ${g.cliente}` : ""].filter(Boolean).map(esc).join(" · ")}</small></span>
+          <b class="fi-monto">${dinero0(g.monto)}</b>
+          <button type="button" class="fi-quitar" data-quitar-gasto="${g.id}" title="${g.fijo ? "Dar de baja desde este mes" : "Quitar"}" aria-label="Quitar">×</button>
+        </li>`).join("")
+      : vacio("Sin gastos anotados este mes.");
+
+    // Pagos recibidos en el mes
+    $("#fi-pagos-n").textContent = f.pagados_mes.length ? dinero0(f.cobrado) : "";
+    $("#fi-pagos").innerHTML = f.pagados_mes.length
+      ? f.pagados_mes.map((c) => filaCobro(c)).join("")
+      : vacio(f.es_mes_actual ? "Aún no llega ningún pago este mes." : "Sin pagos ese mes.");
+
+    // Formularios
+    const clientes = cuentasParaForm();
+    $("#fi-cobro-cliente").innerHTML = clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("") || `<option value="">Primero da de alta un cliente</option>`;
+    if (!$("#fi-gasto-cat").options.length) $("#fi-gasto-cat").innerHTML = Object.entries(f.categorias).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    const elegido = $("#fi-gasto-cliente").value;
+    $("#fi-gasto-cliente").innerHTML = `<option value="">De la agencia (no es por un cliente)</option>` + clientes.map((c) => `<option value="${c.id}" ${String(c.id) === elegido ? "selected" : ""}>Por ${esc(c.nombre)}</option>`).join("");
+
+    medidas($('[data-seccion="finanzas"]'));
+  }
+
+  let clientesFi = [];
+  const cuentasParaForm = () => clientesFi;
+
+  function filaCobro(c) {
+    const n = c.estado === "vencido" ? "rojo" : c.estado === "pendiente" && c.dias_para_vencer <= 3 ? "amarillo" : "";
+    const cuando = c.estado === "pagado" ? `pagó el ${fechaCorta(c.pagado)}`
+      : c.estado === "vencido" ? `${c.dias_atraso} día${c.dias_atraso === 1 ? "" : "s"} de retraso`
+      : c.dias_para_vencer === 0 ? "vence hoy" : `vence en ${c.dias_para_vencer} día${c.dias_para_vencer === 1 ? "" : "s"}`;
+    const fechaRef = c.estado === "pagado" ? c.pagado : c.vence;
+    return `<li class="fi-cobro ${n ? "n-" + n : ""} ${c.estado}">
+      <span class="pg-fecha"><b>${Number(fechaRef.slice(8, 10))}</b><small>${MESES[Number(fechaRef.slice(5, 7)) - 1]}</small></span>
+      <span class="pg-linea-txt"><b data-cuenta="${c.cliente_id}" tabindex="0">${esc(c.cliente)}</b><small>${[c.concepto, cuando].map(esc).join(" · ")}</small></span>
+      <b class="fi-monto ${n ? "t-" + n : ""}">${dinero0(c.monto)}</b>
+      ${c.estado === "pagado"
+        ? `<button type="button" class="fi-quitar" data-cobro-pendiente="${c.id}" title="Regresar a pendiente" aria-label="Regresar a pendiente">↺</button>`
+        : `<button type="button" class="tb-link fi-pagar" data-cobro-pagado="${c.id}">Ya pagó</button>`}
+    </li>`;
+  }
+
+  function grafica(h, mesSel) {
+    const W = 640, H = 210, izq = 46, abajo = 22, arriba = 10;
+    const max = Math.max(1, ...h.map((x) => Math.max(x.facturado, x.gastos)));
+    const min = Math.min(0, ...h.map((x) => x.utilidad));
+    const rango = max - min;
+    const y = (v) => arriba + (H - arriba - abajo) * (1 - (v - min) / rango);
+    const paso = (W - izq) / h.length;
+    const ancho = Math.max(4, paso * 0.32);
+    const marcas = [0, 0.5, 1].map((p) => min + rango * p);
+    const etiqueta = (v) => (Math.abs(v) >= 1000 ? `${compacto.format(v)}` : Math.round(v));
+    const puntos = h.map((x, i) => `${izq + paso * i + paso / 2},${y(x.utilidad).toFixed(1)}`).join(" ");
+    const hayDatos = h.some((x) => x.facturado || x.gastos);
+    return `<svg viewBox="0 0 ${W} ${H}" class="fi-svg" role="img" aria-label="Ingresos, gastos y utilidad de los últimos 12 meses">
+      ${marcas.map((v) => `<line x1="${izq}" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="fi-reja"/><text x="${izq - 6}" y="${y(v) + 4}" class="fi-eje" text-anchor="end">$${etiqueta(v)}</text>`).join("")}
+      ${h.map((x, i) => {
+        const cx = izq + paso * i + paso / 2;
+        const sel = x.mes === mesSel ? "sel" : "";
+        return `<g class="fi-mes-g ${sel}" data-fi-mes="${x.mes}">
+          <title>${MESES[Number(x.mes.slice(5)) - 1]} ${x.mes.slice(0, 4)}: ingresos ${dinero0(x.facturado)}, gastos ${dinero0(x.gastos)}, utilidad ${x.utilidad < 0 ? "−" + dinero0(-x.utilidad) : dinero0(x.utilidad)}</title>
+          <rect x="${cx - paso / 2}" y="${arriba}" width="${paso}" height="${H - arriba - abajo}" class="fi-zona"/>
+          <rect x="${cx - ancho - 1}" y="${y(Math.max(0, x.facturado))}" width="${ancho}" height="${Math.max(0, y(0) - y(x.facturado))}" rx="2" class="fi-ing"/>
+          <rect x="${cx + 1}" y="${y(Math.max(0, x.gastos))}" width="${ancho}" height="${Math.max(0, y(0) - y(x.gastos))}" rx="2" class="fi-gas"/>
+          <text x="${cx}" y="${H - 6}" class="fi-eje ${sel}" text-anchor="middle">${MESES[Number(x.mes.slice(5)) - 1]}</text>
+        </g>`;
+      }).join("")}
+      ${hayDatos ? `<polyline points="${puntos}" class="fi-util"/>${h.map((x, i) => `<circle cx="${izq + paso * i + paso / 2}" cy="${y(x.utilidad)}" r="${x.mes === mesSel ? 4 : 2.5}" class="fi-util-p"/>`).join("")}` : ""}
+    </svg>
+    <div class="fi-ley"><span><i class="fi-ing"></i>Ingresos</span><span><i class="fi-gas"></i>Gastos</span><span><i class="fi-util"></i>Utilidad</span>${hayDatos ? "" : `<span class="tenue">Se irá llenando mes con mes.</span>`}</div>`;
+  }
+
+  async function prepararFinanzas() {
+    clientesFi = (await api("/cuentas")).filter((c) => c.estado !== "terminado");
+  }
+
+  $("#fi-antes").addEventListener("click", () => { mesFi = moverMes(ultimaFi?.mes || new Date().toISOString().slice(0, 7), -1); cargarFinanzas().catch((e) => avisar(e.message)); });
+  $("#fi-despues").addEventListener("click", () => { if (!ultimaFi || ultimaFi.es_mes_actual) return; mesFi = moverMes(ultimaFi.mes, 1); cargarFinanzas().catch((e) => avisar(e.message)); });
+  $("#fi-hoy").addEventListener("click", () => { mesFi = null; cargarFinanzas().catch((e) => avisar(e.message)); });
+  $("#fi-grafica").addEventListener("click", (e) => {
+    const g = e.target.closest("[data-fi-mes]");
+    if (!g) return;
+    mesFi = g.dataset.fiMes;
+    cargarFinanzas().catch((err) => avisar(err.message));
+  });
+  const enviarFi = (form, fn, despues) => $(form).addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const b = e.target.querySelector("button[type=submit]");
+    b.disabled = true;
+    try { await fn(); sonar("accion"); e.target.reset(); despues?.(); await cargarFinanzas(); }
+    catch (err) { avisar(err.message); }
+    b.disabled = false;
+  });
+  enviarFi("#fi-form-cobro", () => api("/cobros", { method: "POST", body: {
+    cliente: $("#fi-cobro-cliente").value, concepto: $("#fi-cobro-concepto").value.trim(), monto: $("#fi-cobro-monto").value,
+    vence: $("#fi-cobro-vence").value || undefined, mes: ultimaFi?.mes,
+  } }), () => { $("#fi-det-cobro").open = false; });
+  enviarFi("#fi-form-gasto", () => api("/gastos", { method: "POST", body: {
+    concepto: $("#fi-gasto-concepto").value.trim(), monto: $("#fi-gasto-monto").value, categoria: $("#fi-gasto-cat").value,
+    cliente: $("#fi-gasto-cliente").value || undefined, fijo: $("#fi-gasto-fijo").checked,
+    fecha: ultimaFi && !ultimaFi.es_mes_actual ? `${ultimaFi.mes}-01` : undefined,
+  } }), () => { $("#fi-det-gasto").open = false; });
+
+  // Botones de las filas: "Ya pagó", regresar a pendiente y quitar gasto (con un segundo toque para confirmar).
+  $('[data-seccion="finanzas"]').addEventListener("click", async (e) => {
+    const ir = e.target.closest("[data-fi-ir]");
+    if (ir) {
+      const destino = $(ir.dataset.fiIr);
+      const det = destino?.closest("details");
+      if (det) det.open = true;
+      (destino?.closest(".panel") || destino)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (det) setTimeout(() => destino.querySelector("input, select")?.focus(), 350);
+      return;
+    }
+    const pagado = e.target.closest("[data-cobro-pagado]");
+    const pendiente = e.target.closest("[data-cobro-pendiente]");
+    const quitar = e.target.closest("[data-quitar-gasto]");
+    const b = pagado || pendiente || quitar;
+    if (!b) return;
+    if (quitar && !b.classList.contains("seguro")) {
+      b.classList.add("seguro");
+      b.textContent = "¿Quitar?";
+      setTimeout(() => { b.classList.remove("seguro"); b.textContent = "×"; }, 3000);
+      return;
+    }
+    b.disabled = true;
+    try {
+      if (pagado) await api(`/cobros/${pagado.dataset.cobroPagado}`, { method: "PATCH", body: { pagado: true } });
+      else if (pendiente) await api(`/cobros/${pendiente.dataset.cobroPendiente}`, { method: "PATCH", body: { pagado: false } });
+      else await api(`/gastos/${quitar.dataset.quitarGasto}`, { method: "DELETE" });
+      sonar("accion");
+      await cargarFinanzas();
+    } catch (err) { avisar(err.message); b.disabled = false; }
+  });
+
   async function abrirCuenta(id, { mover = true } = {}) {
     elegida = Number(id);
     guardado.set("delta_cuenta", String(elegida));
@@ -498,9 +729,9 @@ export function iniciarAgencia(h) {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
-    const x = e.target.closest?.("[data-cuenta][tabindex], [data-ir-a][tabindex]");
+    const x = e.target.closest?.("[data-cuenta][tabindex], [data-ir-a][tabindex], [data-fi-ir][tabindex]");
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }
