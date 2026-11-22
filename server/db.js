@@ -171,6 +171,29 @@ CREATE TABLE IF NOT EXISTS gasto_anuncios (
 );
 `);
 
+// Meta (Facebook, Instagram y cuentas de anuncios de los clientes).
+// meta_activos: lo que DELTA encontró en la cuenta de Meta del dueño y a qué cliente pertenece.
+// meta_fotos: una foto de los números de cada cliente por día (seguidores, alcance, anuncios…).
+db.exec(`
+CREATE TABLE IF NOT EXISTS meta_activos (
+  id TEXT PRIMARY KEY,                           -- act_123 | page:123 | ig:123
+  tipo TEXT NOT NULL,                            -- anuncios | pagina | instagram
+  nombre TEXT NOT NULL,
+  extra TEXT,                                    -- JSON: moneda, usuario de Instagram, página ligada…
+  token TEXT,                                    -- permiso propio de la página (nunca sale a la pantalla)
+  cliente_id INTEGER REFERENCES clientes(id),
+  ligado TEXT,                                   -- auto | manual
+  visto TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TABLE IF NOT EXISTS meta_fotos (
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  fecha TEXT NOT NULL,                           -- AAAA-MM-DD local
+  datos TEXT NOT NULL,                           -- JSON
+  actualizado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (cliente_id, fecha)
+);
+`);
+
 export function getAjuste(clave, porDefecto = null) {
   const fila = db.prepare("SELECT valor FROM ajustes WHERE clave = ?").get(clave);
   return fila ? fila.valor : porDefecto;

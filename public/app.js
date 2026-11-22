@@ -91,7 +91,8 @@ async function cargarPanel() {
     [c.outlook ? `Hotmail${c.outlook_cuenta ? ` (${c.outlook_cuenta})` : ""}` : c.outlook_disponible ? "Hotmail: toque Conectar Hotmail" : "Hotmail: faltan sus llaves de Microsoft en Railway", c.outlook],
     ["Bolsa y noticias", true], [c.higgsfield ? "Higgsfield (imágenes y video con IA)" : "Higgsfield: falta su llave en Railway", c.higgsfield], ["WhatsApp", c.whatsapp], ["Avisos en este equipo", c.push],
   ].map(([n, on]) => `<li class="${on ? "on" : ""}"><span class="punto"></span>${n}</li>`);
-  filas.push(`<li class="pronto"><span class="punto"></span>Cuentas de clientes (Meta, Instagram, TikTok): próximamente</li>`);
+  filas.push(`<li class="${c.meta ? "on" : ""}"><span class="punto"></span>${c.meta ? `Meta: Facebook, Instagram y anuncios de clientes${c.meta_usuario ? ` (${esc(c.meta_usuario)})` : ""}` : c.meta_disponible ? "Meta: toque Conectar Meta" : "Meta: faltan sus llaves de Meta en Railway"}</li>`);
+  filas.push(`<li class="pronto"><span class="punto"></span>TikTok y Google Ads de clientes: próximamente</li>`);
   $("#lista-conexiones").innerHTML = filas.join("");
 
   $("#lista-avisos").innerHTML = p.avisos.length
@@ -105,6 +106,8 @@ async function cargarPanel() {
   correoConectado = { gmail: c.gmail, outlook: c.outlook };
   $("#btn-gmail").textContent = c.gmail ? "Desconectar Gmail" : "Conectar Gmail";
   $("#btn-outlook").textContent = c.outlook ? "Desconectar Hotmail" : "Conectar Hotmail";
+  metaConectado = Boolean(c.meta);
+  $("#btn-meta-aj").textContent = c.meta ? "Meta de clientes" : "Conectar Meta";
 
   if (p.voz) { vozNatural = p.voz; pintarVoz(); }
   $("#aj-zona").value = p.zona_horaria;
@@ -112,6 +115,7 @@ async function cargarPanel() {
 }
 
 let correoConectado = { gmail: false, outlook: false };
+let metaConectado = false;
 const NOMBRE_CUENTA = { gmail: "Gmail", outlook: "Hotmail" };
 const remitente = (m) => m.de.replace(/<.*>/, "").replace(/"/g, "").trim() || m.de;
 const BANDEJAS = ["gmail", "outlook"];
@@ -965,6 +969,30 @@ for (const boton of document.querySelectorAll("[data-correo]")) {
       location.href = url;
     } catch (err) { $("#aj-msg").textContent = err.message; }
   });
+}
+
+// Meta: si ya está conectado abre la ventana de clientes; si no, va a Facebook a dar permiso.
+$("#btn-meta-aj").addEventListener("click", async () => {
+  try {
+    if (metaConectado) {
+      $("#ajustes").close();
+      location.hash = "#/cuentas";
+      return void agenciaTableros().abrirMeta();
+    }
+    const { url } = await api("/meta/conectar");
+    location.href = url;
+  } catch (err) { $("#aj-msg").textContent = err.message; }
+});
+{
+  const q = new URLSearchParams(location.search);
+  const m = q.get("meta");
+  if (m) {
+    history.replaceState(null, "", "/" + location.hash);
+    setTimeout(() => {
+      burbuja("aviso", m === "ok" ? "Meta conectado. Estoy buscando las páginas, Instagram y cuentas de anuncios de sus clientes; en un momento le enseño qué encontré." : `No se pudo conectar Meta: ${q.get("motivo") || "intente de nuevo"}`);
+      if (m === "ok") setTimeout(() => agenciaTableros().abrirMeta().catch(() => {}), 2500);
+    }, 800);
+  }
 }
 
 // Regreso de Google o Microsoft después de conectar un correo

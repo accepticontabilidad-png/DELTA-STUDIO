@@ -348,7 +348,7 @@
               <ul id="pg-juntas" class="pg-linea"></ul>
             </div>
           </div>
-          <p class="tenue chico tb-nota">El gasto en anuncios se anota a mano en cada cuenta (o díganselo a DELTA: "Clínica Sonrisa lleva 4,000 en Meta este mes"). Cuando se conecten Meta, Google y TikTok se llenará solo.</p>
+          <p class="tenue chico tb-nota">Con Meta conectado, el gasto de Facebook e Instagram se llena solo cada 6 horas. Google y TikTok se anotan a mano en cada cuenta (o díganselo a DELTA: "Clínica Sonrisa lleva 4,000 en Google este mes").</p>
         </div>
       </section>
 
@@ -362,7 +362,7 @@
             <button type="button" data-salud="amarillo"><i class="foco amarillo"></i>Amarillo</button>
             <button type="button" data-salud="verde"><i class="foco verde"></i>Verde</button>
           </div>
-          <div class="ag-botones"><button type="button" class="ag-agregar" id="btn-nuevo-cliente">+ Cliente</button></div>
+          <div class="ag-botones"><button type="button" class="tb-link" id="btn-meta" title="Facebook, Instagram y anuncios de tus clientes">Meta</button><button type="button" class="ag-agregar" id="btn-nuevo-cliente">+ Cliente</button></div>
         </div>
         <div class="cu-rejilla">
           <div class="cu-lista" id="cu-lista"></div>
@@ -515,6 +515,16 @@
       </div>
     </form>
   </dialog>
+  <dialog id="dlg-meta" class="dialogo ancho">
+    <div class="ag-cabeza"><h2>Meta de tus clientes</h2><button type="button" class="icono-cerrar" id="mt-cerrar" aria-label="Cerrar">✕</button></div>
+    <p id="mt-estado" class="tenue"></p>
+    <div class="botones mt-botones">
+      <button type="button" id="mt-conectar" class="primario">Conectar Meta</button>
+      <button type="button" id="mt-actualizar">Actualizar ahora</button>
+    </div>
+    <p id="mt-msg" class="voz-msg" role="status"></p>
+    <ul id="mt-lista" class="mt-lista"></ul>
+  </dialog>
   <dialog id="dlg-trabajo" class="dialogo ancho">
     <span id="tr-meta" class="det-tipo"></span>
     <div id="tr-cuerpo" class="md"></div>
@@ -580,6 +590,7 @@
       <div class="botones">
         <button type="button" id="btn-gmail" data-correo="gmail">Conectar Gmail</button>
         <button type="button" id="btn-outlook" data-correo="outlook">Conectar Hotmail</button>
+        <button type="button" id="btn-meta-aj">Conectar Meta</button>
       </div>
       <div class="botones">
         <button type="button" id="btn-nueva-conv">Empezar conversación nueva</button>

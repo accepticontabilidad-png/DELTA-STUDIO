@@ -128,6 +128,31 @@ También una sola vez (unos 15 minutos). Microsoft pide que la "app" de DELTA vi
 
 DELTA lee, resume y hace borradores en las dos cuentas, siempre por separado; al contestar un correo, el borrador sale de la cuenta que lo recibió. Nunca envía sin que usted lo vea y diga "envíalo".
 
+### 5c. Conectar Meta (Facebook, Instagram y anuncios de los clientes)
+
+DELTA solo **lee**: seguidores, alcance, publicaciones e interacciones de la página de Facebook y el Instagram de cada cliente, y el gasto, alcance, clics, conversaciones, prospectos y compras de sus cuentas de anuncios. No publica ni toca campañas. Se actualiza sola cada 6 horas (y con el botón "Actualizar").
+
+Requisito: tu Facebook debe ver los activos de tus clientes (como socio en tu Business Manager o con rol en su página y cuenta de anuncios). Lo que tú ves en Business Suite es lo que verá DELTA.
+
+1. Entra a [developers.facebook.com](https://developers.facebook.com) con tu Facebook → **Mis apps → Crear app**. Nombre: "DELTA". Caso de uso: **Otro** → tipo **Negocio** → elige tu portafolio comercial (la agencia).
+2. En la app, agrega el producto **Inicio de sesión con Facebook para empresas** (Facebook Login for Business) y, en su **Configuración**, en "URI de redireccionamiento de OAuth válidos" pega: `https://delta-studio-production.up.railway.app/oauth/meta`
+3. En **Configuraciones → Crear configuración**: tipo de token **Token de acceso de usuario**, y marca estos permisos: `ads_read`, `business_management`, `pages_show_list`, `pages_read_engagement`, `read_insights`, `instagram_basic`, `instagram_manage_insights`. Guarda y copia el **ID de configuración**.
+4. En **Configuración de la app → Básica**: copia el **Identificador de la app** y la **Clave secreta**. En "URL de la política de privacidad" pon `https://delta-studio-production.up.railway.app/privacidad`.
+5. En Railway → servicio DELTA-STUDIO → **Variables**, agrega:
+   - `META_APP_ID` = identificador de la app
+   - `META_APP_SECRET` = clave secreta
+   - `META_CONFIG_ID` = ID de configuración
+6. Cuando Railway termine de reiniciar, abre DELTA → **Ajustes ⚙ → Conectar Meta** (o Cuentas → **Meta**). Entra con tu Facebook, elige **todas** las páginas, Instagram y cuentas de anuncios de tus clientes y acepta.
+7. DELTA abre la ventana **Meta de tus clientes**: asigna sola lo que se llama parecido a un cliente; lo demás lo eliges con el menú de cada fila. Página e Instagram ligados se mueven juntos.
+
+La app puede quedarse en modo **Desarrollo**: como tú eres el administrador, funciona para tus propios activos sin revisión de Meta.
+
+El permiso dura **60 días**; una semana antes DELTA te avisa para que toques "Volver a conectar" (un minuto).
+
+Alternativa sin vencimiento: en el Business Manager crea un **usuario del sistema** (administrador), asígnale los activos de los clientes, genera un token con esos mismos permisos y ponlo en Railway como `META_ACCESS_TOKEN` (entonces no hace falta el botón).
+
+Opcional: `META_API_VERSION` (por defecto `v23.0`).
+
 ### 6. Conectar WhatsApp
 
 WhatsApp exige usar su plataforma oficial para negocios. Se hace una sola vez:

@@ -24,6 +24,7 @@ import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
 import * as higgsfield from "./higgsfield.js";
+import * as meta from "./meta.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,6 +88,17 @@ function retornoOAuth(nombre, mod, clave) {
 }
 app.get("/oauth/google", retornoOAuth("Gmail", gmail, "gmail"));
 app.get("/oauth/microsoft", retornoOAuth("Hotmail", outlook, "outlook"));
+// Meta (Facebook e Instagram de los clientes): mismo camino, regresa a Cuentas.
+app.get("/oauth/meta", async (req, res) => {
+  try {
+    const nombre = await meta.terminarConexion(req);
+    avisar(`Meta conectado${nombre ? ` (${nombre})` : ""}. Estoy buscando las páginas, Instagram y cuentas de anuncios de sus clientes.`, "Meta").catch(() => {});
+    res.redirect("/?meta=ok#/cuentas");
+  } catch (e) {
+    console.error("[meta]", e.message);
+    res.redirect("/?meta=error&motivo=" + encodeURIComponent(e.message.slice(0, 200)) + "#/cuentas");
+  }
+});
 
 // ---------- API del panel ----------
 const api = express.Router();
@@ -159,6 +171,9 @@ api.get("/panel", envolver(() => {
       outlook_disponible: outlook.outlookDisponible(),
       outlook_cuenta: outlook.cuentaOutlook(),
       higgsfield: higgsfield.higgsfieldDisponible(),
+      meta: meta.metaConectado(),
+      meta_disponible: meta.metaDisponible(),
+      meta_usuario: meta.estado().usuario,
     },
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
   };
@@ -247,6 +262,17 @@ api.post("/clientes/:id/junta", envolver((req) => {
   const titulo = String(req.body?.titulo || "").trim().slice(0, 200) || `Junta con ${c.nombre}`;
   if (!req.body?.inicio) throw new Error("La junta necesita fecha y hora");
   return agenda.crearEvento({ titulo, inicio: String(req.body?.inicio || ""), lugar: req.body?.lugar ? String(req.body.lugar).slice(0, 200) : undefined, cliente: c.nombre });
+}));
+// Meta: qué páginas, Instagram y cuentas de anuncios encontró DELTA y de qué cliente es cada una.
+api.get("/meta", envolver(() => meta.estado()));
+api.get("/meta/conectar", envolver((req) => ({ url: meta.urlConexion(req) })));
+api.post("/meta/desconectar", envolver(() => { meta.desconectar(); return { ok: true }; }));
+api.post("/meta/actualizar", envolver(() => meta.actualizarTodo()));
+api.patch("/meta/activos/:id", envolver((req) => meta.ligar(req.params.id, req.body?.cliente_id ?? null)));
+api.post("/clientes/:id/meta", envolver(async (req) => {
+  const c = agencia.clienteRequerido(req.params.id);
+  await meta.sincronizarCliente(c.id);
+  return agencia.metaDeCliente(c.id);
 }));
 api.post("/proyectos", envolver((req) => agencia.crearProyecto(req.body || {})));
 api.patch("/proyectos/:id", envolver((req) => agencia.actualizarProyecto(Number(req.params.id), req.body || {})));
@@ -347,4 +373,5 @@ app.listen(PUERTO, () => {
   console.log(`DELTA en línea: http://localhost:${PUERTO}`);
   iniciarVigilante();
   iniciarRutinas();
+  meta.iniciarMeta();
 });

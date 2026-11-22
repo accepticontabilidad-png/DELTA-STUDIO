@@ -1298,3 +1298,32 @@ html[data-mood="dia"] .pg-kpi b, html[data-mood="dia"] .cu-kpi b { font-weight: 
 .dona-info .foco, .pg-semaforo .foco, .cu-t-cabeza .foco { animation: none; }
 .cu-kpi .tb-chip { position: static; justify-self: start; margin: 2px 0; }
 .cu-hist { margin-top: 28px; }
+
+/* ---------- Meta: redes y anuncios del cliente (ficha de Cuentas) ---------- */
+.pl-ig { background: linear-gradient(135deg, #feda75, #d62976 55%, #4f5bd5) !important; }
+.cu-meta .ag-cabeza { align-items: center; flex-wrap: wrap; gap: 8px; }
+.cu-meta .ag-botones { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mt-bloque + .mt-bloque { margin-top: 14px; }
+.mt-bloque h3 { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; }
+.mt-bloque h3 small { letter-spacing: 0; text-transform: none; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-rejilla { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mt-dato { padding-bottom: 10px; align-content: start; }
+.mt-dato:hover { transform: none; }
+.mt-dato .tb-chip { position: static; justify-self: start; margin: 2px 0; }
+.mt-dato .tb-kpi-mes { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-mejor { margin: 8px 0 0; }
+.mt-mejor a { color: var(--lila); }
+.cu-meta details { margin-top: 10px; }
+.mt-lista { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.mt-lista li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 220px); gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(8,5,24,.4); }
+.mt-lista li.sin { outline: 1px dashed var(--borde); }
+.mt-lista li.pg-vacio { display: block; background: none; }
+.mt-cosa { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: center; min-width: 0; }
+.mt-cosa b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-cosa small { grid-column: 2; font-size: 11px; }
+.mt-lista select { padding: 7px 9px; font-size: 13px; }
+html[data-mood="dia"] .mt-lista li { background: rgba(123,92,255,.06); }
+@media (max-width: 900px) {
+  .mt-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mt-lista li { grid-template-columns: minmax(0, 1fr); }
+}

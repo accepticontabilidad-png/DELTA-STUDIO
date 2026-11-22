@@ -31,6 +31,9 @@ export function iniciarAgencia(h) {
     raiz.querySelectorAll("[data-abajo]").forEach((x) => { x.style.bottom = `${x.dataset.abajo}px`; });
   };
   const vacio = (txt) => `<li class="pg-vacio">${txt}</li>`;
+  const compacto = new Intl.NumberFormat("es-MX", { notation: "compact", maximumFractionDigits: 1 });
+  const cifra = (n) => (n === null || n === undefined ? "–" : compacto.format(n));
+  const conSigno = (n) => (n ? `${n > 0 ? "+" : "−"}${compacto.format(Math.abs(n))}` : "");
   const foco = (n) => `<i class="foco ${n}" aria-hidden="true"></i>`;
 
   // Dona de tres colores (verde, amarillo, rojo)
@@ -270,6 +273,8 @@ export function iniciarAgencia(h) {
         <a class="tb-kpi cu-kpi" href="#/aprobaciones"><span class="tb-kpi-nombre">Por aprobar</span><b>${c.aprobaciones_pendientes.length}</b><span class="tb-kpi-mes">${c.aprobaciones_pendientes.length ? "Toca para revisarlas" : "Nada pendiente"}</span></a>
       </div>
 
+      ${panelMeta(c)}
+
       <div class="cu-paneles">
         <div class="panel cu-entregas">
           <h2>Entregas</h2>
@@ -362,6 +367,107 @@ export function iniciarAgencia(h) {
     enviar("#cu-form-gasto", () => api(`/clientes/${c.id}/gasto`, { method: "POST", body: { plataforma: $("#cu-gasto-plat").value, monto: $("#cu-gasto-monto").value } }));
   }
 
+  // ---------- Meta: redes y anuncios del cliente ----------
+  function panelMeta(c) {
+    const m = c.meta;
+    if (!m) {
+      return `<div class="panel cu-meta cu-meta-vacio">
+        <div class="ag-cabeza"><h2>Redes y anuncios (Meta)</h2></div>
+        <p class="tenue">Aún no hay página de Facebook, Instagram ni cuenta de anuncios de Meta para ${esc(c.nombre)}.</p>
+        <div class="ag-botones"><button type="button" class="tb-link" data-abrir-meta>Asignar desde Meta</button></div>
+      </div>`;
+    }
+    const dato = (nombre, valor, extra = "", chip = "") => `<div class="tb-kpi mt-dato"><span class="tb-kpi-nombre">${nombre}</span><b>${valor}</b>${chip}<span class="tb-kpi-mes">${extra}</span></div>`;
+    const cambio = (n) => (n ? `<span class="tb-chip s-${n > 0 ? "verde" : "rojo"}">${conSigno(n)}</span>` : "");
+    const desde = m.seguidores_cambio?.desde ? `desde el ${Number(m.seguidores_cambio.desde.slice(8))} ${MESES[Number(m.seguidores_cambio.desde.slice(5, 7)) - 1]}` : "";
+    const ig = m.instagram, fb = m.facebook, ad = m.anuncios;
+    const bloques = [];
+    if (ig) bloques.push(`<div class="mt-bloque"><h3><i class="pt pl-ig"></i>Instagram <small class="tenue">${esc((ig.cuentas || []).join(", "))}</small></h3><div class="mt-rejilla">
+      ${dato("Seguidores", cifra(ig.seguidores), desde, cambio(m.seguidores_cambio?.instagram))}
+      ${dato("Alcance", cifra(ig.alcance_28d), "últimos 28 días")}
+      ${dato("Interacciones", cifra(ig.interacciones_28d), "últimos 28 días")}
+      ${dato("Publicaciones", cifra(ig.publicaciones_mes), `este mes · ${cifra(ig.me_gusta_mes)} me gusta`)}
+    </div>${ig.mejor_publicacion ? `<p class="tenue chico mt-mejor">La que más gustó este mes: ${ig.mejor_publicacion.enlace ? `<a href="${esc(ig.mejor_publicacion.enlace)}" target="_blank" rel="noopener">${esc(ig.mejor_publicacion.texto || "ver publicación")}</a>` : esc(ig.mejor_publicacion.texto)} · ${cifra(ig.mejor_publicacion.me_gusta)} me gusta, ${cifra(ig.mejor_publicacion.comentarios)} comentarios</p>` : ""}</div>`);
+    if (fb) bloques.push(`<div class="mt-bloque"><h3><i class="pt pl-meta"></i>Facebook <small class="tenue">${esc((fb.paginas || []).join(", "))}</small></h3><div class="mt-rejilla">
+      ${dato("Seguidores", cifra(fb.seguidores), desde, cambio(m.seguidores_cambio?.facebook))}
+      ${dato("Alcance", cifra(fb.alcance_28d), "últimos 28 días")}
+      ${dato("Publicaciones", cifra(fb.publicaciones_mes), "este mes")}
+    </div></div>`);
+    if (ad) {
+      const res = [["conversaciones", "Conversaciones"], ["prospectos", "Prospectos"], ["compras", "Compras"]].filter(([k]) => ad[k]);
+      const [kRes, nRes] = res[0] || ["clics_enlace", "Clics al enlace"];
+      const costo = ad[kRes] ? ad.gasto_mes / ad[kRes] : null;
+      const moneda = (ad.monedas || []).length === 1 && ad.monedas[0] !== "MXN" ? ` ${ad.monedas[0]}` : "";
+      bloques.push(`<div class="mt-bloque"><h3><i class="pt pl-meta"></i>Anuncios <small class="tenue">${esc((ad.cuentas || []).join(", "))}</small></h3><div class="mt-rejilla">
+        ${dato("Gasto del mes", (dinero(ad.gasto_mes) === "–" ? "$0" : dinero(ad.gasto_mes)) + moneda, ad.gasto_mes_pasado ? `mes pasado ${dinero(ad.gasto_mes_pasado)}` : "")}
+        ${dato("Alcance", cifra(ad.alcance), `${cifra(ad.impresiones)} impresiones`)}
+        ${dato(nRes, cifra(ad[kRes]), costo ? `${dinero(Math.round(costo * 100) / 100)} c/u` : "este mes", res.length > 1 ? `<span class="tb-chip">${res.slice(1).map(([k, n]) => `${cifra(ad[k])} ${n.toLowerCase()}`).join(" · ")}</span>` : "")}
+        ${dato("Campañas activas", cifra(ad.campanas_activas), `${cifra(ad.clics)} clics este mes`)}
+      </div></div>`);
+    }
+    return `<div class="panel cu-meta">
+      <div class="ag-cabeza"><h2>Redes y anuncios (Meta)</h2>
+        <span class="ag-botones"><span class="tb-hora">${m.actualizado ? `Actualizado ${haceRato(m.actualizado)}` : "Sin datos todavía"}</span>
+        <button type="button" class="tb-link" data-meta-cliente="${c.id}">Actualizar</button><button type="button" class="tb-link" data-abrir-meta>Asignar</button></span></div>
+      ${bloques.length ? bloques.join("") : `<p class="tenue">Ya tiene ${m.activos.length} cosa${m.activos.length === 1 ? "" : "s"} de Meta asignada${m.activos.length === 1 ? "" : "s"}. Toca Actualizar para traer sus números.</p>`}
+      ${(m.errores || []).length ? `<details class="tenue chico"><summary>Meta no dejó ver ${m.errores.length === 1 ? "un dato" : `${m.errores.length} datos`}</summary><ul>${m.errores.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
+    </div>`;
+  }
+
+  // Ventana "Meta de tus clientes": conectar, ver lo que encontró y decir de quién es cada cosa.
+  async function abrirMeta() {
+    const dlg = $("#dlg-meta");
+    if (!dlg.open) dlg.showModal();
+    $("#mt-msg").textContent = "";
+    await pintarMeta();
+  }
+  async function pintarMeta() {
+    const e = await api("/meta");
+    const vence = e.expira ? Math.ceil((new Date(e.expira) - Date.now()) / 864e5) : null;
+    $("#mt-estado").textContent = !e.disponible
+      ? "Falta un paso en Railway para poder conectar Meta (META_APP_ID y META_APP_SECRET). Pídeme la guía y lo hacemos juntos."
+      : !e.conectado ? "Conecta tu Facebook (el que administra las páginas y anuncios de tus clientes) y DELTA traerá sola sus números."
+      : `Conectado${e.usuario ? ` como ${e.usuario}` : ""}${e.modo === "sistema" ? " con el usuario del sistema" : ""}.${e.ultima ? ` Última revisión ${haceRato(e.ultima)}.` : ""}${vence !== null ? ` El permiso dura ${vence} día${vence === 1 ? "" : "s"} más.` : ""}`;
+    $("#mt-conectar").hidden = e.modo === "sistema" || !e.disponible;
+    $("#mt-conectar").textContent = e.conectado ? "Volver a conectar" : "Conectar Meta";
+    $("#mt-actualizar").hidden = !e.conectado;
+    const opciones = (sel) => `<option value="">Sin cliente</option>` + e.clientes.map((c) => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
+    const icono = { pagina: "pl-meta", instagram: "pl-ig", anuncios: "pl-meta" };
+    $("#mt-lista").innerHTML = e.activos.length
+      ? e.activos.map((a) => `<li class="${a.cliente_id ? "" : "sin"}">
+          <span class="mt-cosa"><i class="pt ${icono[a.tipo]}"></i><b>${esc(a.nombre)}</b><small class="tenue">${esc(a.tipo_nombre)}${a.extra?.negocio ? ` · ${esc(a.extra.negocio)}` : ""}${a.extra?.pagina_nombre ? ` · de ${esc(a.extra.pagina_nombre)}` : ""}${a.ligado === "auto" && a.cliente_id ? " · asignada sola" : ""}</small></span>
+          <select data-meta-activo="${esc(a.id)}" aria-label="Cliente de ${esc(a.nombre)}">${opciones(a.cliente_id)}</select>
+        </li>`).join("")
+      : e.conectado ? vacio("Todavía no encuentro nada. Toca Actualizar ahora.") : "";
+  }
+  $("#btn-meta")?.addEventListener("click", () => abrirMeta().catch((err) => avisar(err.message)));
+  $("#mt-cerrar").addEventListener("click", () => { $("#dlg-meta").close(); if (ficha) cargarCuentas().catch(() => {}); });
+  $("#mt-conectar").addEventListener("click", async () => {
+    try { const { url } = await api("/meta/conectar"); location.href = url; } catch (err) { $("#mt-msg").textContent = err.message; }
+  });
+  $("#mt-actualizar").addEventListener("click", async (ev) => {
+    const b = ev.currentTarget;
+    b.disabled = true;
+    $("#mt-msg").textContent = "Revisando Meta… puede tardar un minuto si son muchos clientes.";
+    try {
+      const r = await api("/meta/actualizar", { method: "POST" });
+      $("#mt-msg").textContent = `Listo: ${r.paginas} página${r.paginas === 1 ? "" : "s"}, ${r.cuentas_anuncios} cuenta${r.cuentas_anuncios === 1 ? "" : "s"} de anuncios, ${r.clientes_actualizados} cliente${r.clientes_actualizados === 1 ? "" : "s"} con números nuevos.${r.errores.length ? ` Meta no dejó ver ${r.errores.length} cosa${r.errores.length === 1 ? "" : "s"} (falta algún permiso).` : ""}`;
+      sonar("accion");
+      await pintarMeta();
+    } catch (err) { $("#mt-msg").textContent = err.message; }
+    b.disabled = false;
+  });
+  $("#mt-lista").addEventListener("change", async (ev) => {
+    const sel = ev.target.closest("[data-meta-activo]");
+    if (!sel) return;
+    try {
+      await api(`/meta/activos/${encodeURIComponent(sel.dataset.metaActivo)}`, { method: "PATCH", body: { cliente_id: sel.value ? Number(sel.value) : null } });
+      sonar("accion");
+      await pintarMeta();
+      $("#mt-msg").textContent = "Guardado. Toca Actualizar ahora para traer sus números.";
+    } catch (err) { $("#mt-msg").textContent = err.message; }
+  });
+
   async function abrirCuenta(id, { mover = true } = {}) {
     elegida = Number(id);
     guardado.set("delta_cuenta", String(elegida));
@@ -373,6 +479,15 @@ export function iniciarAgencia(h) {
 
   // Toques: una tarjeta, alerta, fila o entrega con data-cuenta abre la ficha del cliente.
   document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-abrir-meta]")) return void abrirMeta().catch((err) => avisar(err.message));
+    const mc = e.target.closest("[data-meta-cliente]");
+    if (mc) {
+      mc.disabled = true;
+      mc.textContent = "Actualizando…";
+      return void api(`/clientes/${mc.dataset.metaCliente}/meta`, { method: "POST" })
+        .then(() => { sonar("accion"); return cargarFicha(mc.dataset.metaCliente); })
+        .catch((err) => { avisar(err.message); mc.disabled = false; mc.textContent = "Actualizar"; });
+    }
     if (e.target.closest("select, input, button[type=submit], a[href]:not([data-cuenta])")) return;
     const x = e.target.closest("[data-cuenta]");
     if (x) return void abrirCuenta(x.dataset.cuenta).catch((err) => avisar(err.message));
@@ -387,5 +502,5 @@ export function iniciarAgencia(h) {
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, abrirCuenta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  return { cargarPanelGeneral, cargarCuentas, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }
