@@ -25,6 +25,7 @@ import * as paidmedia from "./paidmedia.js";
 import * as contenido from "./contenido.js";
 import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
+import * as seo from "./seo.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -91,7 +92,19 @@ function retornoOAuth(nombre, mod, clave) {
     }
   };
 }
-app.get("/oauth/google", retornoOAuth("Gmail", gmail, "gmail"));
+const retornoGmail = retornoOAuth("Gmail", gmail, "gmail");
+app.get("/oauth/google", async (req, res) => {
+  // La misma dirección de regreso sirve para Gmail y para Google de SEO (Search Console y Analytics).
+  if (!seo.esRetornoSeo(req)) return retornoGmail(req, res);
+  try {
+    const cuenta = await seo.terminarConexion(req);
+    avisar(`Google conectado para SEO${cuenta ? ` (${cuenta})` : ""}. Ya puedo ver las visitas y posiciones de sus clientes.`, "SEO y web").catch(() => {});
+    res.redirect("/?seo=ok#/seo");
+  } catch (e) {
+    console.error("[seo]", e.message);
+    res.redirect("/?seo=error&motivo=" + encodeURIComponent(e.message.slice(0, 200)) + "#/seo");
+  }
+});
 app.get("/oauth/microsoft", retornoOAuth("Hotmail", outlook, "outlook"));
 // Meta (Facebook e Instagram de los clientes): mismo camino, regresa a Cuentas.
 app.get("/oauth/meta", async (req, res) => {
@@ -201,6 +214,7 @@ api.get("/panel", envolver((req) => {
     pagos_vencidos: (finanzas.generarMensualidades(), finanzas.listarCobros({ estado: "vencido" }).length),
     contenido_atrasado: (() => { try { return contenido.listarContenido().filter((p) => p.atrasada).length; } catch { return 0; } })(),
     ideas_nuevas: (() => { try { return tendencias.ideasNuevas(); } catch { return 0; } })(),
+    sitios_caidos: (() => { try { return seo.sitiosCaidos().length; } catch { return 0; } })(),
     anuncios_sin_resultados: (() => { try { return paidmedia.avisosParaPulso().sin_resultados.length; } catch { return 0; } })(),
   };
 }));
@@ -303,6 +317,12 @@ api.post("/reportes/link", envolver((req) => {
   return reportes.crearLink(req.body || {});
 }));
 api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
+api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
+api.put("/seo/config", envolver((req) => seo.configurarSeo(req.body || {})));
+api.post("/seo/revisar", envolver((req) => seo.revisarSitio(req.body?.cliente)));
+api.get("/seo/propiedades", envolver(() => seo.propiedades()));
+api.get("/seo/google/conectar", envolver((req) => ({ url: seo.urlConexion(req) })));
+api.post("/seo/google/desconectar", envolver(() => { seo.desconectarGoogle(); return { ok: true }; }));
 api.get("/tendencias", envolver((req) => tendencias.tableroTendencias({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
 api.put("/tendencias/config", envolver((req) => tendencias.configurarTendencias(req.body || {})));
 api.post("/tendencias/buscar", envolver((req) => tendencias.buscarTendencias(req.body?.cliente)));
@@ -448,4 +468,5 @@ app.listen(PUERTO, () => {
   meta.iniciarMeta();
   reportes.iniciarReportes();
   tendencias.iniciarTendencias();
+  seo.iniciarSeo();
 });
