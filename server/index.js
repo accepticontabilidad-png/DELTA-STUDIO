@@ -24,6 +24,7 @@ import * as finanzas from "./finanzas.js";
 import * as paidmedia from "./paidmedia.js";
 import * as contenido from "./contenido.js";
 import * as reportes from "./reportes.js";
+import * as tendencias from "./tendencias.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -199,6 +200,7 @@ api.get("/panel", envolver((req) => {
     aprobaciones_pendientes: agencia.listarAprobaciones({ estado: "pendiente" }).length,
     pagos_vencidos: (finanzas.generarMensualidades(), finanzas.listarCobros({ estado: "vencido" }).length),
     contenido_atrasado: (() => { try { return contenido.listarContenido().filter((p) => p.atrasada).length; } catch { return 0; } })(),
+    ideas_nuevas: (() => { try { return tendencias.ideasNuevas(); } catch { return 0; } })(),
     anuncios_sin_resultados: (() => { try { return paidmedia.avisosParaPulso().sin_resultados.length; } catch { return 0; } })(),
   };
 }));
@@ -301,6 +303,11 @@ api.post("/reportes/link", envolver((req) => {
   return reportes.crearLink(req.body || {});
 }));
 api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
+api.get("/tendencias", envolver((req) => tendencias.tableroTendencias({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
+api.put("/tendencias/config", envolver((req) => tendencias.configurarTendencias(req.body || {})));
+api.post("/tendencias/buscar", envolver((req) => tendencias.buscarTendencias(req.body?.cliente)));
+api.post("/tendencias/ideas/:id/contenido", envolver((req) => tendencias.ideaAContenido(Number(req.params.id), req.body || {})));
+api.delete("/tendencias/ideas/:id", envolver((req) => tendencias.descartarIdea(Number(req.params.id))));
 api.get("/contenido", envolver((req) => contenido.tableroContenido({ cliente: req.query.cliente ? String(req.query.cliente) : undefined, mes: req.query.mes ? String(req.query.mes) : undefined })));
 api.post("/contenido", envolver((req) => contenido.crearContenido(req.body || {})));
 api.patch("/contenido/:id", envolver((req) => {
@@ -440,4 +447,5 @@ app.listen(PUERTO, () => {
   iniciarRutinas();
   meta.iniciarMeta();
   reportes.iniciarReportes();
+  tendencias.iniciarTendencias();
 });
