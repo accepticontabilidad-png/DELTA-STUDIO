@@ -72,7 +72,8 @@
         <a href="#/correo" class="menu-item" data-ir="correo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Correo</span></a>
         <a href="#/mercados" class="menu-item" data-ir="mercados"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Mercados y noticias</span></a>
         <span class="menu-grupo">Agencia</span>
-        <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Tablero</span></a>
+        <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Panel general</span></a>
+        <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
         <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
         <a href="#/estudio" class="menu-item" data-ir="estudio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span>Estudio de diseño</span></a>
         <a href="#/aprobaciones" class="menu-item" data-ir="aprobaciones"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Aprobaciones</span><small id="badge-aprob" class="badge" hidden></small></a>
@@ -303,22 +304,69 @@
         </div>
       </section>
 
-      <section class="seccion agencia" data-seccion="agencia">
-        <div class="kpis" id="ag-kpis"></div>
-        <div class="dos-col">
-          <div class="panel">
-            <div class="ag-cabeza">
-              <h2>Clientes</h2>
-              <div class="ag-botones"><button type="button" class="ag-agregar" id="btn-nuevo-cliente">+ Cliente</button></div>
+      <!-- Panel general de la agencia: todo de un vistazo -->
+      <section class="seccion agencia-panel" data-seccion="agencia">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Panel de la agencia</h1>
+          <span class="tb-hora" id="pg-hora"></span>
+          <div class="ag-botones">
+            <button type="button" class="ag-agregar" data-pedir="Dame el resumen de la agencia de hoy: alertas, clientes en rojo o amarillo, entregas, juntas y qué atiendo primero.">Resumen con DELTA</button>
+            <a class="ag-agregar" href="#/cuentas">Ver cuentas</a>
+          </div>
+        </div>
+        <div class="tablero tablero-ag">
+          <div class="tb-kpis pg-kpis" id="pg-kpis"></div>
+          <div class="pg-col pg-col-1">
+            <div class="panel pg-alertas-caja">
+              <div class="ag-cabeza"><h2>Alertas de hoy</h2><span class="tb-hora" id="pg-alertas-n"></span></div>
+              <ul id="pg-alertas" class="pg-alertas"></ul>
             </div>
-            <ul id="ag-clientes" class="lista clickable"></ul>
+            <div class="panel pg-actividad-caja">
+              <h2>Actividad de los departamentos</h2>
+              <ul id="ag-actividad" class="lista clickable"></ul>
+            </div>
           </div>
-          <div class="panel">
-            <h2>Próximas entregas</h2>
-            <ul id="ag-entregas" class="lista"></ul>
-            <h3>Actividad de los departamentos</h3>
-            <ul id="ag-actividad" class="lista clickable"></ul>
+          <div class="pg-col pg-col-2">
+            <div class="panel pg-salud-caja">
+              <h2>Salud de la cartera</h2>
+              <div id="pg-salud" class="tb-dona"></div>
+              <ul id="pg-semaforo" class="pg-semaforo"></ul>
+            </div>
+            <div class="panel pg-gasto-caja">
+              <div class="ag-cabeza"><h2>Anuncios por cliente</h2><span class="tb-hora" id="pg-mes"></span></div>
+              <div id="pg-gasto" class="pg-gasto"></div>
+              <div id="pg-plataformas" class="pg-plataformas"></div>
+            </div>
           </div>
+          <div class="pg-col pg-col-3">
+            <div class="panel pg-entregas-caja">
+              <h2>Próximas entregas</h2>
+              <ul id="pg-entregas" class="pg-linea"></ul>
+            </div>
+            <div class="panel pg-juntas-caja">
+              <h2>Juntas con clientes</h2>
+              <ul id="pg-juntas" class="pg-linea"></ul>
+            </div>
+          </div>
+          <p class="tenue chico tb-nota">El gasto en anuncios se anota a mano en cada cuenta (o díganselo a DELTA: "Clínica Sonrisa lleva 4,000 en Meta este mes"). Cuando se conecten Meta, Google y TikTok se llenará solo.</p>
+        </div>
+      </section>
+
+      <!-- Cuentas: una ficha por cliente con su semáforo -->
+      <section class="seccion cuentas" data-seccion="cuentas">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Cuentas</h1>
+          <div class="segmento chico cu-filtro" id="cu-filtro" role="tablist">
+            <button type="button" data-salud="todas" class="activa">Todas</button>
+            <button type="button" data-salud="rojo"><i class="foco rojo"></i>Rojo</button>
+            <button type="button" data-salud="amarillo"><i class="foco amarillo"></i>Amarillo</button>
+            <button type="button" data-salud="verde"><i class="foco verde"></i>Verde</button>
+          </div>
+          <div class="ag-botones"><button type="button" class="ag-agregar" id="btn-nuevo-cliente">+ Cliente</button></div>
+        </div>
+        <div class="cu-rejilla">
+          <div class="cu-lista" id="cu-lista"></div>
+          <div class="cu-ficha" id="cu-ficha"></div>
         </div>
       </section>
 
@@ -426,6 +474,7 @@
         <label>Correo <input id="cl-correo" type="text" maxlength="160" /></label>
         <label>Pago mensual <input id="cl-presupuesto" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 15000" /></label>
       </div>
+      <label>Tope de anuncios al mes <input id="cl-presupuesto-anuncios" type="text" inputmode="decimal" maxlength="20" placeholder="Ej. 8000 (lo que puede gastar en Meta, Google…)" /></label>
       <label>Servicios que le damos <input id="cl-servicios" type="text" maxlength="300" placeholder="Ej. redes, pauta en Meta, SEO" /></label>
       <label>Sitio web y redes <input id="cl-redes" type="text" maxlength="300" /></label>
       <label>Notas <textarea id="cl-notas" rows="3" maxlength="2000"></textarea></label>
@@ -435,17 +484,6 @@
         <button type="submit" class="primario">Guardar</button>
       </div>
     </form>
-  </dialog>
-
-  <dialog id="dlg-ficha" class="dialogo ancho">
-    <div class="ag-cabeza"><h2 id="fi-nombre"></h2><button type="button" class="ag-agregar" id="fi-editar">Editar</button></div>
-    <div id="fi-cuerpo"></div>
-    <form class="form-mini" id="form-proyecto">
-      <input id="pr-titulo" type="text" placeholder="Nuevo proyecto o entregable…" maxlength="200" />
-      <input id="pr-entrega" type="date" title="Fecha de entrega" />
-      <button type="submit">+</button>
-    </form>
-    <div class="botones"><button type="button" id="fi-cerrar">Cerrar</button></div>
   </dialog>
 
   <dialog id="dlg-correo" class="dialogo ancho dlg-correo">

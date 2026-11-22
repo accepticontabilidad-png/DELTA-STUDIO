@@ -62,3 +62,43 @@ test("encargo: responde al instante y, sin clave de Claude, el trabajo queda com
   assert.equal(t.estado, "fallo");
   assert.match(t.resultado, /clave de Claude/);
 });
+
+test("cuentas: semáforo de salud con motivos, gasto contra tope y salud a mano", () => {
+  const c = agencia.crearCliente({ nombre: "Semáforo Clínica", presupuesto_anuncios: 1000 });
+  assert.equal(agencia.saludCliente(agencia.obtenerCliente(c.id)).nivel, "verde");
+  agencia.registrarGasto({ cliente: c.id, plataforma: "meta", monto: "900" });
+  let s = agencia.saludCliente(agencia.obtenerCliente(c.id));
+  assert.equal(s.nivel, "amarillo");
+  assert.match(s.motivos[0], /90 %/);
+  // Anotar otra vez la misma plataforma reemplaza el total del mes (no suma)
+  const g = agencia.registrarGasto({ cliente: c.id, plataforma: "meta", monto: 1200 });
+  assert.equal(g.total_mes, 1200);
+  assert.equal(agencia.saludCliente(agencia.obtenerCliente(c.id)).nivel, "rojo");
+  assert.throws(() => agencia.registrarGasto({ cliente: c.id, plataforma: "radio", monto: 1 }), /Plataforma/);
+  assert.throws(() => agencia.registrarGasto({ cliente: c.id, plataforma: "google", monto: -5 }), /positivo/);
+  // Marcada a mano manda sobre el cálculo, y "auto" la regresa
+  agencia.actualizarCliente(c.id, { salud_manual: "verde", salud_nota: "Ya lo platicamos" });
+  s = agencia.saludCliente(agencia.obtenerCliente(c.id));
+  assert.equal(s.nivel, "verde");
+  assert.equal(s.automatico, "rojo");
+  assert.match(s.motivos[0], /Ya lo platicamos/);
+  agencia.actualizarCliente(c.id, { salud_manual: "auto" });
+  assert.equal(agencia.obtenerCliente(c.id).salud_nota, null);
+  assert.throws(() => agencia.actualizarCliente(c.id, { salud_manual: "morado" }), /Salud no válida/);
+});
+
+test("panel general: alertas del día, salud de la cartera y ficha con juntas y gasto", async () => {
+  const agenda = await import("../server/agenda.js");
+  const c = agencia.crearCliente({ nombre: "Alerta Derma", presupuesto_anuncios: 500 });
+  agencia.crearProyecto({ cliente: c.id, titulo: "Landing atrasada", entrega: "2020-01-01T10:00" });
+  agenda.crearEvento({ titulo: "Revisión mensual", inicio: "2099-03-01T10:00", cliente: "Alerta Derma" });
+  const t = agencia.tablero();
+  assert.ok(t.alertas.some((a) => a.nivel === "rojo" && /Landing atrasada/.test(a.texto) && a.cliente_id === c.id));
+  assert.ok(t.salud.rojo >= 1);
+  assert.equal(t.alertas[0].nivel, "rojo"); // lo urgente va primero
+  const f = agencia.fichaCliente(c.id);
+  assert.equal(f.salud.nivel, "rojo");
+  assert.equal(f.juntas[0].titulo, "Revisión mensual");
+  assert.equal(f.gasto.historial.length, 6);
+  assert.ok(agencia.cuentas().find((x) => x.id === c.id).proxima_junta);
+});

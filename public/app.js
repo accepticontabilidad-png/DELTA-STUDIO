@@ -1,6 +1,7 @@
 // DELTA — app del panel (PC y celular)
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
+import { iniciarAgencia } from "/agencia.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
   get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -652,26 +653,22 @@ function md(texto) {
   return html + (enLista ? "</ul>" : "");
 }
 
+// Panel general y Cuentas viven en /agencia.js (mismo estilo que el tablero de Mercados).
+let agenciaUI = null;
+const agenciaTableros = () => (agenciaUI ||= iniciarAgencia({
+  api, esc, guardado, fmtDia, fmtHora, dinero, ESTADO_PROY, filaTrabajo, sonar,
+  zona: () => zona,
+  nombreDepto,
+  avisar: (texto) => burbuja("aviso", texto),
+  editarCliente: (c) => abrirFormCliente(c),
+}));
 async function cargarTablero() {
-  const t = await api("/agencia");
-  $("#ag-kpis").innerHTML = [
-    [t.clientes_activos, "clientes activos"],
-    [t.proyectos_abiertos, "proyectos abiertos"],
-    [t.entregas_semana, "entregas en 7 días", t.atrasados ? `${t.atrasados} atrasada(s)` : ""],
-    [t.aprobaciones_pendientes, "por aprobar", "", "#/aprobaciones"],
-    [dinero(t.presupuesto_mensual), "ingreso mensual"],
-  ].map(([n, l, extra, href]) => `<${href ? `a href="${href}"` : "div"} class="kpi"><b>${esc(n)}</b><span>${l}</span>${extra ? `<small class="alerta">${esc(extra)}</small>` : ""}</${href ? "a" : "div"}>`).join("");
-  $("#ag-clientes").innerHTML = t.clientes.length
-    ? t.clientes.map((c) => `<li data-ficha="${c.id}"><div class="cuerpo">${esc(c.nombre)}<span class="sub">${[c.industria, c.servicios].filter(Boolean).map(esc).join(" · ") || "&nbsp;"}</span></div><span class="chip ${c.estado}">${esc(c.estado)}</span><span class="tenue num">${c.proyectos_abiertos} proy.</span></li>`).join("")
-    : `<li class="vacio">Aún no hay clientes. Toque "+ Cliente" o dígale a DELTA: "da de alta a la Clínica Sonrisa".</li>`;
-  $("#ag-entregas").innerHTML = t.proximas_entregas.length
-    ? t.proximas_entregas.map((p) => {
-        const tarde = p.entrega && p.entrega < new Date().toISOString();
-        return `<li class="${tarde ? "vencida" : ""}"><div class="cuerpo">${esc(p.titulo)}<span class="sub">${[p.cliente, ESTADO_PROY[p.estado], p.entrega ? fmtDia(p.entrega) : "sin fecha"].filter(Boolean).map(esc).join(" · ")}</span></div></li>`;
-      }).join("")
-    : `<li class="vacio">Sin proyectos abiertos.</li>`;
   if (!deptosCache.length) deptosCache = await api("/departamentos").catch(() => []);
-  $("#ag-actividad").innerHTML = t.actividad.length ? t.actividad.map(filaTrabajo).join("") : `<li class="vacio">Los departamentos aún no han trabajado. Encárgueles algo en Departamentos.</li>`;
+  return agenciaTableros().cargarPanelGeneral();
+}
+async function cargarCuentas() {
+  if (!deptosCache.length) deptosCache = await api("/departamentos").catch(() => []);
+  return agenciaTableros().cargarCuentas();
 }
 
 function filaTrabajo(t) {
@@ -741,37 +738,12 @@ async function abrirTrabajo(id) {
 }
 $("#tr-cerrar").addEventListener("click", () => $("#dlg-trabajo").close());
 
-let fichaActual = null;
-async function abrirFicha(id) {
-  const c = await api(`/clientes/${id}`);
-  fichaActual = c;
-  $("#fi-nombre").textContent = c.nombre;
-  const datos = [["Especialidad", c.industria], ["Estado", c.estado], ["Contacto", c.contacto], ["Teléfono", c.telefono], ["Correo", c.correo], ["Pago mensual", c.presupuesto_mensual ? dinero(c.presupuesto_mensual) : ""], ["Servicios", c.servicios], ["Web y redes", c.redes], ["Notas", c.notas]]
-    .filter(([, v]) => v).map(([k, v]) => `<div><span class="tenue">${k}</span><div>${esc(v)}</div></div>`).join("");
-  $("#fi-cuerpo").innerHTML = `<div class="ficha-datos">${datos}</div>
-    <h3>Proyectos</h3><ul class="lista">${c.proyectos.length ? c.proyectos.map((p) => `<li><div class="cuerpo">${esc(p.titulo)}<span class="sub">${[p.departamento ? nombreDepto(p.departamento) : "", p.entrega ? "entrega " + fmtDia(p.entrega) : ""].filter(Boolean).map(esc).join(" · ")}</span></div><select data-proyecto="${p.id}">${Object.entries(ESTADO_PROY).map(([k, v]) => `<option value="${k}" ${k === p.estado ? "selected" : ""}>${v}</option>`).join("")}</select></li>`).join("") : `<li class="vacio">Sin proyectos.</li>`}</ul>
-    <h3>Trabajos recientes</h3><ul class="lista clickable">${c.trabajos_recientes.length ? c.trabajos_recientes.map(filaTrabajo).join("") : `<li class="vacio">Aún nada.</li>`}</ul>`;
-  if (!$("#dlg-ficha").open) $("#dlg-ficha").showModal();
-}
-$("#fi-cerrar").addEventListener("click", () => $("#dlg-ficha").close());
-$("#fi-editar").addEventListener("click", () => { $("#dlg-ficha").close(); abrirFormCliente(fichaActual); });
-$("#form-proyecto").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const titulo = $("#pr-titulo").value.trim();
-  if (!titulo || !fichaActual) return;
-  try {
-    await api("/proyectos", { method: "POST", body: { cliente: String(fichaActual.id), titulo, entrega: $("#pr-entrega").value ? $("#pr-entrega").value + "T12:00" : undefined } });
-    $("#pr-titulo").value = ""; $("#pr-entrega").value = "";
-    sonar("accion");
-    abrirFicha(fichaActual.id);
-    refrescar("agencia", true);
-  } catch (err) { burbuja("aviso", err.message); }
-});
 document.addEventListener("change", async (e) => {
   const sel = e.target.closest("[data-proyecto]");
   if (!sel) return;
   await api(`/proyectos/${sel.dataset.proyecto}`, { method: "PATCH", body: { estado: sel.value } }).catch((err) => burbuja("aviso", err.message));
-  refrescar("agencia", true);
+  sonar("accion");
+  refrescar(seccionActual, true);
 });
 
 const CAMPOS_CL = ["nombre", "industria", "estado", "contacto", "telefono", "correo", "servicios", "redes", "notas"];
@@ -780,6 +752,7 @@ function abrirFormCliente(c) {
   $("#cl-id").value = c?.id || "";
   for (const k of CAMPOS_CL) $("#cl-" + k).value = c?.[k] ?? (k === "estado" ? "activo" : "");
   $("#cl-presupuesto").value = c?.presupuesto_mensual ?? "";
+  $("#cl-presupuesto-anuncios").value = c?.presupuesto_anuncios ?? "";
   $("#cl-msg").hidden = true;
   $("#dlg-cliente").showModal();
 }
@@ -791,18 +764,20 @@ $("#form-cliente").addEventListener("submit", async (e) => {
   const pres = $("#cl-presupuesto").value.replace(/[$,\s]/g, "");
   body.presupuesto_mensual = pres ? Number(pres) : null;
   if (pres && !Number.isFinite(body.presupuesto_mensual)) { $("#cl-msg").textContent = "El pago mensual debe ser un número."; $("#cl-msg").hidden = false; return; }
+  const tope = $("#cl-presupuesto-anuncios").value.replace(/[$,\s]/g, "");
+  body.presupuesto_anuncios = tope ? Number(tope) : null;
+  if (tope && !Number.isFinite(body.presupuesto_anuncios)) { $("#cl-msg").textContent = "El tope de anuncios debe ser un número."; $("#cl-msg").hidden = false; return; }
   try {
     const id = $("#cl-id").value;
-    await api(id ? `/clientes/${id}` : "/clientes", { method: id ? "PATCH" : "POST", body });
+    const guardadoCl = await api(id ? `/clientes/${id}` : "/clientes", { method: id ? "PATCH" : "POST", body });
     $("#dlg-cliente").close();
     sonar("accion");
-    refrescar("agencia", true);
+    if (!id && guardadoCl?.id) guardado.set("delta_cuenta", String(guardadoCl.id));
+    refrescar(seccionActual, true);
   } catch (err) { $("#cl-msg").textContent = err.message; $("#cl-msg").hidden = false; }
 });
 
 document.addEventListener("click", async (e) => {
-  const ficha = e.target.closest("[data-ficha]");
-  if (ficha) return abrirFicha(ficha.dataset.ficha).catch((err) => burbuja("aviso", err.message));
   const trab = e.target.closest("[data-trabajo]");
   if (trab) return abrirTrabajo(trab.dataset.trabajo).catch((err) => burbuja("aviso", err.message));
   const res = e.target.closest("[data-resolver]");
@@ -928,6 +903,7 @@ const SECCIONES = {
   correo: { cargar: () => cargarCorreo(), cada: 120e3 },
   mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
   agencia: { cargar: () => cargarTablero(), cada: 30e3 },
+  cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
   aprobaciones: { cargar: () => cargarAprobaciones(), cada: 30e3 },
   estudio: { cargar: () => cargarEstudio(), cada: 30e3 },
@@ -1827,8 +1803,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
-    if (d.tipo === "agencia" && ["agencia", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
-    if (d.tipo === "aviso" && ["agencia", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "agencia" && ["agencia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
+    if (d.tipo === "aviso" && ["agencia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
   };
 }
 

@@ -237,6 +237,17 @@ api.get("/agencia", envolver(() => agencia.tablero()));
 api.post("/clientes", envolver((req) => agencia.crearCliente(req.body || {})));
 api.get("/clientes/:id", envolver((req) => agencia.fichaCliente(req.params.id)));
 api.patch("/clientes/:id", envolver((req) => agencia.actualizarCliente(req.params.id, req.body || {})));
+api.get("/cuentas", envolver(() => agencia.cuentas()));
+api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
+  cliente: agencia.clienteRequerido(req.params.id).id, plataforma: req.body?.plataforma, monto: req.body?.monto, mes: req.body?.mes || undefined,
+})));
+// Junta con el cliente: es un evento normal de la agenda, ligado al cliente (avisa igual que los demás).
+api.post("/clientes/:id/junta", envolver((req) => {
+  const c = agencia.clienteRequerido(req.params.id);
+  const titulo = String(req.body?.titulo || "").trim().slice(0, 200) || `Junta con ${c.nombre}`;
+  if (!req.body?.inicio) throw new Error("La junta necesita fecha y hora");
+  return agenda.crearEvento({ titulo, inicio: String(req.body?.inicio || ""), lugar: req.body?.lugar ? String(req.body.lugar).slice(0, 200) : undefined, cliente: c.nombre });
+}));
 api.post("/proyectos", envolver((req) => agencia.crearProyecto(req.body || {})));
 api.patch("/proyectos/:id", envolver((req) => agencia.actualizarProyecto(Number(req.params.id), req.body || {})));
 api.get("/departamentos", envolver(() => {

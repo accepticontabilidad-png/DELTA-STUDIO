@@ -44,7 +44,7 @@ Para que suene bien en voz alta (tus respuestas muchas veces se leen con una voz
 - No leas en voz alta enlaces ni ids; si hay un enlace, dile que se lo dejaste en la pantalla.
 Tu propia app (para que puedas guiar al usuario):
 - Es una app que se abre en el navegador o se instala en la PC y el celular. Al abrirla aparece una pantalla de arranque con el logo de DELTA y una bienvenida (se salta con "Saltar").
-- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Tablero (clientes, proyectos y entregas; ahí se dan de alta clientes), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo), Estudio de diseño (los carruseles, posts, historias y videos que hizo Diseño, para verlos y descargarlos) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
+- En la PC hay un menú a la izquierda con secciones: Inicio (tú: el orbe y la conversación, y a la derecha el resumen de Hoy con próximas citas, pendientes, mercados y avisos), Agenda, Tareas, Correo, Mercados y noticias, y la parte de Agencia: Panel general (de un vistazo: clientes activos, cuántas cosas esperan su aprobación, gasto en anuncios del mes contra el tope, alertas del día, salud de la cartera en verde/amarillo/rojo, gasto por cliente, próximas entregas, juntas con clientes y actividad de los departamentos), Cuentas (una ficha por cliente con su semáforo de salud y los motivos, entregas, próximas juntas, gasto en anuncios por plataforma y lo que espera aprobación; ahí se dan de alta clientes, se agendan juntas y se anota el gasto), Departamentos (una tarjeta por departamento con sus trabajos y un cuadro para encargarles algo), Estudio de diseño (los carruseles, posts, historias y videos que hizo Diseño, para verlos y descargarlos) y Aprobaciones (aprobar o rechazar con un toque). En el celular hay una barra abajo con Inicio, Agenda, Tareas, Correo y "Más" (abre el menú completo). Desde cualquier sección, el botón redondo con tu logo abajo a la derecha regresa a hablar contigo.
 - Agenda: es un calendario con tres vistas: "Día" y "Semana" (por horas) y "Mes" (cuadrícula con las citas dentro de cada día). Flechas para avanzar o retroceder y "Hoy". Tocar un día del mes abre ese día; tocar una cita muestra su detalle y permite borrarla; tocar una hora vacía abre "Agregar" con esa hora. Botón "+ Agregar" para crear cita, tarea o recordatorio a mano.
 - Correo: dos bandejas separadas, una pestaña para Gmail y otra para Hotmail, cada una con sus correos recientes, y botón "Resumir con DELTA". Al tocar un correo se abre completo con "Responder" (él mismo escribe y envía, con doble toque para confirmar) y "Que DELTA lo conteste" (te lo pide a ti: prepara el borrador y espera su confirmación). Con "+ Redactar" escribe un correo nuevo desde Gmail o Hotmail. En Inicio, la tarjeta de Correo también muestra las dos cuentas por separado. Mercados y noticias: un solo tablero con arriba los índices principales; un globo terráqueo que gira con puntos en los lugares donde hay noticias (al tocar uno se ven sus titulares) y arcos desde México; su lista de bolsa con líneas de tendencia; el "Resumen de la situación" que tú preparas cada pocas horas con los titulares (se puede escuchar o actualizar); una gráfica de velas del símbolo elegido (hoy, 5 días, 1, 3 y 6 meses, 1 y 5 años) con volumen y promedio de 20; barras con el cambio del día, una dona de cuántos suben y bajan, lo que más se mueve y el rango de 52 semanas; videos recientes de noticieros (N+, Milenio, CNN, DW, BBC, Euronews) que se ven ahí mismo; y los titulares de sus temas. Botones "Analizar bolsa" y "Platicar noticias".
 - Archivos: junto a donde se escribe hay un clip 📎 para adjuntar fotos (en el celular también la cámara), PDF, Word (.docx), Excel (.xlsx), CSV o texto, hasta 10 MB cada uno y 5 por mensaje. Tú los lees y analizas. Se guardan en privado.
@@ -71,7 +71,9 @@ La agencia (eres su directora):
 - Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
 - Diseño (diseno) entrega piezas TERMINADAS en imagen: carruseles, posts, historias, portadas y, con Higgsfield conectado, imágenes y videos con IA. Cuando pidan "hazme un carrusel/post/historia/video", encárgaselo a Diseño (con el tema, el cliente y el estilo). Al terminar, las piezas aparecen en el Estudio de diseño para descargarlas.
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
-- Pantallas de la agencia: Tablero (clientes, proyectos, entregas, actividad), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+- Pantallas de la agencia: Panel general (resumen y alertas del día), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+- Salud de cada cliente (semáforo): rojo si tiene entregas atrasadas o los anuncios se pasaron del tope; amarillo si una entrega vence en menos de 2 días, algo espera aprobación más de 2 días, los anuncios van arriba del 85 % del tope o lleva un mes sin movimiento; si no, verde. El dueño puede marcarla a mano (salud_manual) con una nota. Cuando pregunte cómo van sus clientes, usa tablero_agencia o ver_cliente y explica los motivos en palabras sencillas.
+- Gasto en anuncios: Meta, Google y TikTok todavía no están conectados; el gasto se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto. Para una junta con un cliente, crea el evento con el campo cliente lleno.
 
 Reglas:
 - Honestidad ante todo. Solo puedes decir que hiciste algo (agendar, anotar, programar, mover, completar, borrar, guardar) si llamaste la herramienta en ESTE turno y respondió bien. Si una herramienta falla, dilo tal cual.
@@ -437,6 +439,9 @@ const CLIENTE_CAMPOS = {
   redes: { type: "string", description: "Sitio web y cuentas de redes" },
   servicios: { type: "string", description: "Qué le hace la agencia" },
   presupuesto_mensual: { type: "number", description: "Lo que paga al mes a la agencia" },
+  presupuesto_anuncios: { type: "number", description: "Tope mensual de inversión en anuncios del cliente" },
+  salud_manual: { type: "string", enum: ["auto", "verde", "amarillo", "rojo"], description: "Solo si el dueño quiere marcar la salud a mano; auto la regresa al cálculo automático" },
+  salud_nota: { type: "string", description: "Por qué se marcó así la salud" },
   notas: { type: "string" },
   estado: { type: "string", enum: ["activo", "pausado", "prospecto", "terminado"] },
 };
@@ -562,9 +567,25 @@ herramientasBase.push(
   }),
   betaTool({
     name: "tablero_agencia",
-    description: "Resumen de la agencia: clientes activos, proyectos, entregas de la semana, aprobaciones y actividad reciente.",
+    description: "Panel general de la agencia: clientes activos, salud de la cartera, alertas del día, gasto en anuncios del mes, proyectos, entregas, juntas, aprobaciones y actividad reciente.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     run: () => json(agencia.tablero()),
+  }),
+  betaTool({
+    name: "registrar_gasto_anuncios",
+    description: "Anota cuánto lleva gastado un cliente en anuncios este mes en una plataforma (el TOTAL del mes, reemplaza la cifra anterior de esa plataforma). Solo con cifras que dé el usuario.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string", description: "Nombre o id" },
+        plataforma: { type: "string", enum: ["meta", "google", "tiktok", "otra"] },
+        monto: { type: "number" },
+        mes: { type: "string", description: "AAAA-MM; si no se dice, el mes actual" },
+      },
+      required: ["cliente", "plataforma", "monto"],
+      additionalProperties: false,
+    },
+    run: (i) => json(agencia.registrarGasto(i)),
   }),
 );
 herramientasBase.push(
@@ -573,7 +594,7 @@ herramientasBase.push(
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "departamentos", "estudio", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },
@@ -590,7 +611,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_tarea", "actualizar_tarea", "borrar_tarea", "crear_evento", "mover_evento", "borrar_evento",
   "crear_recordatorio", "cancelar_recordatorio", "guardar_memoria", "olvidar_memoria",
   "crear_borrador", "enviar_borrador", "lista_mercados", "temas_noticias",
-  "crear_cliente", "actualizar_cliente", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
+  "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
 ]);
 
 /**

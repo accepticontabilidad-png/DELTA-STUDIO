@@ -144,6 +144,33 @@ try {
   /* ya existe */
 }
 
+// Agencia, tableros (Panel general y Cuentas): salud del cliente, tope de anuncios y gasto por mes.
+for (const col of [
+  "salud_manual TEXT",          // null = automática | verde | amarillo | rojo
+  "salud_nota TEXT",            // por qué se marcó a mano
+  "presupuesto_anuncios REAL",  // tope mensual de inversión en anuncios
+]) {
+  try {
+    db.exec(`ALTER TABLE clientes ADD COLUMN ${col}`);
+  } catch {
+    /* ya existe */
+  }
+}
+// Gasto en anuncios por cliente, mes y plataforma. Hoy se captura a mano;
+// cuando se conecten Meta, Google o TikTok, escribirán aquí con su propia "fuente".
+db.exec(`
+CREATE TABLE IF NOT EXISTS gasto_anuncios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  mes TEXT NOT NULL,                             -- AAAA-MM (mes local)
+  plataforma TEXT NOT NULL,                      -- meta | google | tiktok | otra
+  monto REAL NOT NULL DEFAULT 0,
+  fuente TEXT NOT NULL DEFAULT 'manual',         -- manual | meta | google | tiktok
+  actualizado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE (cliente_id, mes, plataforma)
+);
+`);
+
 export function getAjuste(clave, porDefecto = null) {
   const fila = db.prepare("SELECT valor FROM ajustes WHERE clave = ?").get(clave);
   return fila ? fila.valor : porDefecto;
