@@ -109,6 +109,8 @@ async function cargarPanel() {
   $("#badge-contenido").textContent = p.contenido_atrasado || "";
   $("#badge-tendencias").hidden = !p.ideas_nuevas;
   $("#badge-tendencias").textContent = p.ideas_nuevas || "";
+  $("#badge-seo").hidden = !p.sitios_caidos;
+  $("#badge-seo").textContent = p.sitios_caidos || "";
   $("#badge-paidmedia").hidden = !p.anuncios_sin_resultados;
   $("#badge-paidmedia").textContent = p.anuncios_sin_resultados || "";
   correoConectado = { gmail: c.gmail, outlook: c.outlook };
@@ -923,6 +925,7 @@ const SECCIONES = {
   analitica: { cargar: () => agenciaTableros().cargarAnalitica(), cada: 120e3 },
   contenido: { cargar: () => agenciaTableros().cargarContenido(), cada: 30e3 },
   tendencias: { cargar: () => agenciaTableros().cargarTendencias(), cada: 120e3 },
+  seo: { cargar: () => agenciaTableros().cargarSeo(), cada: 120e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
@@ -1012,6 +1015,15 @@ $("#btn-meta-aj").addEventListener("click", async () => {
   }
 }
 
+// Regreso de Google después de conectarlo para SEO (Search Console y Analytics)
+{
+  const q = new URLSearchParams(location.search);
+  const m = q.get("seo");
+  if (m) {
+    history.replaceState(null, "", "/" + location.hash);
+    setTimeout(() => burbuja("aviso", m === "ok" ? "Google conectado. Ya puedo ver las visitas y las posiciones en Google de sus clientes." : `No se pudo conectar Google: ${q.get("motivo") || "intente de nuevo"}`), 800);
+  }
+}
 // Regreso de Google o Microsoft después de conectar un correo
 {
   const q = new URLSearchParams(location.search);

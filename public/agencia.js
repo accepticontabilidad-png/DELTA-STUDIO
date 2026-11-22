@@ -1406,5 +1406,188 @@ export function iniciarAgencia(h) {
     } catch (err) { b.disabled = false; avisar(err.message); }
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  // =====================================================================
+  //  SEO Y WEB
+  // =====================================================================
+  let ultimaSeo = null;
+  let clienteSeo = guardado.get("delta_seo_cliente") || "";
+  let propsSeo = null;
+  const sinDominio = (u) => String(u || "").replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+  const ruta = (u) => { try { const x = new URL(u); return (x.pathname + x.search) || "/"; } catch { return u; } };
+  const cambioChip = (pct, alReves = false) => {
+    if (pct === null || pct === undefined) return null;
+    const bueno = alReves ? pct < 0 : pct > 0;
+    return [pct === 0 ? "" : bueno ? "verde" : "rojo", `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct)} %`];
+  };
+
+  async function cargarSeo() {
+    const t = await api(`/seo${clienteSeo ? `?cliente=${encodeURIComponent(clienteSeo)}` : ""}`).catch(async (err) => {
+      if (!clienteSeo) throw err;
+      clienteSeo = "";
+      return api("/seo");
+    });
+    if (!t.detalle && t.clientes.length) {
+      clienteSeo = String(t.clientes[0].id);
+      return cargarSeo();
+    }
+    ultimaSeo = t;
+    if (t.google.conectado && !propsSeo) propsSeo = await api("/seo/propiedades").catch(() => null);
+    pintarSeo(t);
+  }
+
+  function pintarSeo(t) {
+    $("#seo-google").textContent = t.google.conectado ? "Google conectado ✓" : "Conectar Google";
+    $("#seo-google").title = t.google.conectado ? `${t.google.cuenta || ""} · toca para desconectar` : "Para ver visitas y posiciones en Google";
+    $("#seo-n").textContent = String(t.clientes.length);
+    $("#seo-lista").innerHTML = t.clientes.length
+      ? t.clientes.map((c) => `<button type="button" class="an-cli ${String(c.id) === String(clienteSeo) ? "elegida" : ""} ${c.sitio ? "" : "sin"}" data-seo-cliente="${c.id}">
+          <span class="an-cli-cabeza"><b>${esc(c.nombre)}</b>${c.salud !== null ? `<span class="sc-chip c-${c.color}" title="Salud del sitio">${c.salud}</span>` : ""}</span>
+          ${c.sitio ? `<small class="seo-dom ${c.caido ? "t-rojo" : "tenue"}">${c.caido ? "⚠ no abre · " : ""}${esc(sinDominio(c.sitio))}</small>
+          <span class="an-cli-datos seo-cli-datos">
+            <span><small>Visitas</small>${c.visitas === null ? `<span class="tenue">–</span>` : cifra(c.visitas)}</span>
+            <span><small>Clics Google</small>${c.clics === null ? `<span class="tenue">–</span>` : cifra(c.clics)}</span>
+            <span><small>Posición</small>${c.posicion === null ? `<span class="tenue">–</span>` : Number(c.posicion).toLocaleString("es-MX", { maximumFractionDigits: 1 })}</span>
+          </span>` : `<small class="tenue">Sin sitio anotado</small>`}
+        </button>`).join("")
+      : `<p class="pg-vacio">Aún no hay clientes activos.</p>`;
+
+    const d = t.detalle;
+    $("#seo-revisar").disabled = !d || !d.sitio || d.revisando;
+    if (!d) { $("#seo-titulo").textContent = "Sitio"; return; }
+    guardado.set("delta_seo_cliente", String(d.cliente.id));
+    const r = d.revision;
+    const g = d.google || {};
+    const sc = g.search_console, ga = g.analytics;
+    $("#seo-titulo").textContent = d.cliente.nombre;
+    $("#seo-hora").textContent = d.revisando ? "Revisando…" : r ? `Revisado ${haceRato(r.fecha)}` : d.sitio ? "Sin revisar todavía" : "";
+    $("#seo-url").value = d.sitio ? sinDominio(d.sitio) : "";
+    $("#seo-url").placeholder = "clinica.mx";
+    // Search Console y Analytics: elegir la propiedad del cliente
+    const conG = t.google.conectado;
+    $("#seo-gsc-caja").hidden = !conG;
+    $("#seo-ga-caja").hidden = !conG;
+    if (conG) {
+      const sc0 = propsSeo?.search_console || [], ga0 = propsSeo?.analytics || [];
+      $("#seo-gsc").innerHTML = `<option value="">— Ninguno —</option>` + [...new Set([...sc0, d.gsc_sitio].filter(Boolean))].map((x) => `<option value="${esc(x)}" ${x === d.gsc_sitio ? "selected" : ""}>${esc(x.replace(/^sc-domain:/, ""))}</option>`).join("");
+      $("#seo-ga").innerHTML = `<option value="">— Ninguna —</option>` + ga0.map((x) => `<option value="${esc(x.id)}" ${x.id === d.ga4_propiedad ? "selected" : ""}>${esc(x.nombre)}</option>`).join("")
+        + (d.ga4_propiedad && !ga0.some((x) => x.id === d.ga4_propiedad) ? `<option value="${esc(d.ga4_propiedad)}" selected>${esc(d.ga4_propiedad)}</option>` : "");
+    }
+    const nota = $("#seo-google-nota");
+    const errores = [...(g.errores || []), ...(propsSeo?.errores || [])];
+    nota.hidden = false;
+    nota.innerHTML = !t.google.disponible ? "Para ver visitas y posiciones en Google hace falta configurar la conexión con Google en Railway (la misma de Gmail). Mientras, la revisión del sitio funciona sin nada."
+      : !conG ? "Conecta Google (arriba) para ver las visitas de Analytics y las posiciones en Search Console."
+      : errores.length ? esc(errores[0])
+      : !d.gsc_sitio && !d.ga4_propiedad ? "Elige su Search Console y su Analytics para ver sus números de Google."
+      : "";
+    nota.hidden = !nota.innerHTML;
+    nota.classList.toggle("t-rojo", Boolean(errores.length));
+
+    // KPIs
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi">
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span><b>${esc(k.valor)}</b>
+        ${k.chip?.[1] ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span><span class="pg-kpi-pie">${k.pie || ""}</span>
+      </div>`;
+    const cuando = sc?.periodo ? `últimos 28 días vs anteriores` : "conecta Google";
+    $("#seo-kpis").innerHTML = [
+      { nombre: "Salud del sitio", valor: r ? (r.caido ? "No abre" : `${r.salud}/100`) : "–", chip: r ? [r.color, r.caido ? "Urgente" : r.salud >= 80 ? "Bien" : r.salud >= 60 ? "Regular" : "Mejorar"] : null,
+        extra: r ? `${r.rojos} urgente${r.rojos === 1 ? "" : "s"} · ${r.amarillos} por mejorar` : d.sitio ? "toca Revisar sitio" : "anota su sitio",
+        pie: r && !r.caido ? `<span class="pg-barra ${r.color}"><i data-ancho="${r.salud}"></i></span>` : "" },
+      { nombre: "Visitas al sitio", valor: ga?.visitas !== null && ga?.visitas !== undefined ? Number(ga.visitas).toLocaleString("es-MX") : "–", chip: cambioChip(ga?.visitas_cambio), extra: ga ? `${Number(ga.personas || 0).toLocaleString("es-MX")} personas · ${cuando}` : "Google Analytics · " + cuando },
+      { nombre: "Clics desde Google", valor: sc ? Number(sc.clics).toLocaleString("es-MX") : "–", chip: cambioChip(sc?.clics_cambio), extra: sc ? `apareció ${cifra(sc.apariciones)} veces en Google` : "Search Console · " + cuando },
+      { nombre: "Posición promedio", valor: sc?.posicion ? Number(sc.posicion).toLocaleString("es-MX", { maximumFractionDigits: 1 }) : "–",
+        chip: sc?.posicion && sc.posicion_antes ? (sc.posicion < sc.posicion_antes ? ["verde", "Subió"] : sc.posicion > sc.posicion_antes ? ["rojo", "Bajó"] : ["", "Igual"]) : null,
+        extra: sc?.posicion ? (sc.posicion <= 10 ? "en la primera página de Google" : `página ${Math.ceil(sc.posicion / 10)} de Google · menos es mejor`) : "lugar en Google · menos es mejor" },
+    ].map(kpi).join("");
+
+    // Búsquedas
+    const filaBusq = (x, extra) => `<li><span class="seo-q">${esc(x.busqueda)}</span><span class="seo-num">${extra}</span></li>`;
+    $("#seo-oport").innerHTML = !sc ? `<li class="pg-vacio">${conG ? "Elige su Search Console para verlo." : "Conecta Google para verlo."}</li>`
+      : sc.casi_primera.length ? sc.casi_primera.map((x) => filaBusq(x, `<b>#${Math.round(x.posicion)}</b><small>${cifra(x.apariciones)} veces</small>`)).join("")
+      : `<li class="pg-vacio">Nada entre el lugar 8 y 20 con suficientes búsquedas.</li>`;
+    $("#seo-top").innerHTML = !sc ? `<li class="pg-vacio">${conG ? "Elige su Search Console para verlo." : "Conecta Google para verlo."}</li>`
+      : sc.top.length ? sc.top.slice(0, 8).map((x) => filaBusq(x, `<b>${Number(x.clics).toLocaleString("es-MX")}</b><small>clics · #${Math.round(x.posicion)}</small>`)).join("")
+      : `<li class="pg-vacio">Aún sin clics desde Google.</li>`;
+
+    // Páginas por mejorar
+    $("#seo-prob-n").textContent = r ? `${r.revisadas} página${r.revisadas === 1 ? "" : "s"} revisada${r.revisadas === 1 ? "" : "s"}` : "";
+    $("#seo-generales").innerHTML = r ? r.generales.map((x) => `<li class="pm-aviso n-${x.nivel}">${foco(x.nivel)}<span class="pg-linea-txt"><b>${esc(x.texto)}</b><small>${esc(x.como)}</small></span></li>`).join("") : "";
+    const conProb = r ? r.paginas.filter((p) => p.problemas.length) : [];
+    $("#seo-paginas").innerHTML = !r ? `<p class="pg-vacio">${d.sitio ? "Toca <b>Revisar sitio</b> y en un minuto tendrás la lista." : "Anota su sitio web arriba para revisarlo."}</p>`
+      : !conProb.length ? `<p class="pg-vacio">${r.caido ? "" : "Las páginas revisadas están en orden. 👌"}</p>`
+      : conProb.map((p, i) => {
+        const rojos = p.problemas.filter((x) => x.nivel === "rojo").length;
+        return `<details class="seo-pag" ${i < 2 ? "open" : ""}>
+          <summary>${foco(rojos ? "rojo" : "amarillo")}<span class="seo-pag-nombre"><b>${esc(p.titulo || ruta(p.url))}</b>${p.titulo ? `<small class="tenue">${esc(ruta(p.url))}</small>` : ""}</span><span class="tb-chip ${rojos ? "s-rojo" : "s-amarillo"}">${p.problemas.length}</span></summary>
+          <ul>${p.problemas.map((x) => `<li><b>${esc(x.texto)}</b><small>${esc(x.como)}</small></li>`).join("")}</ul>
+          ${/^https?:\/\//.test(p.url) ? `<a class="seo-abrir" href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">Abrir página ↗</a>` : ""}
+        </details>`;
+      }).join("");
+
+    // Velocidad
+    const ps = r?.pagespeed;
+    const medidor = (n, txt) => `<div class="seo-med ${n === null || n === undefined ? "" : n >= 90 ? "c-verde" : n >= 50 ? "c-amarillo" : "c-rojo"}"><b>${n ?? "–"}</b><small>${txt}</small></div>`;
+    $("#seo-velocidad").innerHTML = ps
+      ? `<div class="seo-meds">${medidor(ps.velocidad, "Velocidad")}${medidor(ps.seo, "SEO")}${medidor(ps.accesibilidad, "Accesibilidad")}${medidor(ps.buenas_practicas, "Buenas prácticas")}</div>
+         <p class="tenue chico">${ps.carga_segundos ? `La parte principal tarda <b>${ps.carga_segundos} s</b> en aparecer en un celular (lo ideal: menos de 2.5 s).` : ""}${ps.usuarios_reales ? ` Con visitantes reales: ${ps.usuarios_reales.carga_segundos} s.` : ""}</p>`
+      : `<p class="pg-vacio">${r?.aviso_velocidad ? esc(r.aviso_velocidad) : r?.caido ? "El sitio no abre." : "Se mide al revisar el sitio."}</p>`;
+
+    // Canales y páginas que bajan
+    const maxV = Math.max(1, ...(ga?.de_donde || []).map((x) => x.visitas));
+    $("#seo-canales").innerHTML = ga?.de_donde?.length
+      ? ga.de_donde.slice(0, 6).map((x) => `<div class="seo-canal"><span>${esc(x.canal)}</span><span class="pg-barra"><i data-ancho="${Math.round((x.visitas / maxV) * 100)}"></i></span><b>${Number(x.visitas).toLocaleString("es-MX")}</b></div>`).join("")
+      : `<p class="pg-vacio">${conG ? "Elige su Analytics para verlo." : "Conecta Google para verlo."}</p>`;
+    $("#seo-bajan-caja").hidden = !sc?.paginas_bajan?.length;
+    $("#seo-bajan").innerHTML = (sc?.paginas_bajan || []).map((x) => `<li><span class="seo-q">${esc(ruta(x.pagina))}</span><span class="seo-num"><b class="t-rojo">${x.cambio} %</b><small>${x.clics_antes} → ${x.clics} clics</small></span></li>`).join("");
+    $("#seo-delta").dataset.pedir = `¿Cómo va la web de ${d.cliente.nombre}? Empieza por lo urgente, luego las búsquedas casi en primera página y dime las 3 cosas que harías este mes.`;
+    medidas($('[data-seccion="seo"]'));
+  }
+
+  $("#seo-lista").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-seo-cliente]");
+    if (!b) return;
+    clienteSeo = b.dataset.seoCliente;
+    $("#seo-lista").querySelectorAll("[data-seo-cliente]").forEach((x) => x.classList.toggle("elegida", x === b));
+    cargarSeo().then(() => { if (matchMedia("(max-width: 1100px)").matches) $(".seo-sitio").scrollIntoView({ behavior: "smooth", block: "start" }); }).catch((err) => avisar(err.message));
+  });
+  $("#seo-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const d = ultimaSeo?.detalle;
+    if (!d) return;
+    const cuerpo = { cliente: d.cliente.id, sitio: $("#seo-url").value.trim() || null };
+    if (ultimaSeo.google.conectado) { cuerpo.gsc_sitio = $("#seo-gsc").value || null; cuerpo.ga4_propiedad = $("#seo-ga").value || null; }
+    try {
+      const antes = d.sitio;
+      const r = await api("/seo/config", { method: "PUT", body: cuerpo });
+      sonar("accion");
+      if (r.sitio && r.sitio !== antes) return void revisarSeo();
+      await cargarSeo();
+    } catch (err) { avisar(err.message); }
+  });
+  async function revisarSeo() {
+    const id = ultimaSeo?.detalle?.cliente.id;
+    if (!id) return;
+    const b = $("#seo-revisar");
+    b.disabled = true;
+    b.textContent = "Revisando…";
+    $("#seo-hora").textContent = "Revisando… (hasta un minuto)";
+    try { await api("/seo/revisar", { method: "POST", body: { cliente: id } }); sonar("accion"); }
+    catch (err) { avisar(err.message); }
+    b.textContent = "Revisar sitio";
+    await cargarSeo().catch(() => {});
+  }
+  $("#seo-revisar").addEventListener("click", revisarSeo);
+  $("#seo-google").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    try {
+      if (!ultimaSeo?.google.conectado) { const { url } = await api("/seo/google/conectar"); location.href = url; return; }
+      if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Desconectar Google?"; setTimeout(() => { b.classList.remove("seguro"); b.textContent = "Google conectado ✓"; }, 4000); return; }
+      await api("/seo/google/desconectar", { method: "POST" });
+      propsSeo = null;
+      await cargarSeo();
+    } catch (err) { avisar(err.message); }
+  });
+
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarSeo, cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }
