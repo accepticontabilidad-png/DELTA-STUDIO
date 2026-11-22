@@ -262,6 +262,30 @@ async function numerosInstagram(a, errores) {
   };
 }
 
+/**
+ * Publicaciones recientes de una cuenta de Instagram ajena (competencia o creador del nicho), para Tendencias.
+ * Usa "business discovery" desde un Instagram ya conectado: solo funciona con cuentas de empresa o creador.
+ */
+export async function cuentaInstagramAjena(usuario, clienteId = null) {
+  const u = String(usuario || "").trim().replace(/^@/, "").toLowerCase();
+  if (!/^[a-z0-9._]{1,30}$/.test(u)) throw new Error(`"${usuario}" no parece una cuenta de Instagram`);
+  if (!metaConectado()) throw new Error("Meta no está conectado");
+  const ig = (clienteId && db.prepare("SELECT * FROM meta_activos WHERE tipo = 'instagram' AND cliente_id = ? LIMIT 1").get(clienteId))
+    || db.prepare("SELECT * FROM meta_activos WHERE tipo = 'instagram' ORDER BY cliente_id IS NULL, visto DESC LIMIT 1").get();
+  if (!ig) throw new Error("hace falta al menos un Instagram conectado en Meta para ver otras cuentas");
+  const extra = JSON.parse(ig.extra || "{}");
+  const pag = extra.pagina && db.prepare("SELECT token FROM meta_activos WHERE id = ?").get(`page:${extra.pagina}`)?.token;
+  const campos = `business_discovery.username(${u}){username,name,followers_count,media_count,media.limit(30){caption,like_count,comments_count,media_type,media_product_type,permalink,timestamp}}`;
+  try {
+    const d = await pedir(`/${ig.id.slice(3)}`, { fields: campos }, tokenPrincipal() || pag);
+    if (!d.business_discovery) throw new Error("Meta: no devolvió la cuenta");
+    return d.business_discovery;
+  } catch (e) {
+    if (/business_discovery|Invalid user id|Cannot find User|110/i.test(e.message)) throw new Error("no se encontró o no es cuenta de empresa o creador");
+    throw e;
+  }
+}
+
 const CAMPOS_ANUNCIOS = "spend,impressions,reach,clicks,inline_link_clicks,actions,action_values";
 const RESULTADOS = {
   conversaciones: ["onsite_conversion.messaging_conversation_started_7d"],

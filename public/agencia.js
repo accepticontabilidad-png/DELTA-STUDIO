@@ -1254,5 +1254,157 @@ export function iniciarAgencia(h) {
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  // =====================================================================
+  //  TENDENCIAS
+  // =====================================================================
+  let ultimaTe = null;
+  let clienteTe = guardado.get("delta_te_cliente") || "";
+  const URGENCIA = { hoy: ["rojo", "Aprovechar hoy"], semana: ["amarillo", "Esta semana"], siempre: ["verde", "No caduca"] };
+  const veces = (n) => `${Number(n).toLocaleString("es-MX", { maximumFractionDigits: 1 })}×`;
+  const enlaceExt = (url, txt, clase = "") => (url && /^https?:\/\//.test(url) ? `<a class="${clase}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${txt}</a>` : txt);
+
+  async function cargarTendencias() {
+    if (!clientesFi.length) await prepararFinanzas();
+    const activos = clientesFi.filter((c) => c.estado === "activo");
+    if (!activos.some((c) => String(c.id) === String(clienteTe))) clienteTe = activos[0] ? String(activos[0].id) : "";
+    const t = await api(`/tendencias${clienteTe ? `?cliente=${encodeURIComponent(clienteTe)}` : ""}`);
+    ultimaTe = t;
+    pintarTendencias(t);
+  }
+
+  function pintarTendencias(t) {
+    const sel = $("#te-cliente");
+    sel.innerHTML = t.clientes.length
+      ? t.clientes.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteTe) ? "selected" : ""}>${esc(c.nombre)}${c.ideas_nuevas ? ` · ${c.ideas_nuevas} idea${c.ideas_nuevas === 1 ? "" : "s"}` : ""}</option>`).join("")
+      : `<option value="">Sin clientes activos</option>`;
+    const d = t.detalle;
+    $("#te-buscar").disabled = !d || d.buscando;
+    $("#te-config").disabled = !d;
+
+    // Lo que México busca hoy (para todos)
+    $("#te-hoy-hora").textContent = t.hoy.error ? (t.hoy.fecha ? `visto ${haceRato(t.hoy.fecha)}` : "sin conexión") : "en vivo";
+    $("#te-hoy").innerHTML = t.hoy.lista.length
+      ? t.hoy.lista.slice(0, 10).map((x) => `<li><span class="te-hoy-tema">${enlaceExt(x.noticias?.[0]?.enlace, esc(x.tema))}</span>${x.busquedas ? `<small class="tenue">${esc(x.busquedas)} búsquedas</small>` : ""}</li>`).join("")
+      : `<li class="pg-vacio">${t.hoy.error ? "Google Tendencias no respondió. Se intenta otra vez en un rato." : "Sin datos por ahora."}</li>`;
+
+    if (!d) {
+      $("#te-nicho").innerHTML = `<p class="pg-vacio">Da de alta a tus clientes en Cuentas para ver sus tendencias.</p>`;
+      $("#te-ideas").innerHTML = ""; $("#te-ig").innerHTML = ""; $("#te-temas").innerHTML = "";
+      $("#te-avisos").hidden = true; $("#te-usadas").hidden = true; $("#te-hora").textContent = "";
+      return;
+    }
+    guardado.set("delta_te_cliente", String(d.cliente.id));
+
+    // Nicho del cliente
+    const chips = (l) => l.map((x) => `<span class="te-chip">${esc(x)}</span>`).join("");
+    $("#te-nicho").innerHTML = `
+      <div class="te-nicho-fila"><small>Temas${d.sugeridas ? " <i class=\"tenue\">(tomados de su ficha)</i>" : ""}</small><div class="te-chips">${d.palabras.length ? chips(d.palabras) : `<span class="tenue">Sin temas: agrégalos para buscar noticias y búsquedas.</span>`}</div></div>
+      <div class="te-nicho-fila"><small>Cuentas de referencia</small><div class="te-chips">${d.cuentas.length ? d.cuentas.map((u) => enlaceExt(`https://www.instagram.com/${u}/`, `@${esc(u)}`, "te-chip")).join("") : `<span class="tenue">Sin cuentas: agrega su competencia o creadores del nicho para ver qué les funciona.</span>`}</div></div>
+      ${!d.meta_conectado && d.cuentas.length ? `<p class="tenue chico">Conecta Meta (en Cuentas) para ver sus cuentas de Instagram.</p>` : ""}`;
+
+    $("#te-hora").textContent = d.buscando ? "Buscando…" : d.ultima ? `Actualizado ${haceRato(d.ultima)}` : "Sin buscar todavía";
+    $("#te-avisos").hidden = !d.avisos.length;
+    $("#te-avisos").innerHTML = d.avisos.map((a) => `<li>${foco("amarillo")}<span>${esc(a)}</span></li>`).join("");
+
+    // Ideas
+    $("#te-ideas").innerHTML = d.ideas.length
+      ? d.ideas.map((i) => {
+        const [n, txt] = URGENCIA[i.urgencia] || URGENCIA.semana;
+        return `<article class="te-idea" data-idea="${i.id}">
+          <div class="te-idea-cabeza"><span class="ct-fmt">${FMT_ICONO[i.formato] || "•"} ${esc(i.formato_nombre)} · ${esc(i.red_nombre)}</span><span class="tb-chip s-${n}">${txt}</span></div>
+          <b class="te-idea-titulo">${esc(i.titulo)}</b>
+          ${i.gancho ? `<p class="te-gancho">“${esc(i.gancho)}”</p>` : ""}
+          ${i.por_que ? `<p class="te-porque">${esc(i.por_que)}</p>` : ""}
+          ${i.pasos.length ? `<details class="te-pasos"><summary>Cómo hacerlo</summary><ol>${i.pasos.map((p) => `<li>${esc(p)}</li>`).join("")}</ol></details>` : ""}
+          ${i.basada_en ? `<small class="te-base tenue">Basada en: ${esc(i.basada_en)}</small>` : ""}
+          <div class="te-idea-pie">
+            <button type="button" class="fi-quitar" data-te-descartar="${i.id}">Descartar</button>
+            <button type="button" class="ag-agregar" data-te-usar="${i.id}">Pasar a Contenido</button>
+          </div>
+        </article>`;
+      }).join("")
+      : `<p class="pg-vacio te-vacio">${d.buscando ? "Buscando lo que se mueve en su nicho…" : !t.claude ? "Las ideas las prepara DELTA con Claude; falta conectarlo." : d.ultima ? "Ya usaste o descartaste todas las ideas. Toca <b>Buscar ahora</b> para más." : "Toca <b>Buscar ahora</b> y en unos segundos tendrás ideas para este cliente."}</p>`;
+
+    $("#te-usadas").hidden = !d.usadas.length;
+    $("#te-usadas summary").textContent = `${d.usadas.length} idea${d.usadas.length === 1 ? "" : "s"} ya en Contenido`;
+    $("#te-usadas ul").innerHTML = d.usadas.map((i) => `<li><a href="#/contenido">${esc(i.titulo)}</a></li>`).join("");
+
+    // Señales
+    const s = d.senales || {};
+    $("#te-ig").innerHTML = (s.instagram || []).length
+      ? s.instagram.map((x) => `<li class="te-sen">
+          <span class="te-veces" title="Interacciones contra lo normal de esa cuenta">${veces(x.veces)}</span>
+          <span class="te-sen-txt">${enlaceExt(x.enlace, `<b>@${esc(x.cuenta)}</b> · ${esc(FORMATOS_TE[x.formato] || x.formato)}`)}
+            <small>${esc(x.texto || "(sin texto)")}</small>
+            <small class="tenue">${cifra(x.me_gusta)} me gusta · ${cifra(x.comentarios)} comentarios · ${haceRato(x.fecha)}</small></span>
+        </li>`).join("")
+      : `<li class="pg-vacio">${!d.cuentas.length ? "Agrega cuentas de referencia en <b>Nicho y cuentas</b>." : d.ultima ? "Nada fuera de lo normal en sus cuentas este mes." : "Aún no se ha buscado."}</li>`;
+    const temas = [
+      ...(s.busquedas || []).map((x) => ({ tipo: "Google", titulo: x.tema, extra: x.busquedas ? `${x.busquedas} búsquedas hoy` : "", enlace: x.noticias?.[0]?.enlace })),
+      ...(s.noticias || []).map((x) => ({ tipo: "Noticia", titulo: x.titulo, extra: [x.fuente, x.fecha && haceRato(x.fecha)].filter(Boolean).join(" · "), enlace: x.enlace })),
+    ];
+    $("#te-temas").innerHTML = temas.length
+      ? temas.slice(0, 10).map((x) => `<li class="te-sen"><span class="te-tipo ${x.tipo === "Google" ? "g" : ""}">${x.tipo}</span><span class="te-sen-txt">${enlaceExt(x.enlace, `<b>${esc(x.titulo)}</b>`)}${x.extra ? `<small class="tenue">${esc(x.extra)}</small>` : ""}</span></li>`).join("")
+      : `<li class="pg-vacio">${!d.palabras.length ? "Agrega los temas de su nicho." : d.ultima ? "Nada nuevo de su tema esta semana." : "Aún no se ha buscado."}</li>`;
+  }
+  const FORMATOS_TE = { reel: "Reel", carrusel: "Carrusel", video: "Video", post: "Post" };
+
+  async function buscarTe() {
+    const id = ultimaTe?.detalle?.cliente.id;
+    if (!id) return;
+    const b = $("#te-buscar");
+    b.disabled = true;
+    b.textContent = "Buscando…";
+    $("#te-hora").textContent = "Buscando… (unos segundos)";
+    try {
+      const r = await api("/tendencias/buscar", { method: "POST", body: { cliente: id } });
+      sonar("accion");
+      if (r.sin_claude) avisar("Se juntaron las señales, pero las ideas necesitan que Claude esté conectado.");
+    } catch (err) { avisar(err.message); }
+    b.textContent = "Buscar ahora";
+    await cargarTendencias().catch(() => {});
+  }
+
+  $("#te-cliente").addEventListener("change", (e) => {
+    clienteTe = e.target.value;
+    cargarTendencias().catch((err) => avisar(err.message));
+  });
+  $("#te-buscar").addEventListener("click", buscarTe);
+  $("#te-config").addEventListener("click", () => {
+    const d = ultimaTe?.detalle;
+    if (!d) return;
+    $("#te-dlg-titulo").textContent = `Nicho de ${d.cliente.nombre}`;
+    $("#te-palabras").value = d.palabras.join(", ");
+    $("#te-cuentas").value = d.cuentas.map((u) => "@" + u).join(", ");
+    $("#te-msg").hidden = true;
+    $("#dlg-tendencias").showModal();
+  });
+  $("#te-cancelar").addEventListener("click", () => $("#dlg-tendencias").close());
+  $("#form-tendencias").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("/tendencias/config", { method: "PUT", body: { cliente: ultimaTe.detalle.cliente.id, palabras: $("#te-palabras").value, cuentas: $("#te-cuentas").value } });
+      $("#dlg-tendencias").close();
+      await buscarTe();
+    } catch (err) { $("#te-msg").textContent = err.message; $("#te-msg").hidden = false; }
+  });
+  $("#te-ideas").addEventListener("click", async (e) => {
+    const usar = e.target.closest("[data-te-usar]");
+    const quitar = e.target.closest("[data-te-descartar]");
+    if (!usar && !quitar) return;
+    const b = usar || quitar;
+    b.disabled = true;
+    try {
+      if (usar) {
+        await api(`/tendencias/ideas/${usar.dataset.teUsar}/contenido`, { method: "POST", body: {} });
+        avisar("Lista: la idea quedó en Contenido como planeada. Ponle fecha cuando la agenden.");
+      } else {
+        await api(`/tendencias/ideas/${quitar.dataset.teDescartar}`, { method: "DELETE" });
+      }
+      sonar("accion");
+      await cargarTendencias();
+    } catch (err) { b.disabled = false; avisar(err.message); }
+  });
+
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }

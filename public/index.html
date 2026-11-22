@@ -76,6 +76,7 @@
         <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Panel general</span></a>
         <a href="#/finanzas" class="menu-item" data-ir="finanzas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3.2-1.6M12 5.5v1.5M12 17v1.5"/></svg><span>Finanzas</span><small id="badge-finanzas" class="badge" hidden></small></a>
         <a href="#/contenido" class="menu-item" data-ir="contenido"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="7" rx="1.5"/></svg><span>Contenido</span><small id="badge-contenido" class="badge" hidden></small></a>
+        <a href="#/tendencias" class="menu-item" data-ir="tendencias"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c.6 3.2 3 4.6 3 8a3 3 0 0 1-6 0c0-1.4.6-2.4 1.3-3.2"/><path d="M8.5 13.5A5.5 5.5 0 1 0 17 9.2"/><path d="M12 21v0"/></svg><span>Tendencias</span><small id="badge-tendencias" class="badge" hidden></small></a>
         <a href="#/paidmedia" class="menu-item" data-ir="paidmedia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg><span>Paid media</span><small id="badge-paidmedia" class="badge" hidden></small></a>
         <a href="#/analitica" class="menu-item" data-ir="analitica"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 17v-3M12 17v-6M15 17v-2"/></svg><span>Analítica</span></a>
         <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
@@ -446,6 +447,44 @@
         </div>
       </section>
 
+      <!-- Tendencias: lo que se mueve en el nicho de cada cliente e ideas listas para pasar a Contenido -->
+      <section class="seccion tendencias" data-seccion="tendencias">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Tendencias</h1>
+          <select id="te-cliente" class="ct-filtro" aria-label="Cliente"></select>
+          <div class="ag-botones">
+            <button type="button" class="tb-link" id="te-config">Nicho y cuentas</button>
+            <button type="button" class="ag-agregar" id="te-buscar">Buscar ahora</button>
+          </div>
+        </div>
+        <div class="tablero tablero-te">
+          <div class="te-principal">
+            <div class="panel te-nicho" id="te-nicho"></div>
+            <div class="panel te-ideas-caja">
+              <div class="ag-cabeza"><h2>Ideas listas para usar</h2><span class="tb-hora" id="te-hora"></span></div>
+              <ul class="te-avisos" id="te-avisos" hidden></ul>
+              <div class="te-ideas" id="te-ideas"></div>
+              <details class="te-usadas" id="te-usadas" hidden><summary></summary><ul></ul></details>
+            </div>
+          </div>
+          <aside class="te-lado">
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Pegando en su nicho</h2><span class="tb-hora">Instagram</span></div>
+              <ul class="te-lista" id="te-ig"></ul>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Se habla de su tema</h2><span class="tb-hora">Esta semana</span></div>
+              <ul class="te-lista" id="te-temas"></ul>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Lo que México busca hoy</h2><span class="tb-hora" id="te-hoy-hora"></span></div>
+              <ol class="te-hoy" id="te-hoy"></ol>
+            </div>
+          </aside>
+        </div>
+        <p class="tenue chico tb-nota">Cada lunes temprano DELTA revisa el nicho de cada cliente y deja ideas nuevas. "Pegando en su nicho" son publicaciones de sus cuentas de referencia que van muy por encima de lo normal para esa cuenta (por ejemplo, 3× = el triple de lo que suele tener). Instagram solo deja ver cuentas de empresa o creador.</p>
+      </section>
+
       <!-- Paid media: inversión en anuncios, costo por contacto, ventas y retorno por cliente -->
       <section class="seccion paidmedia" data-seccion="paidmedia">
         <div class="tb-cabeza">
@@ -713,6 +752,22 @@
         <button type="button" id="ct-borrar" class="peligro" hidden>Quitar</button>
         <button type="button" id="ct-cancelar">Cancelar</button>
         <button type="submit" class="primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-tendencias" class="dialogo">
+    <form id="form-tendencias" method="dialog">
+      <h2 id="te-dlg-titulo">Nicho y cuentas</h2>
+      <label>Temas de su nicho <small class="tenue">(separados por coma, hasta 6)</small>
+        <textarea id="te-palabras" rows="2" maxlength="400" placeholder="Ej. cardiología, colesterol, infarto, salud del corazón"></textarea></label>
+      <label>Cuentas de Instagram de referencia <small class="tenue">(competencia o creadores que admire, hasta 8)</small>
+        <textarea id="te-cuentas" rows="3" maxlength="600" placeholder="Ej. @drcorazon, @cardio.mx"></textarea></label>
+      <p class="tenue chico">Con los temas se buscan noticias y búsquedas de Google; con las cuentas, las publicaciones que les están funcionando. Solo se pueden ver cuentas de empresa o creador.</p>
+      <p id="te-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="te-cancelar">Cancelar</button>
+        <button type="submit" class="primario">Guardar y buscar</button>
       </div>
     </form>
   </dialog>

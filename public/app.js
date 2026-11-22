@@ -107,6 +107,8 @@ async function cargarPanel() {
   $("#badge-finanzas").textContent = p.pagos_vencidos || "";
   $("#badge-contenido").hidden = !p.contenido_atrasado;
   $("#badge-contenido").textContent = p.contenido_atrasado || "";
+  $("#badge-tendencias").hidden = !p.ideas_nuevas;
+  $("#badge-tendencias").textContent = p.ideas_nuevas || "";
   $("#badge-paidmedia").hidden = !p.anuncios_sin_resultados;
   $("#badge-paidmedia").textContent = p.anuncios_sin_resultados || "";
   correoConectado = { gmail: c.gmail, outlook: c.outlook };
@@ -920,6 +922,7 @@ const SECCIONES = {
   finanzas: { cargar: () => agenciaTableros().cargarFinanzas(), cada: 60e3 },
   analitica: { cargar: () => agenciaTableros().cargarAnalitica(), cada: 120e3 },
   contenido: { cargar: () => agenciaTableros().cargarContenido(), cada: 30e3 },
+  tendencias: { cargar: () => agenciaTableros().cargarTendencias(), cada: 120e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },

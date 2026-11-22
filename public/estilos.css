@@ -1635,3 +1635,63 @@ html[data-mood="dia"] .sc-num { font-weight: 400; }
   .sc-izq { justify-self: center; }
   .sc-parte { grid-template-columns: 76px minmax(0, 1fr) 48px; }
 }
+
+/* ---------- Tendencias ---------- */
+.tablero-te { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); grid-template-areas: none; align-items: start; }
+.tablero-te > * { grid-area: auto; }
+.te-principal, .te-lado { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.te-nicho { display: grid; gap: 10px; }
+.te-nicho-fila { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
+.te-nicho-fila > small { color: var(--tenue); font-size: 12px; padding-top: 4px; }
+.te-chips { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.te-chip { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--cian-suave); color: var(--lila); font-size: 12.5px; text-decoration: none; }
+a.te-chip:hover { background: rgba(139,115,255,.26); }
+.te-avisos { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--tenue); }
+.te-avisos li { display: flex; gap: 8px; align-items: baseline; }
+.te-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.te-vacio { grid-column: 1 / -1; padding: 18px 4px; }
+.te-idea { display: grid; gap: 8px; align-content: start; padding: 14px; border-radius: 14px; background: rgba(8,5,24,.4); border: 1px solid var(--borde); min-width: 0; }
+.te-idea-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.te-idea-titulo { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.te-gancho { margin: 0; padding: 8px 10px; border-left: 2px solid var(--dorado); background: rgba(255,158,232,.07); border-radius: 0 8px 8px 0; font-size: 13.5px; font-style: italic; line-height: 1.4; }
+.te-porque { margin: 0; font-size: 13px; color: var(--tenue); line-height: 1.4; }
+.te-pasos summary { cursor: pointer; font-size: 12.5px; color: var(--lila); }
+.te-pasos ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 3px; font-size: 13px; line-height: 1.4; }
+.te-base { font-size: 11.5px; overflow-wrap: anywhere; }
+.te-idea-pie { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
+.te-usadas { margin-top: 12px; font-size: 13px; }
+.te-usadas summary { cursor: pointer; color: var(--tenue); }
+.te-usadas ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.te-usadas a { color: var(--lila); }
+.te-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.te-sen { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.te-sen-txt { display: grid; gap: 2px; min-width: 0; font-size: 13px; }
+.te-sen-txt a { color: inherit; text-decoration: none; }
+.te-sen-txt a:hover b { text-decoration: underline; }
+.te-sen-txt small { font-size: 12px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.te-veces { min-width: 46px; text-align: center; padding: 4px 6px; border-radius: 10px; background: rgba(255,158,232,.14); color: var(--dorado); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.te-tipo { min-width: 58px; text-align: center; padding: 2px 6px; border-radius: 999px; background: rgba(149,144,192,.14); color: var(--tenue); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+.te-tipo.g { background: var(--cian-suave); color: var(--lila); }
+.te-hoy { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 13px; }
+.te-hoy li { padding-left: 2px; }
+.te-hoy li::marker { color: var(--tenue); font-size: 11.5px; }
+.te-hoy-tema a { color: inherit; text-decoration: none; }
+.te-hoy-tema a:hover { text-decoration: underline; }
+.te-hoy small { display: block; font-size: 11.5px; }
+.tendencias .tb-nota { margin-top: 14px; }
+@media (max-width: 1100px) {
+  .tablero-te { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  #te-cliente { order: 3; width: 100%; max-width: none; }
+  .te-nicho-fila { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .te-ideas { grid-template-columns: minmax(0, 1fr); }
+  .te-idea-pie > * { flex: 1 1 auto; }
+}
+html[data-mood="dia"] .te-idea { background: rgba(255,255,255,.78); }
+html[data-mood="dia"] .te-chip, html[data-mood="dia"] .te-tipo.g, html[data-mood="dia"] .te-pasos summary, html[data-mood="dia"] .te-usadas a { color: #5a3fd6; background-color: rgba(106,76,240,.10); }
+html[data-mood="dia"] .te-pasos summary, html[data-mood="dia"] .te-usadas a { background: none; }
+html[data-mood="dia"] .te-gancho { background: rgba(214,51,160,.06); border-left-color: #c2368f; }
+html[data-mood="dia"] .te-veces { background: rgba(214,51,160,.10); color: #b0287f; }
+html[data-mood="dia"] .te-tipo { background: rgba(60,50,110,.08); }
+.te-lado .tb-hora { white-space: nowrap; }
