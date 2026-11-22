@@ -733,6 +733,170 @@ export function iniciarAgencia(h) {
     } catch (err) { avisar(err.message); b.disabled = false; }
   });
 
+  // =====================================================================
+  //  PAID MEDIA
+  // =====================================================================
+  let mesPm = null; // null = mes actual
+  let ultimaPm = null;
+  const PLAT = { meta: "Meta", google: "Google", tiktok: "TikTok", otra: "Otra" };
+  const roasNivel = (r) => (r === null || r === undefined ? null : r >= 3 ? "verde" : r >= 1 ? "amarillo" : "rojo");
+  const roasTxt = (r) => (r === null || r === undefined ? "–" : `${r.toLocaleString("es-MX", { maximumFractionDigits: 1 })}x`);
+  const entero = (n) => (n === null || n === undefined ? "–" : Number(n).toLocaleString("es-MX"));
+
+  async function cargarPaidMedia() {
+    if (!clientesFi.length) await prepararFinanzas();
+    const p = await api(`/paidmedia${mesPm ? `?mes=${mesPm}` : ""}`);
+    ultimaPm = p;
+    pintarPaidMedia(p);
+  }
+
+  function pintarPaidMedia(p) {
+    const mesLargo = p.nombre_mes.charAt(0).toUpperCase() + p.nombre_mes.slice(1);
+    $("#pm-hoy").textContent = mesLargo;
+    $("#pm-hoy").title = p.es_mes_actual ? "Este mes" : "Volver a este mes";
+    $("#pm-despues").disabled = p.es_mes_actual;
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi" ${k.ir ? `data-fi-ir="${k.ir}" role="button" tabindex="0"` : ""}>
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
+        <b>${esc(k.valor)}</b>
+        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
+        <span class="pg-kpi-pie">${k.pie || ""}</span>
+      </div>`;
+    const cambio = p.cambio_inversion;
+    const rn = roasNivel(p.roas);
+    $("#pm-kpis").innerHTML = [
+      { nombre: "Inversión en anuncios", valor: dinero0(p.inversion), chip: cambio === null ? null : ["", conSignoPct(cambio)], extra: p.tope ? `de ${dinero0(p.tope)} de tope` : p.inversion_anterior ? `vs ${dinero0(p.inversion_anterior)} el mes anterior` : "de todos los clientes", pie: p.tope ? barra(p.inversion, p.tope) : "" },
+      { nombre: "Contactos", valor: entero(p.contactos), extra: "mensajes y prospectos", ir: "#pm-clientes" },
+      { nombre: "Costo por contacto", valor: p.costo_por_contacto === null ? "–" : dinero(p.costo_por_contacto), extra: p.costo_por_contacto === null ? "falta saber cuántos llegaron" : "promedio de la agencia" },
+      { nombre: "Retorno", valor: roasTxt(p.roas), chip: rn ? [rn, rn === "verde" ? "Bueno" : rn === "amarillo" ? "Justo" : "Pierde"] : null, extra: p.valor_ventas !== null ? `${dinero0(p.valor_ventas)} vendidos${p.ventas ? ` · ${entero(p.ventas)} venta${p.ventas === 1 ? "" : "s"}` : ""}` : "anota lo que venden tus clientes" },
+    ].map(kpi).join("").replace('tb-chip s-"', 'tb-chip"');
+
+    // Avisos
+    const urg = p.avisos.filter((a) => a.nivel !== "info");
+    $("#pm-avisos-n").textContent = urg.length ? `${urg.length} por revisar` : "";
+    $("#pm-avisos").innerHTML = p.avisos.length
+      ? p.avisos.map((a) => `<li class="pm-aviso n-${a.nivel}" data-cuenta="${a.cliente_id}" tabindex="0">
+          ${foco(a.nivel)}
+          <span class="pg-linea-txt"><b>${esc(a.cliente)}</b><small>${esc(a.texto)}</small></span>
+        </li>`).join("")
+      : vacio(p.clientes.length ? "Todo en orden con los anuncios ✨" : "Aún no hay clientes con anuncios este mes.");
+
+    // Por cliente
+    $("#pm-cli-mes").textContent = mesLargo;
+    $("#pm-clientes").innerHTML = p.clientes.length
+      ? `<div class="fi-rent-fila fi-rent-cabeza pm-fila tenue"><span>Cliente</span><span>Inversión</span><span>Contactos</span><span>Costo c/u</span><span>Retorno</span></div>` +
+        p.clientes.map((c) => {
+          const r = roasNivel(c.roas);
+          return `<div class="fi-rent-fila pm-fila" data-cuenta="${c.id}" tabindex="0">
+            <span class="fi-rent-nombre"><b>${foco(c.nivel)}${esc(c.nombre)}</b>${c.tope ? barra(c.inversion, c.tope).replace("pg-barra", "pg-barra fi-rent-barra") : ""}<small class="tenue">${[c.tope ? `${c.uso_tope} % del tope` : "", c.fuente_resultados === "cliente" ? "lo reporta el cliente" : c.fuente_resultados === "meta" ? "según Meta" : ""].filter(Boolean).join(" · ")}</small></span>
+            <span>${dinero0(c.inversion)}</span>
+            <span>${entero(c.contactos)}</span>
+            <span>${c.costo_por_contacto === null ? "–" : dinero(c.costo_por_contacto)}</span>
+            <span>${r ? `<span class="tb-chip s-${r}">${roasTxt(c.roas)}</span>` : `<span class="tenue">–</span>`}</span>
+          </div>`;
+        }).join("")
+      : `<p class="pg-vacio">Ningún cliente tiene anuncios este mes. Asigna sus cuentas de anuncios en <a href="#" data-abrir-meta>Meta</a> o anota su gasto en su ficha.</p>`;
+
+    // Campañas
+    const acts = p.campanas.filter((k) => k.activa).length;
+    $("#pm-camp-n").textContent = p.campanas.length ? `${acts} activa${acts === 1 ? "" : "s"} · ${p.campanas.length} con gasto` : "";
+    const alerta = new Map(p.avisos.filter((a) => a.campana_id).map((a) => [a.campana_id, a]));
+    $("#pm-campanas").innerHTML = p.campanas.length
+      ? p.campanas.map((k) => {
+          const a = alerta.get(k.id);
+          const res = k.solo_alcance ? `${compacto.format(k.alcance || k.impresiones)} personas` : `${entero(k.resultados)} resultado${k.resultados === 1 ? "" : "s"}`;
+          return `<div class="pm-camp ${a ? "n-" + a.nivel : ""}" data-cuenta="${k.cliente_id}" tabindex="0">
+            <div class="pm-camp-cabeza"><i class="pm-estado ${k.activa ? "on" : ""}" title="${k.activa ? "Activa" : "Apagada"}"></i><b>${esc(k.nombre)}</b><span class="tenue">${esc(k.cliente)}</span></div>
+            <div class="pm-camp-datos">
+              <span><small>Gasto</small>${dinero0(k.gasto)}</span>
+              <span><small>${k.solo_alcance ? "Alcance" : "Resultados"}</small>${res}</span>
+              <span><small>Costo c/u</small>${k.costo_resultado === null || k.solo_alcance ? "–" : dinero(k.costo_resultado)}</span>
+              <span><small>${k.roas !== null ? "Retorno" : "Frecuencia"}</small>${k.roas !== null ? roasTxt(k.roas) : (k.frecuencia || 0).toLocaleString("es-MX", { maximumFractionDigits: 1 })}</span>
+            </div>
+            ${k.objetivo_nombre ? `<small class="tenue">${esc(k.objetivo_nombre)}${k.semana?.gasto ? ` · últimos 7 días: ${dinero0(k.semana.gasto)} y ${entero(k.semana.resultados)} resultado${k.semana.resultados === 1 ? "" : "s"}` : ""}</small>` : ""}
+            ${a ? `<small class="t-${a.nivel}">${esc(a.texto.replace(/^"[^"]+"\s*:?\s*/, ""))}</small>` : ""}
+          </div>`;
+        }).join("")
+      : `<p class="pg-vacio">${p.cuentas_meta ? "Meta aún no trae campañas con gasto este mes." : "Cuando conectes Meta y asignes las cuentas de anuncios a cada cliente, aquí verás cada campaña con su gasto y resultados."} <a href="#" data-abrir-meta>Abrir Meta</a></p>`;
+
+    // Gráfica 6 meses
+    $("#pm-grafica").innerHTML = graficaPm(p.historia, p.mes);
+
+    // Plataformas
+    $("#pm-plat-mes").textContent = mesLargo;
+    const maxP = Math.max(1, ...p.por_plataforma.map((x) => x.monto));
+    $("#pm-plataformas").innerHTML = p.por_plataforma.length
+      ? p.por_plataforma.map((x) => `<div class="fi-cat"><span>${esc(PLAT[x.plataforma] || x.plataforma)}</span><b>${dinero0(x.monto)}</b><span class="pg-barra"><i data-ancho="${Math.round((x.monto / maxP) * 100)}"></i></span></div>`).join("")
+      : `<p class="tenue chico">Sin inversión anotada este mes.</p>`;
+
+    // Formulario
+    const elegido = $("#pm-form-cliente").value;
+    $("#pm-form-cliente").innerHTML = clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === elegido ? "selected" : ""}>${esc(c.nombre)}</option>`).join("") || `<option value="">Primero da de alta un cliente</option>`;
+
+    medidas($('[data-seccion="paidmedia"]'));
+  }
+
+  function graficaPm(h, mesSel) {
+    const W = 520, H = 190, izq = 46, der = 34, abajo = 22, arriba = 12;
+    const maxI = Math.max(1, ...h.map((x) => x.inversion));
+    const maxC = Math.max(1, ...h.map((x) => x.contactos));
+    const alto = H - arriba - abajo;
+    const yI = (v) => arriba + alto * (1 - v / maxI);
+    const yC = (v) => arriba + alto * (1 - v / maxC);
+    const paso = (W - izq - der) / h.length;
+    const ancho = Math.max(8, paso * 0.45);
+    const hayC = h.some((x) => x.contactos);
+    const pts = h.map((x, i) => `${izq + paso * i + paso / 2},${yC(x.contactos).toFixed(1)}`).join(" ");
+    return `<svg viewBox="0 0 ${W} ${H}" class="fi-svg" role="img" aria-label="Inversión en anuncios y contactos de los últimos 6 meses">
+      ${[0, 0.5, 1].map((q) => `<line x1="${izq}" x2="${W - der}" y1="${yI(maxI * q)}" y2="${yI(maxI * q)}" class="fi-reja"/><text x="${izq - 6}" y="${yI(maxI * q) + 4}" class="fi-eje" text-anchor="end">$${maxI * q >= 1000 ? compacto.format(maxI * q) : Math.round(maxI * q)}</text>${hayC ? `<text x="${W - der + 6}" y="${yC(maxC * q) + 4}" class="fi-eje pm-eje-c">${Math.round(maxC * q)}</text>` : ""}`).join("")}
+      ${h.map((x, i) => {
+        const cx = izq + paso * i + paso / 2;
+        const sel = x.mes === mesSel ? "sel" : "";
+        return `<g class="fi-mes-g ${sel}" data-pm-mes="${x.mes}">
+          <title>${MESES[Number(x.mes.slice(5)) - 1]} ${x.mes.slice(0, 4)}: ${dinero0(x.inversion)} invertidos, ${entero(x.contactos)} contactos</title>
+          <rect x="${cx - paso / 2}" y="${arriba}" width="${paso}" height="${alto}" class="fi-zona"/>
+          <rect x="${cx - ancho / 2}" y="${yI(x.inversion)}" width="${ancho}" height="${Math.max(0, yI(0) - yI(x.inversion))}" rx="3" class="fi-ing"/>
+          <text x="${cx}" y="${H - 6}" class="fi-eje ${sel}" text-anchor="middle">${MESES[Number(x.mes.slice(5)) - 1]}</text>
+        </g>`;
+      }).join("")}
+      ${hayC ? `<polyline points="${pts}" class="fi-util pm-linea"/>${h.map((x, i) => `<circle cx="${izq + paso * i + paso / 2}" cy="${yC(x.contactos)}" r="${x.mes === mesSel ? 4 : 2.5}" class="fi-util-p pm-punto"/>`).join("")}` : ""}
+    </svg>
+    <div class="fi-ley"><span><i class="fi-ing"></i>Inversión</span><span><i class="fi-util pm-linea"></i>Contactos</span>${h.some((x) => x.inversion) ? "" : `<span class="tenue">Se irá llenando mes con mes.</span>`}</div>`;
+  }
+
+  $("#pm-antes").addEventListener("click", () => { mesPm = moverMes(ultimaPm?.mes || new Date().toISOString().slice(0, 7), -1); cargarPaidMedia().catch((e) => avisar(e.message)); });
+  $("#pm-despues").addEventListener("click", () => { if (!ultimaPm || ultimaPm.es_mes_actual) return; mesPm = moverMes(ultimaPm.mes, 1); cargarPaidMedia().catch((e) => avisar(e.message)); });
+  $("#pm-hoy").addEventListener("click", () => { mesPm = null; cargarPaidMedia().catch((e) => avisar(e.message)); });
+  $("#pm-grafica").addEventListener("click", (e) => {
+    const g = e.target.closest("[data-pm-mes]");
+    if (!g) return;
+    mesPm = g.dataset.pmMes;
+    cargarPaidMedia().catch((err) => avisar(err.message));
+  });
+  $("#pm-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const b = e.target.querySelector("button[type=submit]");
+    const v = (id) => $(id).value.trim() || undefined;
+    b.disabled = true;
+    try {
+      await api("/paidmedia/resultados", { method: "PUT", body: {
+        cliente: $("#pm-form-cliente").value, mes: ultimaPm?.mes,
+        prospectos: v("#pm-form-prospectos"), ventas: v("#pm-form-ventas"), valor_ventas: v("#pm-form-valor"),
+      } });
+      sonar("accion");
+      e.target.reset();
+      await cargarPaidMedia();
+    } catch (err) { avisar(err.message); }
+    b.disabled = false;
+  });
+  $('[data-seccion="paidmedia"]').addEventListener("click", (e) => {
+    const ir = e.target.closest("[data-fi-ir]");
+    if (!ir) return;
+    const destino = $(ir.dataset.fiIr);
+    (destino?.closest(".panel") || destino)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (destino?.tagName === "FORM") setTimeout(() => destino.querySelector("select, input")?.focus(), 350);
+  });
+
   async function abrirCuenta(id, { mover = true } = {}) {
     elegida = Number(id);
     guardado.set("delta_cuenta", String(elegida));
@@ -744,7 +908,7 @@ export function iniciarAgencia(h) {
 
   // Toques: una tarjeta, alerta, fila o entrega con data-cuenta abre la ficha del cliente.
   document.addEventListener("click", (e) => {
-    if (e.target.closest("[data-abrir-meta]")) return void abrirMeta().catch((err) => avisar(err.message));
+    if (e.target.closest("[data-abrir-meta]")) { e.preventDefault(); return void abrirMeta().catch((err) => avisar(err.message)); }
     const mc = e.target.closest("[data-meta-cliente]");
     if (mc) {
       mc.disabled = true;
@@ -767,5 +931,5 @@ export function iniciarAgencia(h) {
     if (x) x.click();
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }

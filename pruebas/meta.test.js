@@ -33,15 +33,24 @@ const respuestas = {
     { id: "m1", timestamp: new Date().toISOString(), like_count: 120, comments_count: 8, permalink: "https://instagram.com/p/x", caption: "Sonríe" },
     { id: "m2", timestamp: "2020-01-01T00:00:00+0000", like_count: 999, comments_count: 1 },
   ] },
-  "/act_55/insights": { data: [{ spend: "3250.50", impressions: "90000", reach: "40000", clicks: "1200", inline_link_clicks: "800",
-    actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "65" }, { action_type: "link_click", value: "800" }] }] },
-  "/act_55/campaigns": { data: [], summary: { total_count: 3 } },
+  "/act_55/insights": (p) => (p.level === "campaign"
+    ? { data: [
+      { campaign_id: "c1", campaign_name: "Mensajes WhatsApp", objective: "OUTCOME_ENGAGEMENT", spend: p.date_preset === "last_7d" ? "900" : "2650.50", impressions: "70000", frequency: "2.1", inline_link_clicks: "600",
+        actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: p.date_preset === "last_7d" ? "20" : "65" }] },
+      { campaign_id: "c9", campaign_name: "Ventas viejas", objective: "OUTCOME_SALES", spend: "600", impressions: "20000", frequency: "4.6", inline_link_clicks: "200",
+        actions: [{ action_type: "omni_purchase", value: "2" }], action_values: [{ action_type: "omni_purchase", value: "1800" }] },
+    ] }
+    : { data: [{ spend: "3250.50", impressions: "90000", reach: "40000", clicks: "1200", inline_link_clicks: "800",
+      actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "65" }, { action_type: "link_click", value: "800" }, { action_type: "omni_purchase", value: "2" }],
+      action_values: [{ action_type: "omni_purchase", value: "1800" }] }] }),
+  "/act_55/campaigns": { data: [{ id: "c1" }, { id: "c2" }, { id: "c3" }] },
 };
 globalThis.fetch = async (url) => {
   const u = new URL(url);
   const ruta = u.pathname.replace(/^\/v[\d.]+/, "");
   pedidas.push({ ruta, params: Object.fromEntries(u.searchParams) });
-  const d = respuestas[ruta];
+  const r = respuestas[ruta];
+  const d = typeof r === "function" ? r(Object.fromEntries(u.searchParams)) : r;
   if (!d) return new Response(JSON.stringify({ error: { message: "sin permiso", code: 10 } }), { status: 400 });
   return new Response(JSON.stringify(d), { status: 200 });
 };
@@ -101,6 +110,11 @@ test("descubrir y actualizar: liga por nombre, llena el gasto solo y guarda la f
   assert.equal(f.meta.facebook.publicaciones_mes, 2);
   assert.equal(f.meta.anuncios.conversaciones, 65);
   assert.equal(f.meta.anuncios.campanas_activas, 3);
+  assert.equal(f.meta.anuncios.valor_compras, 1800);
+  assert.equal(f.meta.anuncios.campanas.length, 2);
+  const [c1, c9] = f.meta.anuncios.campanas;
+  assert.deepEqual([c1.id, c1.activa, c1.conversaciones, c1.semana.gasto, c1.semana.resultados], ["c1", true, 65, 900, 20]);
+  assert.deepEqual([c9.activa, c9.compras, c9.valor_compras, c9.frecuencia], [false, 2, 1800, 4.6]);
   assert.equal(f.salud.nivel, "verde"); // 3,250 de 5,000: va bien
 });
 

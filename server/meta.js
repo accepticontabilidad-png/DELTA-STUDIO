@@ -262,19 +262,51 @@ async function numerosInstagram(a, errores) {
   };
 }
 
-const CAMPOS_ANUNCIOS = "spend,impressions,reach,clicks,inline_link_clicks,actions";
+const CAMPOS_ANUNCIOS = "spend,impressions,reach,clicks,inline_link_clicks,actions,action_values";
 const RESULTADOS = {
   conversaciones: ["onsite_conversion.messaging_conversation_started_7d"],
   prospectos: ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"],
   compras: ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"],
 };
+const resultadosDe = (fila) => ({
+  ...Object.fromEntries(Object.entries(RESULTADOS).map(([k, tipos]) => [k, sumaAccion(fila.actions, tipos)])),
+  valor_compras: Math.round(sumaAccion(fila.action_values, RESULTADOS.compras) * 100) / 100,
+});
+const CAMPOS_CAMPANA = "campaign_id,campaign_name,objective,spend,impressions,reach,frequency,inline_link_clicks,actions,action_values";
+
+/** Números por campaña (este mes y los últimos 7 días), para el tablero de Paid media. */
+async function campanasDe(a, activas) {
+  const lista = async (preset) => (await todo(`/${a.id}/insights`, { fields: CAMPOS_CAMPANA, date_preset: preset, level: "campaign" }, undefined, 200));
+  const mes = (await intentar(() => lista("this_month"), null, "campañas")) || [];
+  if (!mes.length) return [];
+  const semana = new Map(((await intentar(() => lista("last_7d"), null, "campañas 7 días")) || []).map((f) => [f.campaign_id, f]));
+  return mes.map((f) => {
+    const s = semana.get(f.campaign_id);
+    const r = resultadosDe(f);
+    return {
+      id: f.campaign_id,
+      nombre: f.campaign_name || f.campaign_id,
+      objetivo: f.objective || null,
+      activa: activas ? activas.has(f.campaign_id) : null,
+      cuenta: a.nombre,
+      gasto: Number(f.spend) || 0,
+      impresiones: Number(f.impressions) || 0,
+      alcance: Number(f.reach) || 0,
+      frecuencia: Number(f.frequency) || 0,
+      clics_enlace: Number(f.inline_link_clicks) || 0,
+      ...r,
+      semana: s ? (() => { const rs = resultadosDe(s); return { gasto: Number(s.spend) || 0, resultados: rs.conversaciones + rs.prospectos + rs.compras }; })() : { gasto: 0, resultados: 0 },
+    };
+  });
+}
 
 async function numerosAnuncios(a, errores) {
   const fila = async (preset) => (await pedir(`/${a.id}/insights`, { fields: CAMPOS_ANUNCIOS, date_preset: preset, level: "account" })).data?.[0] || {};
   const este = await intentar(() => fila("this_month"), errores, a.nombre);
   if (!este) return null;
   const pasado = await intentar(() => fila("last_month"), null, "mes pasado");
-  const activas = await intentar(() => pedir(`/${a.id}/campaigns`, { effective_status: ["ACTIVE"], summary: "total_count", limit: 1, fields: "id" }), null, "campañas");
+  const activas = await intentar(() => todo(`/${a.id}/campaigns`, { effective_status: ["ACTIVE"], fields: "id" }, undefined, 300), null, "campañas");
+  const ids = activas ? new Set(activas.map((x) => x.id)) : null;
   return {
     moneda: a.extra?.moneda || null,
     gasto_mes: Number(este.spend) || 0,
@@ -283,8 +315,9 @@ async function numerosAnuncios(a, errores) {
     alcance: Number(este.reach) || 0,
     clics: Number(este.clicks) || 0,
     clics_enlace: Number(este.inline_link_clicks) || 0,
-    ...Object.fromEntries(Object.entries(RESULTADOS).map(([k, tipos]) => [k, sumaAccion(este.actions, tipos)])),
-    campanas_activas: activas?.summary?.total_count ?? null,
+    ...resultadosDe(este),
+    campanas_activas: ids ? ids.size : null,
+    campanas: await campanasDe(a, ids),
   };
 }
 
@@ -317,7 +350,7 @@ export async function sincronizarCliente(clienteId) {
   const foto = {
     facebook: fb.length ? { ...sumar(fb), paginas: de("pagina").map((a) => a.nombre) } : null,
     instagram: ig.length ? { ...sumar(ig), mejor_publicacion: ig.map((x) => x.mejor_publicacion).filter(Boolean).sort((x, y) => y.me_gusta + y.comentarios - x.me_gusta - x.comentarios)[0] || null, cuentas: de("instagram").map((a) => a.nombre) } : null,
-    anuncios: ads.length ? { ...sumar(ads), cuentas: de("anuncios").map((a) => a.nombre), monedas: [...new Set(ads.map((x) => x.moneda).filter(Boolean))] } : null,
+    anuncios: ads.length ? { ...sumar(ads.map(({ campanas, ...x }) => x)), campanas: ads.flatMap((x) => x.campanas || []).sort((x, y) => y.gasto - x.gasto).slice(0, 60), cuentas: de("anuncios").map((a) => a.nombre), monedas: [...new Set(ads.map((x) => x.moneda).filter(Boolean))] } : null,
     errores: errores.slice(0, 6),
   };
   // El gasto de Meta llena solo la tabla de gasto (el semáforo y el Panel general lo usan).

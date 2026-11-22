@@ -74,6 +74,7 @@
         <span class="menu-grupo">Agencia</span>
         <a href="#/agencia" class="menu-item" data-ir="agencia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/></svg><span>Panel general</span></a>
         <a href="#/finanzas" class="menu-item" data-ir="finanzas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3.2-1.6M12 5.5v1.5M12 17v1.5"/></svg><span>Finanzas</span><small id="badge-finanzas" class="badge" hidden></small></a>
+        <a href="#/paidmedia" class="menu-item" data-ir="paidmedia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg><span>Paid media</span><small id="badge-paidmedia" class="badge" hidden></small></a>
         <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
         <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
         <a href="#/estudio" class="menu-item" data-ir="estudio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span>Estudio de diseño</span></a>
@@ -420,6 +421,71 @@
             </div>
           </div>
           <p class="tenue chico tb-nota">Lo que tus clientes invierten en anuncios es dinero de ellos: no cuenta como gasto de la agencia. Díselo a DELTA de viva voz: "Clínica Sonrisa ya pagó", "anota 1,200 de Canva al mes".</p>
+        </div>
+      </section>
+
+      <!-- Paid media: inversión en anuncios, costo por contacto, ventas y retorno por cliente -->
+      <section class="seccion paidmedia" data-seccion="paidmedia">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Paid media</h1>
+          <div class="navegar fi-mes">
+            <button type="button" id="pm-antes" aria-label="Mes anterior">‹</button>
+            <button type="button" id="pm-hoy" class="fi-mes-nombre"></button>
+            <button type="button" id="pm-despues" aria-label="Mes siguiente">›</button>
+          </div>
+          <div class="ag-botones">
+            <button type="button" class="tb-link" data-abrir-meta title="Facebook, Instagram y anuncios de tus clientes">Meta</button>
+            <button type="button" class="tb-link" data-fi-ir="#pm-form">+ Resultados</button>
+            <button type="button" class="ag-agregar" data-pedir="¿Cómo van los anuncios de mis clientes este mes? Empieza por las campañas que gastan sin resultados, luego dime cuánto le cuesta cada contacto a cada cliente, quién vende más de lo que invierte y qué harías tú.">Resumen con DELTA</button>
+          </div>
+        </div>
+        <div class="tablero tablero-pm">
+          <div class="tb-kpis fi-kpis pm-kpis" id="pm-kpis"></div>
+          <div class="pg-col fi-col-1">
+            <div class="panel pm-avisos-caja">
+              <div class="ag-cabeza"><h2>Avisos</h2><span class="tb-hora" id="pm-avisos-n"></span></div>
+              <ul id="pm-avisos" class="pm-avisos"></ul>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Por cliente</h2><span class="tb-hora" id="pm-cli-mes"></span></div>
+              <div id="pm-clientes" class="fi-rent pm-tabla"></div>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Campañas de Meta</h2><span class="tb-hora" id="pm-camp-n"></span></div>
+              <div id="pm-campanas" class="pm-campanas"></div>
+            </div>
+          </div>
+          <div class="pg-col fi-col-2">
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Inversión y contactos</h2><span class="tb-hora">últimos 6 meses</span></div>
+              <div id="pm-grafica" class="fi-grafica"></div>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Por plataforma</h2><span class="tb-hora" id="pm-plat-mes"></span></div>
+              <div id="pm-plataformas" class="fi-categorias"></div>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Lo que reporta el cliente</h2></div>
+              <p class="tenue chico pm-explica">Si el cliente te dice cuántos prospectos le llegaron o cuánto vendió, anótalo: manda sobre lo que mide Meta y sirve para clientes en Google o TikTok.</p>
+              <form class="fi-form" id="pm-form">
+                <select id="pm-form-cliente" aria-label="Cliente" required></select>
+                <input id="pm-form-prospectos" type="text" inputmode="numeric" maxlength="8" placeholder="Prospectos" />
+                <input id="pm-form-ventas" type="text" inputmode="numeric" maxlength="8" placeholder="Ventas cerradas" />
+                <input id="pm-form-valor" type="text" inputmode="decimal" maxlength="14" placeholder="Cuánto vendió ($)" />
+                <button type="submit">Anotar</button>
+              </form>
+            </div>
+            <div class="panel pm-guia">
+              <div class="ag-cabeza"><h2>Cómo leerlo</h2></div>
+              <dl class="pm-dl">
+                <dt>Contactos</dt><dd>Mensajes de WhatsApp o Messenger más prospectos de formulario.</dd>
+                <dt>Costo por contacto</dt><dd>Lo invertido entre los contactos que llegaron.</dd>
+                <dt>Retorno</dt><dd>Pesos vendidos por cada peso invertido. 3 o más es bueno; menos de 1 pierde dinero.</dd>
+                <dt>Cansancio</dt><dd>La misma persona ya vio el anuncio 4 veces o más: toca cambiar el anuncio o el público.</dd>
+              </dl>
+            </div>
+          </div>
+          <p class="tenue chico tb-nota">DELTA solo lee tus campañas: no las apaga ni las cambia. Los números de Meta se actualizan solos cada 6 horas. Dile a DELTA: "Clínica Sonrisa vendió 40 mil este mes por los anuncios".</p>
         </div>
       </section>
 

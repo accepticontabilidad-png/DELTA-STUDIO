@@ -223,6 +223,21 @@ CREATE TABLE IF NOT EXISTS gastos_agencia (
 );
 `);
 
+// Paid media: resultados que el cliente reporta (prospectos, ventas y cuánto vendió) por mes.
+// Cuando existen, mandan sobre lo que mide Meta (el cliente sabe lo que de verdad vendió).
+db.exec(`
+CREATE TABLE IF NOT EXISTS resultados_anuncios (
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  mes TEXT NOT NULL,                             -- AAAA-MM (mes local)
+  prospectos INTEGER,                            -- mensajes o prospectos que llegaron por anuncios
+  ventas INTEGER,                                -- ventas cerradas
+  valor_ventas REAL,                             -- cuánto vendió por los anuncios
+  nota TEXT,
+  actualizado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (cliente_id, mes)
+);
+`);
+
 export function getAjuste(clave, porDefecto = null) {
   const fila = db.prepare("SELECT valor FROM ajustes WHERE clave = ?").get(clave);
   return fila ? fila.valor : porDefecto;

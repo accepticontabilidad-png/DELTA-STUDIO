@@ -12,6 +12,7 @@
 import { db } from "./db.js";
 import { ahoraLocalISO, rangoDelDia } from "./tiempo.js";
 import * as agencia from "./agencia.js";
+import { avisosParaPulso } from "./paidmedia.js";
 
 // Las tablas cobros y gastos_agencia se crean en db.js.
 
@@ -327,6 +328,11 @@ export function pulso() {
   const cerca = activos.filter((c) => c.presupuesto_anuncios && c.gasto_mes <= c.presupuesto_anuncios && c.gasto_mes / c.presupuesto_anuncios >= 0.85);
   meter("anuncios_pasados", pasados.length, "rojo", pasados.length === 1 ? "cliente pasado del tope de anuncios" : "clientes pasados del tope de anuncios", "#/cuentas", nombres(pasados));
   meter("anuncios_cerca", cerca.length, "amarillo", cerca.length === 1 ? "cliente cerca del tope de anuncios" : "clientes cerca del tope de anuncios", "#/cuentas", nombres(cerca));
+
+  const pm = avisosParaPulso();
+  meter("anuncios_sin_resultados", pm.sin_resultados.length, "rojo", pm.sin_resultados.length === 1 ? "campaña gastando sin resultados" : "campañas gastando sin resultados", "#/paidmedia",
+    pm.sin_resultados.slice(0, 3).map((a) => a.campana ? `${a.campana} (${a.cliente})` : a.cliente));
+  meter("anuncios_retorno", pm.retorno.length, "rojo", pm.retorno.length === 1 ? "cliente vende menos de lo que invierte en anuncios" : "clientes venden menos de lo que invierten en anuncios", "#/paidmedia", nombres(pm.retorno, "cliente"));
 
   const tareas = db.prepare("SELECT titulo FROM tareas WHERE estado = 'pendiente' AND fecha_limite IS NOT NULL AND fecha_limite < ? ORDER BY fecha_limite").all(iso(ahora));
   meter("tareas_vencidas", tareas.length, "amarillo", tareas.length === 1 ? "tarea vencida" : "tareas vencidas", "#/tareas", tareas.slice(0, 3).map((t) => t.titulo));
