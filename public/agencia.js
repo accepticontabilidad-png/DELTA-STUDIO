@@ -35,6 +35,35 @@ export function iniciarAgencia(h) {
   const cifra = (n) => (n === null || n === undefined ? "–" : compacto.format(n));
   const conSigno = (n) => (n ? `${n > 0 ? "+" : "−"}${compacto.format(Math.abs(n))}` : "");
   const foco = (n) => `<i class="foco ${n}" aria-hidden="true"></i>`;
+  // Delta Score: chip con el número y anillo con el desglose
+  const scoreChip = (sc) => (sc ? `<span class="sc-chip c-${sc.color}" title="Delta Score: ${sc.puntos} · ${esc(sc.nivel_nombre)}">${sc.puntos}</span>` : "");
+  const anillo = (sc, r = 44) => {
+    const C = 2 * Math.PI * r, w = r * 2 + 16;
+    return `<svg viewBox="0 0 ${w} ${w}" class="sc-anillo c-${sc.color}" aria-hidden="true">
+      <circle cx="${w / 2}" cy="${w / 2}" r="${r}" class="sc-fondo"/>
+      <circle cx="${w / 2}" cy="${w / 2}" r="${r}" class="sc-arco" stroke-dasharray="${(C * sc.puntos) / 100} ${C}" transform="rotate(-90 ${w / 2} ${w / 2})"/>
+      <text x="${w / 2}" y="${w / 2 + 2}" class="sc-num">${sc.puntos}</text><text x="${w / 2}" y="${w / 2 + 20}" class="sc-de">de 100</text>
+    </svg>`;
+  };
+  const SIN_DATOS = { entregas: "Entregas (agrega sus entregas)", pagos: "Pagos (anota su pago mensual)", anuncios: "Anuncios (pon su tope o anota su gasto)", redes: "Redes (asígnale su Facebook o Instagram en Meta)" };
+  function panelScore(sc) {
+    return `<div class="panel sc-panel">
+      <div class="ag-cabeza"><h2>Delta Score</h2><span class="tb-hora">Qué tan bien va la cuenta, de 0 a 100</span></div>
+      <div class="sc-cuerpo">
+        <div class="sc-izq">${anillo(sc)}<b class="t-${sc.color}">${esc(sc.nivel_nombre)}</b></div>
+        <div class="sc-partes">
+          ${sc.partes.map((p) => `<div class="sc-parte">
+            <span class="sc-p-nombre">${esc(p.nombre)}</span>
+            <span class="pg-barra ${p.pct >= 80 ? "verde" : p.pct >= 50 ? "amarillo" : "rojo"}"><i data-ancho="${Math.max(3, p.pct)}"></i></span>
+            <span class="sc-p-pts">${p.pts}<small>/${p.max}</small></span>
+            <small class="sc-p-nota">${esc(p.nota)}</small>
+          </div>`).join("")}
+          ${sc.limitado_por_semaforo ? `<p class="tenue chico">Tope de ${sc.limitado_por_semaforo === "rojo" ? 49 : 64} porque el semáforo está en ${sc.limitado_por_semaforo}.</p>` : ""}
+          ${sc.sin_datos.length ? `<p class="tenue chico sc-falta">Todavía no cuenta: ${sc.sin_datos.map((k) => esc(SIN_DATOS[k])).join(" · ")}.</p>` : ""}
+        </div>
+      </div>
+    </div>`;
+  }
 
   // Dona de tres colores (verde, amarillo, rojo)
   function dona(partes, centro, sub) {
@@ -105,10 +134,13 @@ export function iniciarAgencia(h) {
         <b class="t-${t.salud.rojo ? "rojo" : t.salud.amarillo ? "amarillo" : "verde"}">${activos ? (t.salud.rojo ? "Hay clientes en rojo" : t.salud.amarillo ? "Cartera estable" : "Cartera sana") : "Sin clientes activos"}</b>
         <span>${foco("verde")}${t.salud.verde} en verde</span><span>${foco("amarillo")}${t.salud.amarillo} en amarillo</span><span>${foco("rojo")}${t.salud.rojo} en rojo</span>
       </div>`;
-    const conOjo = cuentas.filter((c) => c.estado === "activo" && c.salud.nivel !== "verde").slice(0, 5);
+    $("#pg-score").innerHTML = t.score_promedio !== null
+      ? `<span>Delta Score promedio</span><b class="t-${t.score_promedio >= 65 ? "verde" : t.score_promedio >= 50 ? "amarillo" : "rojo"}">${t.score_promedio}</b><small class="tenue">de 100</small>`
+      : "";
+    const conOjo = t.score_clientes.filter((c) => c.puntos < 80).slice(0, 5);
     $("#pg-semaforo").innerHTML = conOjo.length
-      ? conOjo.map((c) => `<li data-cuenta="${c.id}" tabindex="0">${foco(c.salud.nivel)}<span><b>${esc(c.nombre)}</b><small>${esc(c.salud.motivos[0])}</small></span></li>`).join("")
-      : activos ? `<li class="pg-vacio">Todos tus clientes activos están en verde.</li>` : `<li class="pg-vacio">Da de alta tu primer cliente en Cuentas.</li>`;
+      ? conOjo.map((c) => `<li data-cuenta="${c.id}" tabindex="0">${scoreChip(c)}<span><b>${esc(c.nombre)}</b><small>${esc(c.nivel_nombre)} · ${esc(c.resumen)}</small></span></li>`).join("")
+      : activos ? `<li class="pg-vacio">Todos tus clientes activos tienen 80 o más. Excelente ✨</li>` : `<li class="pg-vacio">Da de alta tu primer cliente en Cuentas.</li>`;
 
     // Gasto por cliente
     $("#pg-mes").textContent = nombreMes(t.mes);
@@ -221,7 +253,7 @@ export function iniciarAgencia(h) {
             c.por_aprobar ? `${c.por_aprobar} por aprobar` : "",
           ].filter(Boolean);
           return `<button type="button" class="cu-tarjeta s-borde-${c.salud.nivel} ${c.id === elegida ? "elegida" : ""} ${c.estado !== "activo" ? "apagada" : ""}" data-cuenta="${c.id}">
-            <span class="cu-t-cabeza">${foco(c.salud.nivel)}<b>${esc(c.nombre)}</b>${c.estado !== "activo" ? `<span class="chip ${c.estado}">${esc(ESTADO_CL[c.estado])}</span>` : ""}</span>
+            <span class="cu-t-cabeza">${foco(c.salud.nivel)}<b>${esc(c.nombre)}</b>${c.estado !== "activo" ? `<span class="chip ${c.estado}">${esc(ESTADO_CL[c.estado])}</span>` : ""}${scoreChip(c.score)}</span>
             <span class="cu-t-sub">${esc(c.industria || c.servicios || "Sin especialidad")}</span>
             <span class="cu-t-motivo t-${c.salud.nivel}">${esc(c.salud.motivos[0])}</span>
             ${datos.length ? `<span class="cu-t-datos">${datos.map(esc).join(" · ")}</span>` : ""}
@@ -267,7 +299,7 @@ export function iniciarAgencia(h) {
           </div>
           <div class="ag-botones">
             <button type="button" class="tb-link" id="cu-editar">Editar datos</button>
-            <button type="button" class="ag-agregar" data-pedir="${esc(`¿Cómo va ${c.nombre}? Revisa su ficha (salud, entregas, juntas, anuncios y aprobaciones) y dime el siguiente paso con este cliente.`)}">Siguiente paso con DELTA</button>
+            <button type="button" class="ag-agregar" data-pedir="${esc(`¿Cómo va ${c.nombre}? Revisa su ficha (Delta Score y su desglose, salud, entregas, pagos, anuncios, redes y aprobaciones) y dime qué subiría más su calificación y el siguiente paso con este cliente.`)}">Siguiente paso con DELTA</button>
           </div>
         </div>
         <div class="cu-salud">
@@ -290,6 +322,8 @@ export function iniciarAgencia(h) {
           </form>
         </div>
       </div>
+
+      ${c.score ? panelScore(c.score) : ""}
 
       <div class="cu-kpis">
         <div class="tb-kpi cu-kpi"><span class="tb-kpi-nombre">Pago mensual</span><b>${c.presupuesto_mensual ? dinero(c.presupuesto_mensual) : "–"}</b><span class="tb-kpi-mes">${esc(c.servicios || "Servicios sin anotar")}</span></div>
