@@ -918,6 +918,7 @@ const SECCIONES = {
   mercados: { cargar: () => cargarMercadosYNoticias(), cada: 300e3 },
   agencia: { cargar: () => cargarTablero(), cada: 30e3 },
   finanzas: { cargar: () => agenciaTableros().cargarFinanzas(), cada: 60e3 },
+  analitica: { cargar: () => agenciaTableros().cargarAnalitica(), cada: 120e3 },
   contenido: { cargar: () => agenciaTableros().cargarContenido(), cada: 30e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
