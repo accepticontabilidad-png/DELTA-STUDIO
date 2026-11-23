@@ -2,6 +2,7 @@
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
+import { pintarFabrica, tableroDe } from "/fabrica.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
   get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -734,16 +735,8 @@ function filaTrabajo(t) {
   return `<li data-trabajo="${t.id}"><div class="cuerpo"><b>${esc(nombreDepto(t.departamento))}</b>${t.cliente ? " · " + esc(t.cliente) : ""}<span class="sub">${esc((t.extracto || t.encargo || "").replace(/[#*]/g, "").slice(0, 140))}</span></div>${estado}<span class="tenue num">${fmtDia(t.terminado || t.creado)}</span></li>`;
 }
 
-async function cargarDeptos() {
-  const [deptos, tab] = await Promise.all([api("/departamentos"), api("/agencia")]);
-  deptosCache = deptos;
-  const opciones = `<option value="">Sin cliente</option>` + tab.clientes.filter((c) => c.estado !== "terminado").map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("");
-  // No se repinta una tarjeta mientras se escribe en ella.
-  const escribiendo = document.activeElement?.closest?.(".depto")?.dataset.depto;
-  const viejas = Object.fromEntries([...document.querySelectorAll(".depto")].map((x) => [x.dataset.depto, x]));
-  $("#deptos").innerHTML = deptos.map((d) => {
-    if (d.id === escribiendo && viejas[d.id]) return viejas[d.id].outerHTML;
-    return `<article class="depto panel" data-depto="${d.id}">
+function tarjetaDepto(d, opciones) {
+  return `<article class="depto panel" data-depto="${d.id}">
       <header><h3>${esc(d.nombre)}</h3>${d.trabajando ? `<span class="chip trabajando">trabajando…</span>` : ""}</header>
       <p class="tenue">${esc(d.resumen)}</p>
       <ul class="lista clickable">${d.trabajos.length ? d.trabajos.slice(0, 3).map(filaTrabajo).join("") : `<li class="vacio">Sin trabajos todavía.</li>`}</ul>
@@ -752,7 +745,56 @@ async function cargarDeptos() {
         <div class="form-mini"><select>${opciones}</select><button type="submit">Encargar</button></div>
       </form>
     </article>`;
-  }).join("");
+}
+
+// Vista de Departamentos: "Oficina" (la fábrica animada) o "Lista" (las tarjetas de siempre).
+const secDeptos = document.querySelector('.seccion[data-seccion="departamentos"]');
+function vistaDeptos(v) {
+  secDeptos.dataset.vistaDeptos = v;
+  document.querySelectorAll("[data-vista-fab]").forEach((b) => b.classList.toggle("activa", b.dataset.vistaFab === v));
+}
+vistaDeptos(guardado.get("delta_vista_deptos", "fabrica") === "lista" ? "lista" : "fabrica");
+document.querySelectorAll("[data-vista-fab]").forEach((b) => b.addEventListener("click", () => {
+  vistaDeptos(b.dataset.vistaFab);
+  guardado.set("delta_vista_deptos", b.dataset.vistaFab);
+  refrescar("departamentos", true);
+}));
+
+let opcionesDeptos = "";
+let pendientesFab = null;
+function abrirDepto(id) {
+  const d = deptosCache.find((x) => x.id === id);
+  if (!d) return;
+  $("#dd-cuerpo").innerHTML = tarjetaDepto(d, opcionesDeptos);
+  const tablero = tableroDe(id);
+  $("#dd-tablero").hidden = !(tablero && puedeAbrir(tablero));
+  if (tablero) $("#dd-tablero").href = "#/" + tablero;
+  sonar("accion");
+  $("#dlg-depto").showModal();
+}
+$("#dd-cerrar").addEventListener("click", () => $("#dlg-depto").close());
+$("#dd-tablero").addEventListener("click", () => $("#dlg-depto").close());
+
+async function cargarDeptos() {
+  const [deptos, tab, pend] = await Promise.all([api("/departamentos"), api("/agencia"), api("/aprobaciones?estado=pendiente").catch(() => null)]);
+  deptosCache = deptos;
+  if (Array.isArray(pend)) pendientesFab = pend.length;
+  const opciones = opcionesDeptos = `<option value="">Sin cliente</option>` + tab.clientes.filter((c) => c.estado !== "terminado").map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("");
+  if (secDeptos.dataset.vistaDeptos === "fabrica") {
+    const activos = deptos.filter((d) => d.trabajando > 0);
+    const hoy = deptos.reduce((n, d) => n + d.trabajos.filter((t) => t.estado === "listo" && fmtDia(t.terminado || t.creado) === fmtDia(new Date().toISOString())).length, 0);
+    $("#fab-barra").innerHTML = `<span class="pastilla-fab ${activos.length ? "vivo" : ""}"><span class="led"></span><b>${activos.length}</b> ${activos.length === 1 ? "departamento trabajando" : "departamentos trabajando"}</span>
+      <span class="pastilla-fab"><b>${deptos.length}</b> departamentos</span>
+      <span class="pastilla-fab"><b>${hoy}</b> entregados hoy</span>
+      ${pendientesFab != null ? `<a class="pastilla-fab" href="#/aprobaciones"><b>${pendientesFab}</b> por aprobar</a>` : ""}
+      <span class="ayuda">Toque una sala para encargarle algo</span>`;
+    pintarFabrica($("#fabrica"), deptos, { pendientes: pendientesFab }, abrirDepto);
+    return;
+  }
+  // No se repinta una tarjeta mientras se escribe en ella.
+  const escribiendo = document.activeElement?.closest?.("#deptos .depto")?.dataset.depto;
+  const viejas = Object.fromEntries([...document.querySelectorAll("#deptos .depto")].map((x) => [x.dataset.depto, x]));
+  $("#deptos").innerHTML = deptos.map((d) => (d.id === escribiendo && viejas[d.id] ? viejas[d.id].outerHTML : tarjetaDepto(d, opciones))).join("");
 }
 
 let filtroAprob = "pendiente";
@@ -868,6 +910,7 @@ document.addEventListener("submit", async (e) => {
     f.querySelector("textarea").value = "";
     f.querySelector("textarea").blur();
     sonar("enviar");
+    if (f.closest("#dlg-depto")) { $("#dlg-depto").close(); burbuja("aviso", "Encargo enviado. Ya están trabajando en él."); }
     refrescar("departamentos", true);
   } catch (err) { burbuja("aviso", err.message); }
   finally { boton.disabled = false; }

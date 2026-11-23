@@ -2133,3 +2133,116 @@ html[data-mood="dia"] .crm-ut-lista summary { color: var(--cian); }
 .crm-ver-mas small { color: var(--tenue); font-weight: 400; }
 .crm-tabla td.malo { color: var(--rojo); font-weight: 600; }
 html[data-mood="dia"] .crm-ver-mas { color: var(--cian); }
+
+/* ---------------- Fábrica: los departamentos como oficina animada ---------------- */
+.deptos-cabeza { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fab-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 10px; }
+.fab-barra .pastilla-fab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; border: 1px solid var(--borde); background: var(--panel); color: var(--tenue); }
+.fab-barra .pastilla-fab b { color: var(--texto); }
+.fab-barra .pastilla-fab .led { width: 8px; height: 8px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 8px var(--verde); }
+.fab-barra .pastilla-fab.vivo .led { background: var(--dorado); box-shadow: 0 0 10px var(--dorado); animation: latir 1.2s ease-in-out infinite; }
+.fab-barra .ayuda { font-size: 12px; color: var(--tenue); margin-left: auto; }
+.fabrica { border-radius: 22px; overflow: hidden; border: 1px solid var(--borde); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.fab-svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; font-family: inherit; }
+[data-vista-deptos="fabrica"] #deptos, [data-vista-deptos="lista"] .fab-zona { display: none; }
+
+/* Noche (por defecto) */
+.fabrica { --f-suelo: #08061a; --f-camino: rgba(139,115,255,.16); --f-piso: #141034; --f-junta: rgba(139,115,255,.07); --f-muro-op: .55;
+  --f-mesa: #2a2358; --f-mesa-borde: rgba(183,166,255,.25); --f-monitor: #1b1640; --f-monitor-on: #9fe9ff; --f-teclado: #3a3270; --f-silla: #221c48;
+  --f-rotulo: rgba(8,5,24,.65); --f-texto: #ecebff; --f-tenue: #9590c0; --f-pizarra: #0f0c28; --f-maceta: #3b2a1e; --f-hoja: #2fae7c;
+  --f-estado: rgba(8,5,24,.55); --f-sombra: rgba(0,0,0,.45); --f-globo: #ffffff; --f-doc: #f4f1ff; }
+html[data-mood="dia"] .fabrica { --f-suelo: #e6e0f6; --f-camino: rgba(82,50,216,.13); --f-piso: #fffcf6; --f-junta: rgba(120,90,40,.07); --f-muro-op: .9;
+  --f-mesa: #e2cfa9; --f-mesa-borde: rgba(120,80,30,.25); --f-monitor: #3a3550; --f-monitor-on: #3fc4ff; --f-teclado: #ffffff; --f-silla: #cfc7e6;
+  --f-rotulo: rgba(255,255,255,.92); --f-texto: #160f36; --f-tenue: #4c4577; --f-pizarra: #ffffff; --f-maceta: #c98a5a; --f-hoja: #2f9e5c;
+  --f-estado: rgba(255,255,255,.85); --f-sombra: rgba(60,40,140,.14); --f-globo: #ffffff; --f-doc: #ffffff;
+  box-shadow: 0 20px 50px rgba(80,50,200,.14); }
+
+.fab-suelo { fill: var(--f-suelo); }
+.fab-camino { stroke: var(--f-camino); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 10 12; }
+.fab-brillo-pelo { fill: rgba(255,255,255,.18); }
+.fab-sombra { fill: var(--f-sombra); }
+.fab-piso { fill: var(--f-piso); }
+.fab-junta { fill: none; stroke: var(--f-junta); stroke-width: 1; }
+.fab-muro { fill: none; stroke-width: 3; stroke-opacity: var(--f-muro-op); }
+.fab-puerta { fill: var(--f-piso); }
+.fab-rotulo { fill: var(--f-rotulo); }
+.fab-nombre { fill: var(--f-texto); font-weight: 700; letter-spacing: .01em; }
+.fab-tag { fill: var(--f-tenue); font-weight: 600; }
+.fab-mesa { fill: var(--f-mesa); stroke: var(--f-mesa-borde); stroke-width: 1; }
+.fab-mesa-juntas { fill: var(--f-mesa); stroke: var(--f-mesa-borde); stroke-width: 1; }
+.fab-monitor { fill: var(--f-monitor); transition: fill .6s; }
+.fab-teclado { fill: var(--f-teclado); opacity: .8; }
+.fab-luz-monitor { opacity: .25; }
+.fab-silla, .fab-silla-chica { fill: var(--f-silla); }
+.fab-pizarra { fill: var(--f-pizarra); stroke: var(--f-mesa-borde); }
+.fab-grafica { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 400; stroke-dashoffset: 0; opacity: .85; }
+.fab-maceta { fill: var(--f-maceta); }
+.fab-hoja { fill: var(--f-hoja); opacity: .9; }
+.fab-estado-fondo { fill: var(--f-estado); }
+.fab-estado { fill: var(--f-tenue); font-weight: 600; }
+.fab-chip-fondo { fill: rgba(255,158,232,.16); stroke: rgba(255,158,232,.55); }
+.fab-chip-texto { fill: var(--dorado); font-weight: 700; }
+.fab-chip { opacity: 0; transition: opacity .4s; }
+.fab-globo { fill: var(--f-globo); stroke: rgba(0,0,0,.12); }
+.fab-punto { fill: #6a4cf0; }
+.fab-tecleo { opacity: 0; }
+.fab-sala { cursor: pointer; outline: none; }
+.fab-sala .fab-piso, .fab-sala .fab-muro { transition: stroke-width .25s, filter .25s; }
+.fab-sala:hover .fab-muro, .fab-sala:focus-visible .fab-muro { stroke-width: 5; stroke-opacity: 1; }
+.fab-sala:hover .fab-sombra { fill: rgba(106,76,240,.35); }
+.fab-sala.quieta .fab-cuerpo { animation: fab-respira 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Cuando el departamento trabaja: pantallas encendidas, tecleo, gráfica que se dibuja */
+.fab-sala.trabajando .fab-chip { opacity: 1; }
+.fab-sala.trabajando .fab-chip-fondo { animation: latir 1.4s ease-in-out infinite; }
+.fab-sala.trabajando .fab-monitor { fill: var(--f-monitor-on); animation: fab-pantalla 2.2s ease-in-out infinite; }
+.fab-sala.trabajando .fab-luz-monitor { opacity: 1; }
+.fab-sala.trabajando .fab-muro { stroke-opacity: 1; filter: drop-shadow(0 0 6px currentColor); }
+.fab-sala.trabajando .fab-mano { animation: fab-teclea .32s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+.fab-sala.trabajando .fab-mano.m2 { animation-delay: .16s; }
+.fab-sala.trabajando .fab-cuerpo { animation: fab-inclina 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.fab-sala.trabajando .fab-agente.habla .fab-tecleo { opacity: 1; }
+.fab-sala.trabajando .fab-punto { animation: fab-puntos 1.2s ease-in-out infinite; }
+.fab-sala.trabajando .fab-punto.p1 { animation-delay: .2s; }
+.fab-sala.trabajando .fab-punto.p2 { animation-delay: .4s; }
+.fab-sala.trabajando .fab-grafica { animation: fab-dibuja 3.5s ease-in-out infinite; }
+.fab-sala.trabajando .fab-estado { fill: var(--f-texto); }
+.fab-sala.trabajando .fab-foco { animation: latir 1s ease-in-out infinite; }
+
+/* Sala de DELTA */
+.fab-direccion .fab-orbe { filter: drop-shadow(0 0 18px rgba(139,115,255,.8)); animation: fab-orbe 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.fab-orbe-brillo { fill: rgba(255,255,255,.55); }
+.fab-anillo { fill: none; stroke: rgba(139,115,255,.35); stroke-width: 1.4; stroke-dasharray: 3 7; animation: fab-gira 18s linear infinite; transform-box: fill-box; transform-origin: center; }
+.fab-anillo + .fab-anillo { animation-direction: reverse; animation-duration: 12s; }
+.fab-delta { fill: var(--f-texto); font-weight: 800; letter-spacing: .14em; }
+.fab-bandeja { cursor: pointer; }
+.fab-bandeja-fondo { fill: var(--f-rotulo); stroke: var(--borde); }
+.fab-bandeja:hover .fab-bandeja-fondo { stroke: var(--cian); stroke-width: 2; }
+.fab-bandeja-num { fill: var(--f-texto); font-weight: 800; }
+.fab-bandeja-texto { fill: var(--f-tenue); font-weight: 600; }
+.fab-direccion.con-pendientes .fab-bandeja-fondo { stroke: var(--dorado); animation: latir 1.6s ease-in-out infinite; }
+.fab-cafetera { fill: var(--f-mesa); stroke: var(--f-mesa-borde); }
+.fab-cafe { fill: #6b3f25; }
+
+/* Los que caminan */
+.fab-caminante { pointer-events: none; }
+.fab-sombra-chica { fill: var(--f-sombra); }
+.fab-hoja-doc { fill: var(--f-doc); stroke: rgba(0,0,0,.2); }
+.fab-renglon { stroke: #8b73ff; stroke-width: 1.2; }
+.fab-doc { opacity: 0; transition: opacity .3s; }
+.fab-caminante.lleva .fab-doc { opacity: 1; }
+
+@keyframes fab-teclea { from { transform: translateY(0); } to { transform: translateY(-2.5px); } }
+@keyframes fab-inclina { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-3deg); } }
+@keyframes fab-respira { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+@keyframes fab-pantalla { 0%, 100% { opacity: 1; } 50% { opacity: .65; } }
+@keyframes fab-puntos { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes fab-dibuja { 0% { stroke-dashoffset: 400; } 60%, 100% { stroke-dashoffset: 0; } }
+@keyframes fab-orbe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes fab-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fabrica * { animation: none !important; } }
+
+/* Ficha de un departamento (al tocar su sala) */
+.dlg-depto .depto { background: none; border: none; box-shadow: none; padding: 0; }
+.dlg-depto .ag-cabeza { margin-bottom: 4px; }
+.dlg-depto .ir-tablero { font-size: 13px; }
