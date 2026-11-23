@@ -270,7 +270,10 @@ export function crearArranque(el) {
       el.style.setProperty("--k", k.toFixed(3));
       $(".arr-saludo b", el).textContent = saludo;
       $(".arr-saludo span", el).textContent = linea;
-      $(".arr-sistemas", el).innerHTML = sistemas.map((s, i) => `<li style="--i:${i}"><i></i>${s.replace(/[&<>"']/g, "")}<b>OK</b></li>`).join("");
+      // El orden de cada sistema va por CSSOM: la política de seguridad bloquea los style="" escritos en el HTML.
+      const lista = $(".arr-sistemas", el);
+      lista.innerHTML = sistemas.map((s) => `<li><i></i>${s.replace(/[&<>"']/g, "")}<b>OK</b></li>`).join("");
+      lista.querySelectorAll("li").forEach((li, i) => li.style.setProperty("--i", String(i)));
       if (!reducir) {
         descifrar($(".arr-nombre", el), "DELTA", ahora + 1150 * k, 750 * k);
         contarHasta($(".arr-cifra", el), ahora + 300 * k, 1700 * k);
