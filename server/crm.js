@@ -193,7 +193,7 @@ export function crearProspecto({ cliente, nombre, telefono, correo, fuente, camp
     interes ? String(interes).slice(0, 160) : null, e, RANGO[e] ?? 0, numeroValido(valor), cita ? citaValida(cita) : null,
     notas ? String(notas).slice(0, 2000) : null, e !== "nuevo" ? ahoraISO() : null, responsable ? String(responsable).trim().slice(0, 80) : null);
   const id = r.lastInsertRowid;
-  evento(id, "etapa", origen === "formulario" ? "Llegó por el formulario" : origen === "meta" ? "Llenó un formulario de anuncio en Meta" : origen === "kommo" ? "Llegó desde Kommo" : origen === "ghl" ? "Llegó desde GoHighLevel" : origen === "pancake" ? "Llegó desde Pancake" : origen === "whatsapp" ? "Escribió por WhatsApp" : "Prospecto nuevo");
+  evento(id, "etapa", origen === "formulario" ? "Llegó por el formulario" : origen === "meta" ? "Llenó un formulario de anuncio en Meta" : origen === "kommo" ? "Llegó desde Kommo" : origen === "ghl" ? "Llegó desde GoHighLevel" : origen === "pancake" ? "Llegó desde Pancake" : origen === "messenger" ? "Escribió por Messenger" : origen === "instagram" ? "Escribió por Instagram" : origen === "whatsapp" ? "Escribió por WhatsApp" : "Prospecto nuevo");
   avisarPantalla({ tipo: "crm" });
   return obtenerProspecto(id);
 }
@@ -368,37 +368,64 @@ export async function importarDeMeta(cliente) {
   const clave = `crm_meta_desde_${c.id}`;
   const desde = getAjuste(clave) || null;
   const inicio = new Date().toISOString();
-  const r = await meta.formulariosDeCliente(c.id, { desde });
-  let nuevos = 0, repetidos = 0;
-  for (const l of r.leads.sort((a, b) => a.fecha.localeCompare(b.fecha))) {
-    if (db.prepare("SELECT 1 FROM prospectos WHERE meta_lead_id = ?").get(l.id)) { repetidos++; continue; }
-    if (!l.nombre && !l.telefono) continue;
-    let tel = null;
-    try { tel = normalizarTelefono(l.telefono); } catch { /* teléfono raro: se guarda en notas */ }
-    const notas = [...l.respuestas, l.telefono && !tel ? `teléfono: ${l.telefono}` : null, l.anuncio ? `anuncio: ${l.anuncio}` : null, l.formulario ? `formulario: ${l.formulario}` : null].filter(Boolean).join("\n");
-    const p = crearProspecto({ cliente: c.id, nombre: l.nombre, telefono: tel, correo: l.correo, fuente: "anuncios", campana: l.campana, notas: notas || null }, { origen: "meta" });
-    if (p.ya_existia) { repetidos++; db.prepare("UPDATE prospectos SET meta_lead_id = COALESCE(meta_lead_id, ?) WHERE id = ?").run(l.id, p.id); continue; }
-    db.prepare("UPDATE prospectos SET meta_lead_id = ?, creado = ?, etapa_desde = ? WHERE id = ?").run(l.id, l.fecha, l.fecha, p.id);
-    db.prepare("UPDATE prospecto_eventos SET fecha = ? WHERE prospecto_id = ? AND tipo = 'etapa'").run(l.fecha, p.id);
-    nuevos++;
+  let nuevos = 0, repetidos = 0, formularios = 0, paginas = 0, sinPermisoForms = false;
+  // 1) Formularios instantáneos
+  try {
+    const r = await meta.formulariosDeCliente(c.id, { desde });
+    paginas = r.paginas; formularios = r.formularios;
+    for (const l of r.leads.sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+      if (db.prepare("SELECT 1 FROM prospectos WHERE meta_lead_id = ?").get(l.id)) { repetidos++; continue; }
+      if (!l.nombre && !l.telefono) continue;
+      let tel = null;
+      try { tel = normalizarTelefono(l.telefono); } catch { /* teléfono raro: se guarda en notas */ }
+      const notas = [...l.respuestas, l.telefono && !tel ? `teléfono: ${l.telefono}` : null, l.anuncio ? `anuncio: ${l.anuncio}` : null, l.formulario ? `formulario: ${l.formulario}` : null].filter(Boolean).join("\n");
+      const p = crearProspecto({ cliente: c.id, nombre: l.nombre, telefono: tel, correo: l.correo, fuente: "anuncios", campana: l.campana, notas: notas || null }, { origen: "meta" });
+      if (p.ya_existia) { repetidos++; db.prepare("UPDATE prospectos SET meta_lead_id = COALESCE(meta_lead_id, ?) WHERE id = ?").run(l.id, p.id); continue; }
+      fechar(p.id, l.id, l.fecha);
+      nuevos++;
+    }
+  } catch (e) { if (e.permiso === false) sinPermisoForms = true; else throw e; }
+  // 2) Quien escribió por Messenger o Instagram (anuncios de mensajes incluidos)
+  let mensajes = 0;
+  const m = await meta.conversacionesDeCliente(c.id, { desde: desde ? new Date(Date.parse(desde) - DIA).toISOString() : null });
+  paginas = paginas || m.paginas;
+  for (const x of m.conversaciones.sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (db.prepare("SELECT 1 FROM prospectos WHERE meta_lead_id = ?").get(x.id)) { repetidos++; continue; }
+    const red = x.plataforma === "instagram" ? "Instagram" : "Messenger";
+    const p = crearProspecto({ cliente: c.id, nombre: x.nombre || `Alguien por ${red}`, fuente: x.plataforma === "instagram" ? "instagram" : "facebook",
+      notas: x.ultimo ? `Último mensaje por ${red}${x.de_ellos === false ? " (de la clínica)" : ""}: "${x.ultimo}"` : null }, { origen: x.plataforma });
+    if (p.ya_existia) { repetidos++; continue; }
+    fechar(p.id, x.id, x.fecha);
+    nuevos++; mensajes++;
   }
   setAjuste(clave, inicio);
   if (nuevos) avisarPantalla({ tipo: "crm" });
-  return { cliente: c.nombre, paginas: r.paginas, formularios: r.formularios, nuevos, repetidos };
+  return { cliente: c.nombre, paginas, formularios, mensajes, nuevos, repetidos, sin_permiso: sinPermisoForms, sin_permiso_mensajes: m.sin_permiso };
 }
 
-/** Revisa los formularios de Meta de todos los clientes con página ligada (cada hora). */
+function fechar(id, metaId, fecha) {
+  db.prepare("UPDATE prospectos SET meta_lead_id = ?, creado = ?, etapa_desde = ? WHERE id = ?").run(metaId, fecha, fecha, id);
+  db.prepare("UPDATE prospecto_eventos SET fecha = ? WHERE prospecto_id = ? AND tipo = 'etapa'").run(fecha, id);
+}
+
+/** Revisa formularios y mensajes de Meta de todos los clientes con página ligada (cada hora). */
 export async function importarTodoMeta() {
   if (!meta.metaConectado()) return null;
   const ids = db.prepare("SELECT DISTINCT a.cliente_id FROM meta_activos a JOIN clientes c ON c.id = a.cliente_id WHERE a.tipo = 'pagina' AND c.estado != 'terminado'").all().map((x) => x.cliente_id);
-  let nuevos = 0, sinPermiso = false;
+  let nuevos = 0;
   for (const id of ids) {
     try { nuevos += (await importarDeMeta(id)).nuevos; }
-    catch (e) { if (e.permiso === false) { sinPermiso = true; break; } console.error("[crm meta]", id, e.message); }
+    catch (e) { console.error("[crm meta]", id, e.message); }
   }
-  setAjuste("crm_meta_permiso", sinPermiso ? "no" : "si");
-  if (nuevos) avisar(`Llegaron ${nuevos} prospecto${nuevos === 1 ? "" : "s"} nuevo${nuevos === 1 ? "" : "s"} de los formularios de Meta. Están en el CRM.`, "CRM").catch(() => {});
-  return { nuevos, sin_permiso: sinPermiso };
+  const faltan = await meta.permisosFaltantes();
+  if (faltan) setAjuste("crm_meta_faltan", JSON.stringify(faltan));
+  if (nuevos) avisar(`Llegaron ${nuevos} prospecto${nuevos === 1 ? "" : "s"} nuevo${nuevos === 1 ? "" : "s"} de Meta (formularios y mensajes). Están en el CRM.`, "CRM").catch(() => {});
+  return { nuevos, faltan };
+}
+
+/** Los permisos de Meta que le faltan al CRM, en palabras sencillas. */
+function faltanMeta() {
+  try { return JSON.parse(getAjuste("crm_meta_faltan") || "[]").map((k) => meta.PERMISOS_CRM[k]).filter(Boolean); } catch { return []; }
 }
 
 export function iniciarCrm() {
@@ -426,7 +453,7 @@ export function tableroCrm({ cliente, mes } = {}) {
     borradores: db.prepare(`SELECT e.id, e.texto, e.fecha, p.id prospecto_id, p.nombre, c.nombre cliente FROM prospecto_eventos e JOIN prospectos p ON p.id = e.prospecto_id JOIN clientes c ON c.id = p.cliente_id
         WHERE e.tipo = 'borrador' AND e.estado = 'pendiente' ${cliente ? "AND p.cliente_id = ?" : ""} ORDER BY e.id DESC LIMIT 20`).all(...(cliente ? [clienteRequerido(cliente).id] : [])),
     embudo: e,
-    meta: { conectado: meta.metaConectado(), permiso_formularios: getAjuste("crm_meta_permiso") !== "no", paginas: cliente ? db.prepare("SELECT COUNT(*) n FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").get(clienteRequerido(cliente).id).n : null },
+    meta: { conectado: meta.metaConectado(), faltan: meta.metaConectado() ? faltanMeta() : [], paginas: cliente ? db.prepare("SELECT COUNT(*) n FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").get(clienteRequerido(cliente).id).n : null },
     embudo_anterior: embudo({ cliente, mes: mesAnt }),
     fuentes: FUENTES,
   };

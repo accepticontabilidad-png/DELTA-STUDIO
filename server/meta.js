@@ -20,7 +20,15 @@ const PERMISOS = [
   "ads_read", "business_management", "pages_show_list", "pages_read_engagement",
   "read_insights", "instagram_basic", "instagram_manage_insights",
   "leads_retrieval", "pages_manage_ads", // formularios instantáneos (clientes potenciales) para el CRM
+  "pages_messaging", "instagram_manage_messages", // quién escribió por Messenger e Instagram (solo leer)
 ].join(",");
+/** Lo que necesita el CRM, en palabras sencillas. */
+export const PERMISOS_CRM = {
+  leads_retrieval: "clientes potenciales (formularios)",
+  pages_manage_ads: "anuncios de la página",
+  pages_messaging: "mensajes de Messenger",
+  instagram_manage_messages: "mensajes de Instagram",
+};
 const DIA = 864e5;
 const CADA = 6 * 3600e3; // se actualiza sola cada 6 horas
 
@@ -69,6 +77,7 @@ export async function terminarConexion(req) {
   setAjuste("meta_usuario", yo.name || "");
   setAjuste("meta_expira", largo.expires_in ? new Date(Date.now() + largo.expires_in * 1000).toISOString() : "");
   setAjuste("meta_aviso_vence", "");
+  permisosFaltantes().then((f) => { if (f) setAjuste("crm_meta_faltan", JSON.stringify(f)); }).catch(() => {});
   // Primera revisión en segundo plano: encuentra páginas, Instagram y cuentas de anuncios.
   actualizarTodo().catch((e) => console.error("[meta]", e.message));
   return yo.name;
@@ -395,7 +404,7 @@ export async function sincronizarCliente(clienteId) {
 // ---------- Formularios instantáneos (clientes potenciales) para el CRM ----------
 let leadsDePrueba = null;
 export const _leadsDePrueba = (fn) => { leadsDePrueba = fn; };
-const sinPermiso = (e) => [10, 200, 3, 294].includes(e.codigo) || /permission|permiso|leads_retrieval|pages_manage_ads/i.test(e.message);
+const sinPermiso = (e) => [10, 200, 3, 294].includes(e.codigo) || /permission|permiso|leads_retrieval|pages_manage_ads|pages_messaging|instagram_manage_messages/i.test(e.message);
 
 /**
  * Las personas que llenaron un formulario de anuncio en las páginas de este cliente desde `desde` (ISO).
@@ -429,6 +438,71 @@ export async function formulariosDeCliente(clienteId, { desde } = {}) {
     }
   }
   return { paginas: paginas.length, formularios, leads };
+}
+
+/** ¿Qué permisos de los que usa el CRM le faltan a la conexión de Meta? (null si no se pudo saber) */
+export async function permisosFaltantes() {
+  if (!metaConectado() || modoSistema()) return null;
+  if (leadsDePrueba) return [];
+  try {
+    const d = await pedir("/me/permissions");
+    const dados = new Set((d.data || []).filter((x) => x.status === "granted").map((x) => x.permission));
+    return Object.keys(PERMISOS_CRM).filter((k) => !dados.has(k));
+  } catch { return null; }
+}
+
+let mensajesDePrueba = null;
+export const _mensajesDePrueba = (fn) => { mensajesDePrueba = fn; };
+
+/**
+ * Las personas que escribieron por Messenger o Instagram a las páginas de este cliente desde `desde` (ISO).
+ * Solo lee la lista de conversaciones: nombre, cuándo y el último mensaje. No contesta nada.
+ * Devuelve { paginas, conversaciones: [{ id, plataforma, fecha, nombre, ultimo, de_ellos }], sin_permiso: [] }.
+ */
+export async function conversacionesDeCliente(clienteId, { desde } = {}) {
+  const paginas = db.prepare("SELECT * FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").all(clienteId);
+  if (!paginas.length) return { paginas: 0, conversaciones: [], sin_permiso: [] };
+  if (mensajesDePrueba) return mensajesDePrueba(clienteId, { desde, paginas });
+  if (!metaConectado()) throw new Error("Meta no está conectado");
+  const corte = desde ? Date.parse(desde) : Date.now() - 35 * DIA;
+  const conversaciones = [];
+  const faltan = new Set();
+  for (const pg of paginas) {
+    const token = pg.token || tokenPrincipal();
+    const idPagina = pg.id.replace(/^page:/, "");
+    const extra = JSON.parse(pg.extra || "{}");
+    for (const plataforma of extra.instagram ? ["messenger", "instagram"] : ["messenger"]) {
+      try {
+        let d = await pedir(`/${idPagina}/conversations`, {
+          platform: plataforma, limit: 50,
+          fields: "id,updated_time,participants,messages.limit(1){message,from,created_time}",
+        }, token);
+        let vistos = 0;
+        for (;;) {
+          let viejo = false;
+          for (const c of d.data || []) {
+            const fecha = c.updated_time ? Date.parse(c.updated_time) : 0;
+            if (fecha < corte) { viejo = true; break; }
+            const persona = (c.participants?.data || []).find((x) => String(x.id) !== idPagina && String(x.id) !== String(extra.instagram || "")) || {};
+            const ultimo = c.messages?.data?.[0];
+            conversaciones.push({
+              id: `${plataforma}:${c.id}`, plataforma, fecha: new Date(fecha || Date.now()).toISOString(),
+              nombre: persona.name || persona.username || null,
+              ultimo: ultimo?.message ? String(ultimo.message).slice(0, 300) : null,
+              de_ellos: ultimo?.from ? String(ultimo.from.id) === String(persona.id) : null,
+            });
+          }
+          vistos += (d.data || []).length;
+          if (viejo || !d.paging?.next || vistos >= 500) break;
+          d = await pedir(d.paging.next, {}, null);
+        }
+      } catch (e) {
+        if (sinPermiso(e) || [230, 551].includes(e.codigo)) faltan.add(plataforma === "instagram" ? "instagram_manage_messages" : "pages_messaging");
+        else console.error("[meta mensajes]", pg.nombre, plataforma, e.message);
+      }
+    }
+  }
+  return { paginas: paginas.length, conversaciones, sin_permiso: [...faltan] };
 }
 
 /** Convierte las respuestas del formulario en nombre, teléfono, correo y lo demás. */

@@ -390,8 +390,10 @@ api.delete("/crm/borradores/:id", envolver((req) => crm.descartarBorrador(Number
 api.post("/crm/prospectos/:id/enviar", envolver((req) => crm.enviarWhatsAppProspecto(Number(req.params.id), req.body || {})));
 api.post("/crm/prospectos/:id/enviado", envolver((req) => crm.marcarEnviado(Number(req.params.id), req.body || {})));
 api.post("/crm/meta", envolver(async (req) => {
-  try { return await crm.importarDeMeta(String(req.body?.cliente || "")); }
-  catch (e) { if (e.permiso === false) return { sin_permiso: true }; throw e; }
+  const r = await crm.importarDeMeta(String(req.body?.cliente || ""));
+  const faltan = await meta.permisosFaltantes();
+  if (faltan) setAjuste("crm_meta_faltan", JSON.stringify(faltan));
+  return { ...r, faltan: (faltan || []).map((k) => meta.PERMISOS_CRM[k]) };
 }));
 api.get("/crm/fuentes", envolver((req) => ({ fuentes: crmExternos.listarFuentes(String(req.query.cliente || "")), tipos: crmExternos.TIPOS })));
 api.post("/crm/fuentes", envolver((req) => crmExternos.conectarFuente(req.body || {})));

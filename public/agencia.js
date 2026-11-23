@@ -1725,12 +1725,13 @@ export function iniciarAgencia(h) {
     const e = t.embudo;
     const vacio = !t.etapas.some((x) => x.prospectos.length);
     let html = "";
-    if (t.meta.conectado && !t.meta.permiso_formularios) {
-      html = `<b>Falta un permiso de Meta para traer los formularios de tus anuncios.</b>
-        <p class="tenue chico">Ve a Ajustes ⚙ → Conectar Meta, vuelve a entrar con tu Facebook y acepta todo lo que te pida (incluye "clientes potenciales"). Después toca <b>Traer de Meta</b> y cada persona que llenó un formulario aparece aquí sola.</p>`;
+    const faltan = t.meta.faltan || [];
+    if (t.meta.conectado && faltan.length) {
+      html = `<b>Meta todavía no le da a DELTA permiso para ver ${esc(faltan.join(", "))}.</b>
+        <p class="tenue chico">Por eso no aparecen aquí las personas que llenaron formularios o escribieron por tus anuncios. Ve a <b>Cuentas → Conectar Meta</b>, entra con tu Facebook y, cuando te lo pregunte, deja todo marcado y toca Continuar. Luego toca <b>Traer de Meta</b> y se llena solo.</p>`;
     } else if (vacio && e.meta?.conversaciones) {
-      html = `<b>Tus anuncios abrieron ${e.meta.conversaciones === 1 ? "1 conversación" : `${e.meta.conversaciones} conversaciones`} este mes (WhatsApp, Messenger o Instagram), pero esas personas viven en los chats de la clínica.</b>
-        <p class="tenue chico">Para que lleguen aquí solas hay que conectar el WhatsApp del cliente (te guío paso a paso). Mientras, agrégalas con <b>+ Prospecto</b> o díselo a DELTA: "llegó Ana López para ${esc(t.cliente || "el cliente")}, quiere consulta".</p>`;
+      html = `<b>Tus anuncios abrieron ${e.meta.conversaciones === 1 ? "1 conversación" : `${e.meta.conversaciones} conversaciones`} este mes. Toca <b>Traer de Meta</b> para ver aquí a quien escribió por Messenger o Instagram.</b>
+        <p class="tenue chico">Las que fueron por WhatsApp viven en el WhatsApp de la clínica: llegan aquí cuando conectes ese WhatsApp o su Pancake/Kommo en <b>Conexiones</b>. Mientras, agrégalas con <b>+ Prospecto</b>.</p>`;
     } else if (vacio && t.cliente && t.meta.paginas === 0) {
       html = `<b>Este cliente todavía no tiene su página de Facebook ligada.</b><p class="tenue chico">Lígala en Cuentas → Meta para traer sus formularios de anuncios.</p>`;
     }
@@ -1745,10 +1746,12 @@ export function iniciarAgencia(h) {
     b.textContent = "Buscando…";
     try {
       const r = await api("/crm/meta", { method: "POST", body: { cliente: clienteCrm } });
-      if (r.sin_permiso) avisar("Meta todavía no da permiso para ver los formularios. Vuelve a conectar Meta en Ajustes y acepta todo.");
-      else if (!r.paginas) avisar("Este cliente no tiene página de Facebook ligada. Lígala en Cuentas → Meta.");
-      else if (!r.formularios) avisar(`${r.cliente} no tiene formularios de anuncios en Meta. Si sus anuncios son de mensajes, esas personas están en su WhatsApp.`);
-      else avisar(r.nuevos ? `Traje ${r.nuevos} prospecto${r.nuevos === 1 ? "" : "s"} nuevo${r.nuevos === 1 ? "" : "s"} de Meta.` : "No hay formularios nuevos en Meta.");
+      const partes = [];
+      if (r.nuevos) partes.push(`Traje ${r.nuevos} prospecto${r.nuevos === 1 ? "" : "s"} nuevo${r.nuevos === 1 ? "" : "s"}${r.mensajes ? ` (${r.mensajes} por mensajes)` : ""}.`);
+      if (!r.paginas) partes.push("Este cliente no tiene página de Facebook ligada. Lígala en Cuentas → Meta.");
+      else if (r.faltan?.length) partes.push(`Falta que Meta dé permiso para ${r.faltan.join(", ")}: vuelve a conectar Meta en Cuentas.`);
+      else if (!r.nuevos) partes.push("No hay nadie nuevo en formularios ni en mensajes de Messenger o Instagram.");
+      avisar(partes.join(" "));
       await cargarCrm();
     } catch (err) { avisar(err.message); }
     finally { b.disabled = false; b.textContent = antes; }
