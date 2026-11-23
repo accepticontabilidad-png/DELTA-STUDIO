@@ -2,7 +2,7 @@
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
-import { iniciarInicioVivo, datosVivos, orbeVivo } from "/inicio-vivo.js";
+import { iniciarInicioVivo, datosVivos } from "/inicio-vivo.js";
 import { crearArranque } from "/arranque.js";
 import { pintarFabrica, tableroDe } from "/fabrica.js";
 const $ = (s) => document.querySelector(s);
@@ -1063,6 +1063,7 @@ const SECCIONES = {
   estudio: { cargar: () => cargarEstudio(), cada: 30e3 },
 };
 let seccionActual = "delta";
+const SECCIONES_AGENCIA = ["agencia", "finanzas", "crm", "contenido", "tendencias", "seo", "paidmedia", "analitica", "cuentas"];
 const conDelta = (n = seccionActual) => n === "delta" || n === "inicio"; // vistas donde está el orbe
 const cargadaEn = {};
 
@@ -1085,6 +1086,8 @@ function mostrarSeccion(nombre) {
   pintarMenu();
   $("#mini-orbe").hidden = conDelta(nombre) || esEquipo();
   document.body.dataset.seccion = nombre;
+  // "Boutique Medical Marketing" solo se ve en las secciones de la Agencia
+  $("#lema-agencia").hidden = !SECCIONES_AGENCIA.includes(nombre);
   cerrarMenu();
   refrescar(nombre);
   if (conDelta(nombre)) $("#conversacion").scrollTop = $("#conversacion").scrollHeight;
@@ -1798,11 +1801,54 @@ const orbe = (() => {
     energia += (objetivo - energia) * (nivel != null ? 0.25 : 0.06);
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
-    orbeVivo.energia = energia; orbeVivo.estado = estado; // el polvo de estrellas reacciona a la voz
     const dia = document.documentElement.dataset.mood === "dia";
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
     // De día los trazos (anillos, marcas, cometa) van en un violeta más profundo y firme para que se lean sobre el fondo claro
     const tinta = dia ? (a) => `rgba(${Math.round(r * 0.55)},${Math.round(g * 0.45)},${Math.round(b * 0.85)},${Math.min(1, a * 2.1)})` : rgba;
+
+    // Modo DELTA minimalista: solo un resplandor suave y dos aros finos que respiran
+    // (crecen y brillan con la voz). Sin esfera, sin marcas ni polvo.
+    if (seccionActual === "delta") {
+      const halo0 = ctx.createRadialGradient(C, C, 0, C, C, W * 0.5);
+      halo0.addColorStop(0, dia ? `rgba(140,110,255,${0.22 + 0.2 * energia})` : rgba(0.16 + 0.22 * energia));
+      halo0.addColorStop(0.35, dia ? `rgba(160,130,255,${0.08 + 0.08 * energia})` : rgba(0.05 + 0.07 * energia));
+      halo0.addColorStop(1, rgba(0));
+      ctx.fillStyle = halo0;
+      ctx.fillRect(0, 0, W, W);
+      const resp = Math.sin(t / 1400);
+      const aros = [[0.37, 0.012], [0.48, -0.008]];
+      aros.forEach(([rad, amp], i) => {
+        const radio = W * (rad + amp * resp + 0.012 * energia * (i ? 1 : 1.6));
+        ctx.lineWidth = (1 + 0.6 * energia) * e;
+        if (estado === "reposo") ctx.strokeStyle = tinta(0.2 + 0.06 * (i ? -resp : resp));
+        else {
+          // Con voz, el aro interior ondula muy fino
+          ctx.strokeStyle = tinta(0.28 + 0.35 * energia);
+        }
+        ctx.beginPath();
+        if (i === 0 && estado !== "reposo") {
+          for (let k = 0; k <= 180; k++) {
+            const a = (k / 180) * Math.PI * 2;
+            const v = nivel != null ? freq[2 + (k % 60)] / 255 : Math.abs(Math.sin(a * 5 + t / 160));
+            const rr = radio + Math.sin(a * 8 + t / 200) * v * 10 * energia * e;
+            k ? ctx.lineTo(C + Math.cos(a) * rr, C + Math.sin(a) * rr) : ctx.moveTo(C + Math.cos(a) * rr, C + Math.sin(a) * rr);
+          }
+        } else ctx.arc(C, C, radio, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      // Un solo punto de luz muy discreto que recorre el aro exterior
+      const ap = t * 0.00025 * (1 + energia * 2);
+      const rp = W * (0.48 - 0.008 * resp + 0.012 * energia);
+      const px = C + Math.cos(ap) * rp, py = C + Math.sin(ap) * rp;
+      const punto = ctx.createRadialGradient(px, py, 0, px, py, 7 * e);
+      punto.addColorStop(0, dia ? "rgba(106,76,240,.9)" : "rgba(255,255,255,.9)");
+      punto.addColorStop(1, tinta(0));
+      ctx.fillStyle = punto;
+      ctx.beginPath(); ctx.arc(px, py, 7 * e, 0, Math.PI * 2); ctx.fill();
+      if (reducir && estado === "reposo") setTimeout(() => requestAnimationFrame(dibujar), 250);
+      else requestAnimationFrame(dibujar);
+      return;
+    }
 
     // Resplandor de fondo: núcleo violeta y un borde rosado muy tenue
     const halo = ctx.createRadialGradient(C, C, W * 0.05, C, C, W * 0.5);
