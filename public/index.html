@@ -489,6 +489,27 @@
         <div class="tb-cabeza">
           <h1 class="tb-titulo">CRM y embudo</h1>
           <select id="crm-cliente" class="ct-filtro" aria-label="Cliente"></select>
+          <div class="crm-periodo-caja">
+            <button type="button" class="crm-periodo" id="crm-periodo" aria-haspopup="dialog" aria-expanded="false" aria-controls="crm-cal">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+              <span id="crm-periodo-txt">Este mes</span>
+              <svg class="crm-periodo-flecha" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="crm-cal" id="crm-cal" role="dialog" aria-label="Elegir fechas" hidden>
+              <div class="crm-cal-rapidos" id="crm-cal-rapidos"></div>
+              <div class="crm-cal-anio">
+                <button type="button" data-crm-anio="-1" aria-label="Año anterior">‹</button>
+                <b id="crm-cal-anio"></b>
+                <button type="button" data-crm-anio="1" aria-label="Año siguiente">›</button>
+              </div>
+              <div class="crm-cal-meses" id="crm-cal-meses"></div>
+              <div class="crm-cal-rango">
+                <label>Desde<input type="date" id="crm-desde"></label>
+                <label>Hasta<input type="date" id="crm-hasta"></label>
+                <button type="button" class="crm-cal-aplicar" id="crm-cal-aplicar">Aplicar</button>
+              </div>
+            </div>
+          </div>
           <div class="ag-botones">
             <button type="button" class="tb-link solo-dueno" id="crm-meta">Traer de Meta</button>
             <button type="button" class="tb-link solo-dueno" id="crm-config">Conexiones</button>
@@ -497,12 +518,43 @@
           </div>
         </div>
         <div class="tablero tablero-ct tablero-crm">
-          <div class="tb-kpis fi-kpis ct-kpis" id="crm-kpis"></div>
+          <div class="crm-filtros" id="crm-filtros" hidden>
+            <select id="crm-f-campana" class="ct-filtro" aria-label="Campaña"></select>
+            <select id="crm-f-conjunto" class="ct-filtro" aria-label="Conjunto de anuncios"></select>
+            <select id="crm-f-anuncio" class="ct-filtro" aria-label="Anuncio"></select>
+            <button type="button" class="tb-link" id="crm-f-quitar" hidden>Quitar filtros</button>
+            <span class="tenue chico crm-filtros-nota" id="crm-filtros-nota"></span>
+          </div>
+          <div class="tb-kpis crm-kpis" id="crm-kpis"></div>
           <div class="panel crm-aviso-meta" id="crm-aviso-meta" hidden></div>
+          <div class="crm-graficas">
+            <div class="panel crm-trafico-caja">
+              <div class="ag-cabeza"><h2>Embudo</h2><span class="tb-hora" id="crm-embudo-mes"></span></div>
+              <div class="crm-trafico" id="crm-trafico"></div>
+            </div>
+            <div class="panel crm-dia-caja">
+              <div class="ag-cabeza"><h2>Día por día</h2><span class="crm-leyenda" id="crm-dia-leyenda"></span></div>
+              <div class="crm-dia" id="crm-dia"></div>
+            </div>
+            <div class="panel crm-mejores-caja">
+              <div class="ag-cabeza"><h2 id="crm-mejores-titulo">Los mejores anuncios</h2></div>
+              <div class="crm-mejores" id="crm-mejores"></div>
+            </div>
+          </div>
+          <div class="panel crm-tabla-caja" id="crm-tabla-caja" hidden>
+            <div class="ag-cabeza">
+              <div class="segmento chico" id="crm-nivel" role="tablist" aria-label="Ver por">
+                <button type="button" data-crm-nivel="campana" class="activa">Campañas</button>
+                <button type="button" data-crm-nivel="conjunto">Conjuntos</button>
+                <button type="button" data-crm-nivel="anuncio">Anuncios</button>
+              </div>
+              <span class="tb-hora" id="crm-tabla-nota"></span>
+            </div>
+            <div class="crm-tabla-scroll"><table class="crm-tabla" id="crm-tabla"></table></div>
+          </div>
           <div class="crm-medio">
             <div class="panel crm-embudo-caja">
-              <div class="ag-cabeza"><h2>Embudo del mes</h2><span class="tb-hora" id="crm-embudo-mes"></span></div>
-              <div class="crm-embudo" id="crm-embudo"></div>
+              <div class="ag-cabeza"><h2>Costos y origen</h2><span class="tb-hora" id="crm-costos-mes"></span></div>
               <div class="crm-costos" id="crm-costos"></div>
               <div class="crm-fuentes" id="crm-fuentes"></div>
             </div>
@@ -510,7 +562,7 @@
           </div>
           <div class="segmento chico ct-tabs" id="crm-tabs" role="tablist" aria-label="Etapas"></div>
           <div class="ct-board crm-board" id="crm-board"></div>
-          <p class="tenue chico tb-nota">Arrastra un prospecto a otra columna (o usa las flechas) para cambiarlo de etapa. Si alguien nuevo lleva más de 24 horas sin respuesta sale en rojo. DELTA te propone el mensaje, pero <b>nunca le escribe a nadie sola</b>: tú lo abres en WhatsApp o tocas Enviar. Díselo de viva voz: "llegó Ana López para Kardia, quiere chequeo", "Ana ya agendó para el jueves a las 5".</p>
+          <p class="tenue chico tb-nota">Toca la fecha de arriba para ver otro día, mes o año. Los números de anuncios vienen de Meta y el <b>costo real por cita</b> sale de las citas que de verdad están en el CRM. Arrastra un prospecto a otra columna (o usa las flechas) para cambiarlo de etapa. Si alguien nuevo lleva más de 24 horas sin respuesta sale en rojo. DELTA te propone el mensaje, pero <b>nunca le escribe a nadie sola</b>: tú lo abres en WhatsApp o tocas Enviar.</p>
         </div>
       </section>
 

@@ -1612,14 +1612,475 @@ export function iniciarAgencia(h) {
   const esperaTxt = (horas) => (horas < 1 ? "acaba de llegar" : horas < 24 ? `lleva ${horas} h esperando` : `lleva ${Math.floor(horas / 24)} día${Math.floor(horas / 24) === 1 ? "" : "s"} esperando`);
   const minutosTxt = (m) => (m === null || m === undefined ? "–" : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`);
 
+  // ---------- Periodo (fecha, mes y año) ----------
+  const hoyLocal = () => new Date().toLocaleDateString("en-CA", { timeZone: h.zona() });
+  const diaMas = (f, n) => new Date(Date.parse(`${f}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+  const finMes = (a, m) => new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10); // m de 1 a 12
+  const RAPIDOS = [
+    ["hoy", "Hoy"], ["ayer", "Ayer"], ["7", "Últimos 7 días"], ["30", "Últimos 30 días"],
+    ["mes", "Este mes"], ["mes_pasado", "Mes pasado"], ["anio", "Este año"],
+  ];
+  function rangoRapido(clave) {
+    const hoy = hoyLocal();
+    const [a, m] = hoy.split("-").map(Number);
+    switch (clave) {
+      case "hoy": return [hoy, hoy];
+      case "ayer": return [diaMas(hoy, -1), diaMas(hoy, -1)];
+      case "7": return [diaMas(hoy, -6), hoy];
+      case "30": return [diaMas(hoy, -29), hoy];
+      case "mes_pasado": { const am = m === 1 ? a - 1 : a, mm = m === 1 ? 12 : m - 1; return [`${am}-${String(mm).padStart(2, "0")}-01`, finMes(am, mm)]; }
+      case "anio": return [`${a}-01-01`, hoy];
+      default: return [`${a}-${String(m).padStart(2, "0")}-01`, finMes(a, m)];
+    }
+  }
+  let periodoCrm = (() => {
+    try { const p = JSON.parse(guardado.get("delta_crm_periodo") || "null"); if (p?.rapido || (p?.desde && p?.hasta)) return p; } catch {}
+    return { rapido: "mes" };
+  })();
+  const rangoCrm = () => (periodoCrm.rapido ? rangoRapido(periodoCrm.rapido) : [periodoCrm.desde, periodoCrm.hasta]);
+  function textoPeriodo([d, hta]) {
+    const [a1, m1, d1] = d.split("-").map(Number), [a2, m2, d2] = hta.split("-").map(Number);
+    if (d1 === 1 && hta === finMes(a2, m2) && a1 === a2 && m1 === m2) return `${MESES_LARGOS[m1 - 1][0].toUpperCase()}${MESES_LARGOS[m1 - 1].slice(1)} ${a1}`;
+    if (d === hta) return `${d1} ${MESES[m1 - 1]} ${a1}`;
+    if (a1 === a2 && m1 === m2) return `${d1} – ${d2} ${MESES[m1 - 1]} ${a1}`;
+    if (a1 === a2) return `${d1} ${MESES[m1 - 1]} – ${d2} ${MESES[m2 - 1]} ${a1}`;
+    return `${d1} ${MESES[m1 - 1]} ${a1} – ${d2} ${MESES[m2 - 1]} ${a2}`;
+  }
+  let anioCal = Number(rangoCrm()[0].slice(0, 4));
+  function pintarCalendario() {
+    const [d, hta] = rangoCrm();
+    const hoy = hoyLocal();
+    $("#crm-periodo-txt").textContent = periodoCrm.rapido && periodoCrm.rapido !== "mes" ? RAPIDOS.find((r) => r[0] === periodoCrm.rapido)[1] : textoPeriodo([d, hta]);
+    $("#crm-periodo").title = textoPeriodo([d, hta]);
+    $("#crm-cal-rapidos").innerHTML = RAPIDOS.map(([k, t]) => `<button type="button" data-crm-rapido="${k}" class="${periodoCrm.rapido === k ? "activa" : ""}">${t}</button>`).join("");
+    $("#crm-cal-anio").textContent = anioCal;
+    $('[data-crm-anio="1"]').disabled = anioCal >= Number(hoy.slice(0, 4));
+    $("#crm-cal-meses").innerHTML = MESES.map((m, i) => {
+      const ini = `${anioCal}-${String(i + 1).padStart(2, "0")}-01`;
+      const elegido = d === ini && hta === finMes(anioCal, i + 1);
+      return `<button type="button" data-crm-mes="${ini.slice(0, 7)}" class="${elegido ? "activa" : ""}" ${ini > hoy ? "disabled" : ""}>${m}</button>`;
+    }).join("");
+    $("#crm-desde").value = d;
+    $("#crm-hasta").value = hta;
+    $("#crm-desde").max = $("#crm-hasta").max = hoy;
+  }
+  function elegirPeriodo(p) {
+    periodoCrm = p;
+    guardado.set("delta_crm_periodo", JSON.stringify(p));
+    filtroCrm = { campana: "", conjunto: "", anuncio: "" };
+    cerrarCalendario();
+    cargarCrm().catch((err) => avisar(err.message));
+  }
+  const cerrarCalendario = () => { $("#crm-cal").hidden = true; $("#crm-periodo").setAttribute("aria-expanded", "false"); };
+  $("#crm-periodo").addEventListener("click", () => {
+    const abrir = $("#crm-cal").hidden;
+    if (abrir) { anioCal = Number(rangoCrm()[1].slice(0, 4)); pintarCalendario(); }
+    $("#crm-cal").hidden = !abrir;
+    $("#crm-periodo").setAttribute("aria-expanded", String(abrir));
+  });
+  $("#crm-cal").addEventListener("click", (e) => {
+    const r = e.target.closest("[data-crm-rapido]");
+    if (r) return elegirPeriodo({ rapido: r.dataset.crmRapido });
+    const an = e.target.closest("[data-crm-anio]");
+    if (an) { anioCal += Number(an.dataset.crmAnio); return pintarCalendario(); }
+    const m = e.target.closest("[data-crm-mes]");
+    if (m) { const [a, n] = m.dataset.crmMes.split("-").map(Number); return elegirPeriodo({ desde: `${m.dataset.crmMes}-01`, hasta: finMes(a, n) }); }
+  });
+  $("#crm-cal-aplicar").addEventListener("click", () => {
+    let d = $("#crm-desde").value, hta = $("#crm-hasta").value;
+    if (!d && !hta) return;
+    d ||= hta; hta ||= d;
+    if (d > hta) [d, hta] = [hta, d];
+    elegirPeriodo({ desde: d, hasta: hta });
+  });
+  document.addEventListener("click", (e) => { if (!$("#crm-cal").hidden && !e.target.closest(".crm-periodo-caja")) cerrarCalendario(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#crm-cal").hidden) { cerrarCalendario(); $("#crm-periodo").focus(); } });
+
+  // ---------- Cargar ----------
+  let reporteCrm = null;
+  let filtroCrm = { campana: "", conjunto: "", anuncio: "" };
+  let nivelCrm = "campana";
+  let pedidoCrm = 0;
   async function cargarCrm() {
     if (!clientesFi.length) await prepararFinanzas();
-    const q = clienteCrm ? `?cliente=${encodeURIComponent(clienteCrm)}` : "";
+    const [d, hta] = rangoCrm();
+    pintarCalendario();
+    const q = (c) => `?${new URLSearchParams({ ...(c ? { cliente: c } : {}), desde: d, hasta: hta })}`;
+    const n = ++pedidoCrm;
     let t;
-    try { t = await api(`/crm${q}`); }
-    catch (err) { if (!clienteCrm) throw err; clienteCrm = ""; guardado.set("delta_crm_cliente", ""); t = await api("/crm"); }
+    try { t = await api(`/crm${q(clienteCrm)}`); }
+    catch (err) { if (!clienteCrm) throw err; clienteCrm = ""; guardado.set("delta_crm_cliente", ""); t = await api(`/crm${q("")}`); }
+    if (n !== pedidoCrm) return;
     ultimaCrm = t;
+    if (!reporteCrm || reporteCrm.desde !== d || reporteCrm.hasta !== hta || reporteCrm.cliente !== clienteCrm) reporteCrm = null;
     pintarCrm(t);
+    try {
+      const r = await api(`/crm/reporte${q(clienteCrm)}`);
+      if (n !== pedidoCrm) return;
+      reporteCrm = { ...r, cliente: clienteCrm };
+    } catch (err) {
+      if (n !== pedidoCrm) return;
+      reporteCrm = { desde: d, hasta: hta, cliente: clienteCrm, anuncios: null, prospectos: null, error: err.message };
+    }
+    pintarReporte();
+  }
+
+  // ---------- Reporte estilo Looker: anuncios de Meta + lo que pasó en el CRM ----------
+  const normal = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const dinero2 = (n) => (n === null || n === undefined || !Number.isFinite(n) ? "–" : "$" + n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const enteroCrm = (n) => Math.round(n || 0).toLocaleString("es-MX");
+  const div = (a, b) => (b ? a / b : null);
+  const vacios = () => ({ gasto: 0, impresiones: 0, clics: 0, clics_enlace: 0, conversaciones: 0, prospectos: 0, compras: 0, valor_compras: 0 });
+  const NUMEROS = ["gasto", "impresiones", "clics", "clics_enlace", "conversaciones", "prospectos", "compras", "valor_compras"];
+  const sumarEn = (acc, f) => { for (const k of NUMEROS) acc[k] += Number(f[k]) || 0; return acc; };
+  const resultadosDe = (x) => x.conversaciones + x.prospectos + x.compras;
+
+  let idSparkCrm = 0;
+  function spark(serie) {
+    const s = serie.filter((v) => v !== null && Number.isFinite(v));
+    if (s.length < 2) return `<span class="pg-kpi-pie"></span>`;
+    const w = 120, alto = 34;
+    const min = Math.min(...s), max = Math.max(...s), r = max - min || 1;
+    const pts = s.map((v, i) => [((i / (s.length - 1)) * w).toFixed(1), (alto - 2 - ((v - min) / r) * (alto - 4)).toFixed(1)]);
+    const d = "M" + pts.map((p) => p.join(",")).join("L");
+    const id = `crmsp${++idSparkCrm}`;
+    return `<svg class="spark" viewBox="0 0 ${w} ${alto}" preserveAspectRatio="none" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="st-a"/><stop offset="1" class="st-b"/></linearGradient></defs>
+      <path d="${d}L${w},${alto}L0,${alto}Z" fill="url(#${id})"/><path d="${d}" class="sp-linea"/></svg>`;
+  }
+
+  // Los días del periodo agrupados (día, semana o mes según lo largo que sea).
+  function cubetas(desde, hasta) {
+    const dias = [];
+    for (let f = desde; f <= hasta && dias.length < 800; f = diaMas(f, 1)) dias.push(f);
+    const tipo = dias.length <= 62 ? "dia" : dias.length <= 190 ? "semana" : "mes";
+    const grupos = [];
+    const clave = (f, i) => (tipo === "dia" ? f : tipo === "semana" ? dias[Math.floor(i / 7) * 7] : f.slice(0, 7));
+    const idx = new Map();
+    dias.forEach((f, i) => {
+      const k = clave(f, i);
+      if (!idx.has(k)) { idx.set(k, grupos.length); grupos.push({ clave: k, desde: f }); }
+    });
+    return { tipo, grupos, de: (f) => { const i = dias.indexOf(f); return i < 0 ? -1 : idx.get(clave(f, i)); } };
+  }
+  const etiquetaCubeta = (c, tipo) => {
+    if (tipo === "mes") { const [a, m] = c.clave.split("-").map(Number); return `${MESES[m - 1]} ${String(a).slice(2)}`; }
+    const [, m, d] = c.desde.split("-").map(Number);
+    return `${d} ${MESES[m - 1]}`;
+  };
+
+  // A qué campaña, conjunto o anuncio pertenece cada prospecto del CRM (por el nombre que trae de Meta/Pancake).
+  function ligarProspectos(prospectos, filas) {
+    const completo = new Map(), porAnuncio = new Map(), porCampana = new Map(), repetidos = new Set();
+    for (const f of filas) {
+      completo.set(normal(`${f.campana} · ${f.anuncio}`), f);
+      const a = normal(f.anuncio);
+      if (porAnuncio.has(a) && porAnuncio.get(a).anuncio_id !== f.anuncio_id) repetidos.add(a);
+      porAnuncio.set(a, f);
+      porCampana.set(normal(f.campana), f.campana_id);
+    }
+    return prospectos.map((p) => {
+      const t = normal(p.campana);
+      if (!t) return { ...p };
+      const f = completo.get(t) || (!repetidos.has(t) && porAnuncio.get(t));
+      if (f) return { ...p, campana_id: f.campana_id, conjunto_id: f.conjunto_id, anuncio_id: f.anuncio_id };
+      const c = porCampana.get(t) || porCampana.get(normal(String(p.campana).split(" · ")[0]));
+      return c ? { ...p, campana_id: c } : { ...p };
+    });
+  }
+
+  function datosReporte() {
+    const t = ultimaCrm, r = reporteCrm;
+    const [desde, hasta] = rangoCrm();
+    const filasTodas = r?.anuncios?.filas || [];
+    const hayAds = filasTodas.length > 0;
+    const fc = filtroCrm;
+    const pasa = (x) => (!fc.campana || x.campana_id === fc.campana) && (!fc.conjunto || x.conjunto_id === fc.conjunto) && (!fc.anuncio || x.anuncio_id === fc.anuncio);
+    const filtrando = Boolean(fc.campana || fc.conjunto || fc.anuncio);
+    const filas = filasTodas.filter(pasa);
+    const diasAds = (r?.anuncios?.dias || []).filter(pasa);
+    const prosTodos = r?.prospectos ? (hayAds ? ligarProspectos(r.prospectos, filasTodas) : r.prospectos) : null;
+    const pros = prosTodos ? (filtrando ? prosTodos.filter(pasa) : prosTodos) : null;
+    const tot = filas.reduce(sumarEn, vacios());
+    const crm = pros
+      ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, ventas: pros.filter((p) => p.alcanzo >= 4).length, contactados: pros.filter((p) => p.alcanzo >= 1).length, valor: pros.filter((p) => p.alcanzo >= 4).reduce((s, p) => s + (p.valor || 0), 0) }
+      : { prospectos: t.embudo.prospectos, citas: t.embudo.citas, asistieron: t.embudo.pasos[3].n, ventas: t.embudo.ventas, contactados: t.embudo.pasos[1].n, valor: t.embudo.valor_ventas || 0 };
+    // Series por día (o semana/mes)
+    const hoy = hoyLocal();
+    const cub = cubetas(desde, hasta > hoy && desde <= hoy ? hoy : hasta);
+    const serie = () => cub.grupos.map(() => vacios());
+    const porDia = serie();
+    for (const d of diasAds) { const i = cub.de(d.fecha); if (i >= 0) sumarEn(porDia[i], d); }
+    const prosDia = cub.grupos.map(() => ({ prospectos: 0, citas: 0 }));
+    for (const p of pros || []) { const i = cub.de(p.dia); if (i >= 0) { prosDia[i].prospectos++; if (p.alcanzo >= 2) prosDia[i].citas++; } }
+    return { t, r, desde, hasta, hayAds, filas, filasTodas, prosTodos, pros, tot, crm, cub, porDia, prosDia, filtrando };
+  }
+
+  function pintarReporte() {
+    const t = ultimaCrm;
+    if (!t) return;
+    const D = datosReporte();
+    const { r, hayAds, tot, crm, cub, porDia, prosDia } = D;
+    const cargando = !r;
+    const txtPeriodo = textoPeriodo([D.desde, D.hasta]);
+    $("#crm-embudo-mes").textContent = txtPeriodo;
+    $("#crm-costos-mes").textContent = txtPeriodo;
+    pintarFiltros(D);
+
+    // Tarjetas
+    const sr = t.sin_responder.length;
+    const e = t.embudo, a = t.embudo_anterior;
+    const cambio = (x, y) => (D.filtrando ? "" : y ? `${x >= y ? "+" : "−"}${Math.abs(Math.round(((x - y) / y) * 100))} % vs. periodo anterior` : "");
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi crm-kpi ${k.clase || ""}" ${k.ir ? `data-crm-ir="${k.ir}" role="button" tabindex="0"` : ""} ${k.ayuda ? `title="${esc(k.ayuda)}"` : ""}>
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
+        <b>${esc(k.valor)}</b>
+        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
+        ${k.serie ? spark(k.serie) : ""}
+      </div>`;
+    const ventasK = { nombre: "Ventas", valor: crm.valor ? dinero(crm.valor) : String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}${hayAds && tot.gasto && crm.valor ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}`, ir: "venta" };
+    const sinResp = { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null };
+    let tarjetas;
+    if (hayAds) {
+      const res = resultadosDe(tot);
+      const cpa = div(tot.gasto, crm.citas);
+      tarjetas = [
+        { nombre: "Inversión", valor: dinero2(tot.gasto), extra: `${enteroCrm(tot.impresiones)} impresiones`, serie: porDia.map((x) => x.gasto), clase: "k-inv" },
+        { nombre: "CPC · costo por clic", valor: dinero2(div(tot.gasto, tot.clics_enlace)), extra: `${enteroCrm(tot.clics_enlace)} clics al enlace`, serie: porDia.map((x) => div(x.gasto, x.clics_enlace)), ayuda: "Inversión entre los clics al enlace del anuncio" },
+        { nombre: "CPM · costo por mil", valor: dinero2(div(tot.gasto * 1000, tot.impresiones)), extra: "lo que cuesta mostrarse 1,000 veces", serie: porDia.map((x) => div(x.gasto * 1000, x.impresiones)) },
+        { nombre: "CTR · tasa de clics", valor: tot.impresiones ? `${(tot.clics_enlace / tot.impresiones * 100).toLocaleString("es-MX", { maximumFractionDigits: 2 })} %` : "–", extra: "de cada 100 que lo ven, cuántos tocan", serie: porDia.map((x) => div(x.clics_enlace * 100, x.impresiones)) },
+        { nombre: "CPL · costo por registro", valor: dinero2(div(tot.gasto, res)), extra: `${enteroCrm(res)} mensaje${res === 1 ? "" : "s"} o registro${res === 1 ? "" : "s"} en Meta`, serie: porDia.map((x) => div(x.gasto, resultadosDe(x))), ayuda: "Inversión entre las conversaciones y formularios que Meta cuenta" },
+        { nombre: "CPA real · por cita", valor: dinero2(cpa), extra: crm.citas ? `${crm.citas} cita${crm.citas === 1 ? "" : "s"} agendada${crm.citas === 1 ? "" : "s"} en el CRM` : "aún no hay citas en estas fechas", serie: porDia.map((x, i) => div(x.gasto, prosDia[i].citas)), ir: "cita", clase: "k-real", ayuda: "Inversión entre las citas que de verdad están en el CRM" },
+        ventasK, sinResp,
+      ];
+    } else {
+      tarjetas = [
+        { nombre: "Prospectos", valor: String(crm.prospectos), extra: cambio(e.prospectos, a.prospectos) || (crm.prospectos ? "" : "nadie llegó en estas fechas"), serie: prosDia.map((x) => x.prospectos), ir: "nuevo" },
+        { nombre: "Agendaron cita", valor: String(crm.citas), extra: crm.prospectos ? `${Math.round((crm.citas / crm.prospectos) * 100)} % de los prospectos` : "", serie: prosDia.map((x) => x.citas), ir: "cita" },
+        ventasK, sinResp,
+      ];
+      if (e.inversion) {
+        tarjetas.unshift(
+          { nombre: "Inversión", valor: dinero(e.inversion), extra: "anotada en Paid media", clase: "k-inv" },
+          { nombre: "Costo por prospecto", valor: dinero2(e.costo_prospecto), extra: `${crm.prospectos} prospecto${crm.prospectos === 1 ? "" : "s"}` },
+          { nombre: "CPA real · por cita", valor: dinero2(e.costo_cita), extra: `${crm.citas} cita${crm.citas === 1 ? "" : "s"} en el CRM`, clase: "k-real" },
+          { nombre: "Costo por venta", valor: dinero2(e.costo_venta), extra: e.retorno ? `retorno ${e.retorno.toLocaleString("es-MX")}x` : "" },
+        );
+      }
+    }
+    $("#crm-kpis").innerHTML = tarjetas.map(kpi).join("");
+    $("#crm-kpis").classList.toggle("ocho", tarjetas.length > 4);
+
+    // Embudo
+    const pasos = hayAds
+      ? [["Impresiones", tot.impresiones], ["Clics al enlace", tot.clics_enlace], ["Mensajes y registros", resultadosDe(tot)], ["Prospectos en el CRM", crm.prospectos], ["Citas agendadas", crm.citas], ["Ventas", crm.ventas]]
+      : [["Prospectos", crm.prospectos], ["Contactados", crm.contactados], ["Citas agendadas", crm.citas], ["Asistieron", crm.asistieron], ["Ventas", crm.ventas]];
+    $("#crm-trafico").innerHTML = pasos[0][1] ? embudoSvg(pasos) : `<p class="ct-vacia">${cargando ? "Cargando…" : "Cuando lleguen prospectos en estas fechas vas a ver aquí cuántos pasan de un paso al siguiente."}</p>`;
+
+    // Día por día
+    const A = hayAds ? porDia.map((x) => x.gasto) : prosDia.map((x) => x.prospectos);
+    const B = hayAds ? porDia.map((x) => resultadosDe(x)) : prosDia.map((x) => x.citas);
+    const nombres = hayAds ? ["Inversión", "Mensajes y registros"] : ["Prospectos", "Citas"];
+    $("#crm-dia-leyenda").innerHTML = `<span class="l-a">${nombres[0]}</span><span class="l-b">${nombres[1]}</span>`;
+    $("#crm-dia").innerHTML = A.some(Boolean) || B.some(Boolean)
+      ? lineasSvg(cub, A, B, nombres, hayAds)
+      : `<p class="ct-vacia">${cargando ? "Cargando…" : "Sin movimiento en estas fechas."}</p>`;
+
+    // Los mejores
+    pintarMejores(D);
+    // Tabla
+    pintarTabla(D);
+    // Costos y origen
+    pintarCostos(D);
+
+    // Aviso si Meta tiene la cuenta pero no respondió
+    const errs = r?.anuncios?.errores || [];
+    $("#crm-filtros-nota").textContent = errs.length && !hayAds ? `Meta no respondió: ${errs[0]}` : "";
+    medidas($('[data-seccion="crm"]'));
+  }
+
+  function embudoSvg(pasos) {
+    const W = 320, H = 52, n = pasos.length, ancho = (i) => W * (1 - (i / n) * 0.62);
+    const partes = pasos.map(([nombre, v], i) => {
+      const y = i * H, wt = ancho(i), wb = ancho(i + 1);
+      const pct = i && pasos[i - 1][1] ? (v / pasos[i - 1][1]) * 100 : null;
+      const pctTxt = pct === null ? "" : ` · ${pct < 10 ? pct.toLocaleString("es-MX", { maximumFractionDigits: 1 }) : Math.round(pct)} %`;
+      return `<g class="crm-f f${i}"><title>${esc(nombre)}: ${enteroCrm(v)}${pctTxt ? ` (${pctTxt.slice(3)} del paso anterior)` : ""}</title>
+        <path d="M${(W - wt) / 2},${y} L${(W + wt) / 2},${y} L${(W + wb) / 2},${y + H - 4} L${(W - wb) / 2},${y + H - 4} Z"/>
+        <text x="${W / 2}" y="${y + 22}" class="crm-f-num">${v >= 100000 ? cifra(v) : enteroCrm(v)}</text>
+        <text x="${W / 2}" y="${y + 38}" class="crm-f-nom">${esc(nombre)}${pctTxt}</text></g>`;
+    }).join("");
+    return `<svg viewBox="0 0 ${W} ${n * H}" class="crm-embudo-svg" role="img" aria-label="Embudo: ${esc(pasos.map(([k, v]) => `${k} ${v}`).join(", "))}">${partes}</svg>`;
+  }
+
+  function lineasSvg(cub, A, B, nombres, hayAds) {
+    const W = 560, H = 250, izq = 10, der = 10, arr = 22, abj = 24;
+    const n = A.length, paso = n > 1 ? (W - izq - der) / (n - 1) : 0;
+    const x = (i) => izq + (n > 1 ? paso * i : (W - izq - der) / 2);
+    const maxA = Math.max(...A, 0) || 1, maxB = Math.max(...B, 0) || 1;
+    const yA = (v) => arr + (H - arr - abj) * (1 - v / maxA), yB = (v) => arr + (H - arr - abj) * (1 - v / maxB);
+    const lA = A.map((v, i) => `${x(i).toFixed(1)},${yA(v).toFixed(1)}`).join(" ");
+    const lB = B.map((v, i) => `${x(i).toFixed(1)},${yB(v).toFixed(1)}`).join(" ");
+    const base = H - abj;
+    const marcas = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, l) => l.indexOf(v) === i && v >= 0);
+    const fmtA = (v) => (hayAds ? dinero(v) : enteroCrm(v));
+    const zonas = A.map((v, i) => `<rect x="${(x(i) - (paso || W) / 2).toFixed(1)}" y="0" width="${(paso || W).toFixed(1)}" height="${H}" class="crm-zona"><title>${esc(etiquetaCubeta(cub.grupos[i], cub.tipo))}${cub.tipo === "semana" ? " (semana)" : ""}: ${nombres[0]} ${fmtA(v)} · ${nombres[1]} ${enteroCrm(B[i])}</title></rect>`).join("");
+    return `<svg viewBox="0 0 ${W} ${H}" class="crm-lineas" role="img" aria-label="${esc(nombres.join(" y "))} por ${cub.tipo === "dia" ? "día" : cub.tipo}">
+      <defs><linearGradient id="crm-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="st-a"/><stop offset="1" class="st-b"/></linearGradient></defs>
+      ${[0.25, 0.5, 0.75].map((f) => `<line x1="${izq}" x2="${W - der}" y1="${(arr + (H - arr - abj) * f).toFixed(1)}" y2="${(arr + (H - arr - abj) * f).toFixed(1)}" class="crm-rejilla"/>`).join("")}
+      <line x1="${izq}" x2="${W - der}" y1="${base}" y2="${base}" class="crm-eje"/>
+      <text x="${izq}" y="13" class="crm-tope a">máx ${esc(fmtA(maxA))}</text>
+      <text x="${W - der}" y="13" class="crm-tope b">máx ${enteroCrm(maxB)}</text>
+      ${n > 1 ? `<polygon points="${x(0).toFixed(1)},${base} ${lA} ${x(n - 1).toFixed(1)},${base}" class="crm-area"/>` : ""}
+      <polyline points="${lA}" class="crm-linea-a"/>
+      <polyline points="${lB}" class="crm-linea-b"/>
+      ${n <= 45 ? B.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${yB(v).toFixed(1)}" r="2.6" class="crm-punto-b"/>`).join("") : ""}
+      ${marcas.map((i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" class="crm-x" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${esc(etiquetaCubeta(cub.grupos[i], cub.tipo))}</text>`).join("")}
+      ${zonas}
+    </svg>`;
+  }
+
+  function pintarMejores(D) {
+    const caja = $("#crm-mejores");
+    let partes, centro, sub;
+    if (D.hayAds) {
+      $("#crm-mejores-titulo").textContent = "Los mejores anuncios";
+      const porAd = new Map();
+      for (const f of D.filas) {
+        const x = porAd.get(f.anuncio_id) || { nombre: f.anuncio, campana: f.campana, ...vacios() };
+        sumarEn(x, f);
+        porAd.set(f.anuncio_id, x);
+      }
+      const lista = [...porAd.values()].map((x) => ({ ...x, res: resultadosDe(x) })).sort((p, q) => q.res - p.res || q.gasto - p.gasto);
+      const usarGasto = !lista.some((x) => x.res);
+      const valor = (x) => (usarGasto ? x.gasto : x.res);
+      const top = lista.slice(0, 5);
+      const resto = lista.slice(5);
+      partes = top.map((x, i) => ({ n: valor(x), clase: `c${i}`, nombre: x.nombre, det: usarGasto ? dinero(x.gasto) : `${enteroCrm(x.res)} · ${dinero2(div(x.gasto, x.res))} c/u` }));
+      if (resto.length) partes.push({ n: resto.reduce((s, x) => s + valor(x), 0), clase: "c5", nombre: `Otros ${resto.length}`, det: usarGasto ? dinero(resto.reduce((s, x) => s + x.gasto, 0)) : enteroCrm(resto.reduce((s, x) => s + x.res, 0)) });
+      centro = usarGasto ? dinero(D.tot.gasto) : enteroCrm(resultadosDe(D.tot));
+      sub = usarGasto ? "invertido" : "resultados";
+    } else {
+      $("#crm-mejores-titulo").textContent = "De dónde llegan";
+      const cuenta = new Map();
+      for (const p of D.pros || []) cuenta.set(p.fuente, (cuenta.get(p.fuente) || 0) + 1);
+      const lista = D.pros ? [...cuenta.entries()].map(([k, n]) => ({ nombre: ultimaCrm.fuentes[k] || k, n })) : ultimaCrm.embudo.por_fuente.map((f) => ({ nombre: f.nombre, n: f.prospectos }));
+      lista.sort((p, q) => q.n - p.n);
+      partes = lista.slice(0, 6).map((x, i) => ({ ...x, clase: `c${i}`, det: `${x.n} prospecto${x.n === 1 ? "" : "s"}` }));
+      centro = String(lista.reduce((s, x) => s + x.n, 0));
+      sub = "prospectos";
+    }
+    caja.innerHTML = partes.some((p) => p.n)
+      ? `<div class="crm-dona">${dona(partes, centro, sub)}</div>
+         <ul class="crm-dona-lista">${partes.map((p) => `<li><i class="crm-punto ${p.clase}"></i><span class="crm-dona-nombre" title="${esc(p.nombre)}">${esc(p.nombre)}</span><small class="tenue">${esc(p.det)}</small></li>`).join("")}</ul>`
+      : `<p class="ct-vacia">${reporteCrm ? "Nada que comparar en estas fechas." : "Cargando…"}</p>`;
+  }
+
+  const NIVELES = { campana: "Campaña", conjunto: "Conjunto", anuncio: "Anuncio" };
+  function pintarTabla(D) {
+    $("#crm-tabla-caja").hidden = !D.hayAds;
+    if (!D.hayAds) return;
+    const nivel = nivelCrm;
+    $("#crm-nivel").querySelectorAll("[data-crm-nivel]").forEach((b) => b.classList.toggle("activa", b.dataset.crmNivel === nivel));
+    const grupos = new Map();
+    for (const f of D.filas) {
+      const id = f[`${nivel}_id`];
+      const g = grupos.get(id) || { id, nombre: f[nivel], padre: nivel === "campana" ? (D.r.anuncios.filas.some((x) => x.cliente !== f.cliente) ? f.cliente : "") : f.campana, ...vacios(), citas: 0, prospectos_crm: 0 };
+      sumarEn(g, f);
+      grupos.set(id, g);
+    }
+    for (const p of D.pros || []) {
+      const g = grupos.get(p[`${nivel}_id`]);
+      if (g) { g.prospectos_crm++; if (p.alcanzo >= 2) g.citas++; }
+    }
+    const lista = [...grupos.values()].sort((a, b) => b.gasto - a.gasto);
+    const sinLigar = (D.pros || []).filter((p) => !p[`${nivel}_id`]).length;
+    $("#crm-tabla-nota").textContent = `${lista.length} ${NIVELES[nivel].toLowerCase()}${lista.length === 1 ? "" : "s"}`;
+    const fila = (g, total = false) => {
+      const res = resultadosDe(g);
+      return `<tr ${total ? `class="total"` : `data-crm-fila="${nivel}:${esc(g.id)}" tabindex="0" title="Ver solo este ${NIVELES[nivel].toLowerCase()}"`}>
+        <th scope="row"><span class="crm-t-nombre">${esc(g.nombre)}</span>${g.padre ? `<small class="tenue">${esc(g.padre)}</small>` : ""}</th>
+        <td>${dinero2(g.gasto)}</td><td>${enteroCrm(g.impresiones)}</td><td>${enteroCrm(g.clics_enlace)}</td>
+        <td>${g.impresiones ? `${(g.clics_enlace / g.impresiones * 100).toLocaleString("es-MX", { maximumFractionDigits: 2 })} %` : "–"}</td>
+        <td>${dinero2(div(g.gasto, g.clics_enlace))}</td>
+        <td>${enteroCrm(res)}</td><td>${dinero2(div(g.gasto, res))}</td>
+        <td>${total ? D.crm.citas : g.citas || "–"}</td><td class="real">${dinero2(div(g.gasto, total ? D.crm.citas : g.citas))}</td>
+      </tr>`;
+    };
+    $("#crm-tabla").innerHTML = `<thead><tr><th scope="col">${NIVELES[nivel]}</th><th scope="col">Inversión</th><th scope="col">Impresiones</th><th scope="col">Clics</th><th scope="col">CTR</th><th scope="col">CPC</th><th scope="col">Mensajes y registros</th><th scope="col">CPL</th><th scope="col">Citas CRM</th><th scope="col">CPA real</th></tr></thead>
+      <tbody>${lista.slice(0, 60).map((g) => fila(g)).join("")}</tbody>
+      <tfoot>${fila({ ...D.tot, nombre: "Total", padre: sinLigar && D.crm.citas ? `${sinLigar} prospecto${sinLigar === 1 ? "" : "s"} sin anuncio identificado` : "" }, true)}</tfoot>`;
+  }
+
+  function pintarFiltros(D) {
+    const caja = $("#crm-filtros");
+    caja.hidden = !D.hayAds;
+    if (!D.hayAds) return;
+    const fc = filtroCrm;
+    const unicos = (lista, k) => { const m = new Map(); for (const f of lista) if (!m.has(f[`${k}_id`])) m.set(f[`${k}_id`], f[k]); return [...m.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "es")); };
+    const todas = D.filasTodas;
+    const opciones = (lista, sel, todos) => `<option value="">${todos}</option>` + lista.map(([id, n]) => `<option value="${esc(id)}" ${id === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
+    $("#crm-f-campana").innerHTML = opciones(unicos(todas, "campana"), fc.campana, "Todas las campañas");
+    $("#crm-f-conjunto").innerHTML = opciones(unicos(todas.filter((f) => !fc.campana || f.campana_id === fc.campana), "conjunto"), fc.conjunto, "Todos los conjuntos");
+    $("#crm-f-anuncio").innerHTML = opciones(unicos(todas.filter((f) => (!fc.campana || f.campana_id === fc.campana) && (!fc.conjunto || f.conjunto_id === fc.conjunto)), "anuncio"), fc.anuncio, "Todos los anuncios");
+    $("#crm-f-quitar").hidden = !D.filtrando;
+  }
+  const cambiarFiltro = (nivel, valor) => {
+    if (nivel === "campana") filtroCrm = { campana: valor, conjunto: "", anuncio: "" };
+    else if (nivel === "conjunto") filtroCrm = { ...filtroCrm, conjunto: valor, anuncio: "" };
+    else filtroCrm = { ...filtroCrm, anuncio: valor };
+    if (valor) {
+      const f = reporteCrm?.anuncios?.filas.find((x) => x[`${nivel}_id`] === valor);
+      if (f) { filtroCrm.campana = f.campana_id; if (nivel === "anuncio") filtroCrm.conjunto = f.conjunto_id; }
+    }
+    pintarReporte();
+  };
+  for (const k of ["campana", "conjunto", "anuncio"]) $(`#crm-f-${k}`).addEventListener("change", (e) => cambiarFiltro(k, e.target.value));
+  $("#crm-f-quitar").addEventListener("click", () => { filtroCrm = { campana: "", conjunto: "", anuncio: "" }; pintarReporte(); });
+  $("#crm-nivel").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-crm-nivel]");
+    if (b) { nivelCrm = b.dataset.crmNivel; pintarReporte(); }
+  });
+  $("#crm-tabla").addEventListener("click", (e) => {
+    const tr = e.target.closest("[data-crm-fila]");
+    if (!tr) return;
+    const [nivel, ...id] = tr.dataset.crmFila.split(":");
+    cambiarFiltro(nivel, id.join(":"));
+    if (nivel !== "anuncio") nivelCrm = nivel === "campana" ? "conjunto" : "anuncio";
+    pintarReporte();
+  });
+  $("#crm-tabla").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("[data-crm-fila]")) e.target.click(); });
+
+  function pintarCostos(D) {
+    const e = ultimaCrm.embudo;
+    const c = D.crm;
+    const inv = D.hayAds ? D.tot.gasto : e.inversion;
+    const costos = [
+      inv ? ["Inversión en anuncios", dinero(inv)] : null,
+      inv && c.prospectos ? ["Costo por prospecto", dinero2(inv / c.prospectos)] : null,
+      inv && c.citas ? ["Costo por cita", dinero2(inv / c.citas)] : null,
+      inv && c.ventas ? ["Costo por venta", dinero2(inv / c.ventas)] : null,
+      c.ventas && c.valor ? ["Ticket promedio", dinero(c.valor / c.ventas)] : null,
+      inv && c.valor ? ["Retorno", `${(c.valor / inv).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x`] : null,
+    ].filter(Boolean);
+    if (!D.hayAds && e.meta) {
+      costos.unshift(["Conversaciones por anuncios (Meta)", `${e.meta.conversaciones}${e.meta.costo_conversacion ? ` · ${dinero(e.meta.costo_conversacion)} c/u` : ""}`]);
+      if (e.meta.formularios) costos.splice(1, 0, ["Formularios llenados (Meta)", String(e.meta.formularios)]);
+    }
+    $("#crm-costos").innerHTML = costos.length
+      ? costos.map(([k, v]) => `<div><span class="tenue">${esc(k)}</span><b>${esc(v)}</b></div>`).join("")
+      : c.prospectos ? `<p class="tenue chico">Liga la cuenta de anuncios del cliente en Cuentas → Meta (o anota el gasto en Paid media) para ver cuánto cuesta cada prospecto, cita y venta.</p>` : "";
+    const cuenta = new Map();
+    for (const p of D.pros || []) {
+      const x = cuenta.get(p.fuente) || { nombre: ultimaCrm.fuentes[p.fuente] || p.fuente, prospectos: 0, citas: 0, ventas: 0 };
+      x.prospectos++; if (p.alcanzo >= 2) x.citas++; if (p.alcanzo >= 4) x.ventas++;
+      cuenta.set(p.fuente, x);
+    }
+    const fuentes = D.pros ? [...cuenta.values()].sort((a, b) => b.prospectos - a.prospectos) : e.por_fuente;
+    const totalF = fuentes.reduce((s, f) => s + f.prospectos, 0);
+    $("#crm-fuentes").innerHTML = fuentes.length
+      ? `<span class="crm-sub tenue">De dónde llegan</span>` + fuentes.slice(0, 5).map((f) => `<div class="crm-fuente"><span>${esc(f.nombre)}</span><span class="pg-barra"><i data-ancho="${Math.round((f.prospectos / totalF) * 100)}"></i></span><small class="tenue">${f.prospectos} · ${f.citas} cita${f.citas === 1 ? "" : "s"} · ${f.ventas} venta${f.ventas === 1 ? "" : "s"}</small></div>`).join("")
+      : "";
   }
 
   function tarjetaProspecto(p, i, ultima) {
@@ -1651,51 +2112,7 @@ export function iniciarAgencia(h) {
     sel.innerHTML = (h.restringido() ? "" : `<option value="">Todos los clientes</option>`) + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCrm) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
     $("#crm-config").hidden = !clienteCrm;
     $("#crm-meta").hidden = !clienteCrm;
-    const e = t.embudo, a = t.embudo_anterior;
-    const mesNombre = MESES_LARGOS[Number(e.mes.slice(5)) - 1];
-    const cambio = (x, y) => (y ? `${x >= y ? "+" : "−"}${Math.abs(Math.round(((x - y) / y) * 100))} % vs. mes pasado` : x ? "primer mes con datos" : "");
-    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi" ${k.ir ? `data-crm-ir="${k.ir}" role="button" tabindex="0"` : ""}>
-        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
-        <b>${esc(k.valor)}</b>
-        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
-        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
-      </div>`;
-    const sr = t.sin_responder.length;
-    $("#crm-kpis").innerHTML = [
-      { nombre: `Prospectos en ${mesNombre}`, valor: String(e.prospectos), extra: cambio(e.prospectos, a.prospectos) || "aún no llega nadie este mes", ir: "nuevo" },
-      { nombre: "Agendaron cita", valor: String(e.citas), extra: e.prospectos ? `${e.pasos[2].del_total ?? 0} % de los prospectos${e.costo_cita ? ` · ${dinero(e.costo_cita)} c/u` : ""}` : "", ir: "cita" },
-      { nombre: "Ventas", valor: e.valor_ventas ? dinero(e.valor_ventas) : String(e.ventas), chip: e.cierre_pct === null ? null : [e.cierre_pct >= 20 ? "verde" : e.cierre_pct >= 10 ? "amarillo" : "rojo", `${e.cierre_pct} % cierre`], extra: `${e.ventas} venta${e.ventas === 1 ? "" : "s"}${e.retorno ? ` · retorno ${e.retorno.toLocaleString("es-MX")}x` : ""}`, ir: "venta" },
-      { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null },
-    ].map(kpi).join("");
-
-    // Embudo: barras que se van angostando
-    $("#crm-embudo-mes").textContent = `${mesNombre} ${e.mes.slice(0, 4)}`;
-    const max = Math.max(1, e.pasos[0].n);
-    $("#crm-embudo").innerHTML = e.prospectos
-      ? e.pasos.map((x, i) => `<div class="crm-paso">
-          <span class="crm-paso-nombre">${esc(x.nombre)}</span>
-          <span class="crm-paso-barra"><i data-ancho="${Math.max(x.n ? 4 : 0, Math.round((x.n / max) * 100))}" class="p${i}"></i><b>${x.n}</b></span>
-          <span class="crm-paso-pct tenue">${i ? `${x.de_anterior ?? 0} %` : ""}</span>
-        </div>`).join("")
-      : `<p class="ct-vacia">Cuando lleguen prospectos este mes vas a ver aquí cuántos pasan de un paso al siguiente.</p>`;
-    const costos = [
-      e.inversion ? ["Inversión en anuncios", dinero(e.inversion)] : null,
-      e.costo_prospecto ? ["Costo por prospecto", dinero(e.costo_prospecto)] : null,
-      e.costo_cita ? ["Costo por cita", dinero(e.costo_cita)] : null,
-      e.costo_venta ? ["Costo por venta", dinero(e.costo_venta)] : null,
-      e.ticket_promedio ? ["Ticket promedio", dinero(e.ticket_promedio)] : null,
-    ].filter(Boolean);
-    if (e.meta) {
-      costos.unshift(["Conversaciones por anuncios (Meta)", `${e.meta.conversaciones}${e.meta.costo_conversacion ? ` · ${dinero(e.meta.costo_conversacion)} c/u` : ""}`]);
-      if (e.meta.formularios) costos.splice(1, 0, ["Formularios llenados (Meta)", String(e.meta.formularios)]);
-    }
     pintarAvisoMeta(t);
-    $("#crm-costos").innerHTML = costos.length
-      ? costos.map(([k, v]) => `<div><span class="tenue">${esc(k)}</span><b>${esc(v)}</b></div>`).join("")
-      : e.prospectos ? `<p class="tenue chico">Anota el gasto de anuncios en Paid media para ver cuánto cuesta cada prospecto, cita y venta.</p>` : "";
-    $("#crm-fuentes").innerHTML = e.por_fuente.length
-      ? `<span class="crm-sub tenue">De dónde llegan</span>` + e.por_fuente.slice(0, 5).map((f) => `<div class="crm-fuente"><span>${esc(f.nombre)}</span><span class="pg-barra"><i data-ancho="${Math.round((f.prospectos / e.prospectos) * 100)}"></i></span><small class="tenue">${f.prospectos} · ${f.citas} cita${f.citas === 1 ? "" : "s"} · ${f.ventas} venta${f.ventas === 1 ? "" : "s"}</small></div>`).join("")
-      : "";
 
     // Para hoy
     const lineas = [
@@ -1716,7 +2133,7 @@ export function iniciarAgencia(h) {
         <header class="ct-col-cabeza"><span>${esc(x.nombre)}</span><small>${x.prospectos.length}</small>${x.clave === "nuevo" ? `<button type="button" class="ct-mas" data-crm-nuevo aria-label="Nuevo prospecto">+</button>` : ""}</header>
         <div class="ct-col-piezas">${x.prospectos.length ? x.prospectos.map((p) => tarjetaProspecto(p, i, i === t.etapas.length - 1)).join("") : `<p class="ct-vacia">${x.clave === "nuevo" ? "Aquí caen los del formulario y WhatsApp" : x.clave === "venta" || x.clave === "perdido" ? "Últimos 30 días" : "Nadie aquí"}</p>`}</div>
       </section>`).join("");
-    medidas($('[data-seccion="crm"]'));
+    pintarReporte();
   }
 
   // Por qué puede estar vacío y qué falta para que se llene solo
@@ -2045,6 +2462,7 @@ export function iniciarAgencia(h) {
   $("#crm-cliente").addEventListener("change", (e) => {
     clienteCrm = e.target.value;
     guardado.set("delta_crm_cliente", clienteCrm);
+    filtroCrm = { campana: "", conjunto: "", anuncio: "" };
     cargarCrm().catch((err) => avisar(err.message));
   });
 

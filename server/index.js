@@ -28,6 +28,7 @@ import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
 import * as crm from "./crm.js";
+import * as crmReporte from "./crmreporte.js";
 import * as crmExternos from "./crmexternos.js";
 import * as equipo from "./equipo.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
@@ -373,7 +374,9 @@ api.post("/reportes/link", envolver((req) => {
   return reportes.crearLink(req.body || {});
 }));
 api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
-api.get("/crm", envolver((req) => crm.tableroCrm({ cliente: req.query.cliente ? String(req.query.cliente) : undefined, mes: req.query.mes ? String(req.query.mes) : undefined })));
+const periodoDe = (q) => ({ cliente: q.cliente ? String(q.cliente) : undefined, mes: q.mes ? String(q.mes) : undefined, desde: q.desde ? String(q.desde) : undefined, hasta: q.hasta ? String(q.hasta) : undefined });
+api.get("/crm", envolver((req) => crm.tableroCrm(periodoDe(req.query))));
+api.get("/crm/reporte", envolver((req) => crmReporte.reporteCrm(periodoDe(req.query))));
 api.post("/crm/prospectos", envolver((req) => crm.crearProspecto(req.body || {})));
 api.get("/crm/prospectos/:id", envolver((req) => crm.fichaProspecto(Number(req.params.id))));
 api.patch("/crm/prospectos/:id", envolver((req) => {
