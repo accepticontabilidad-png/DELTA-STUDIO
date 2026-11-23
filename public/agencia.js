@@ -1907,6 +1907,8 @@ export function iniciarAgencia(h) {
 
     // Los mejores
     pintarMejores(D);
+    pintarMapa(D);
+    pintarEdades(D);
     // Tabla
     pintarTabla(D);
     // Costos y origen
@@ -1921,7 +1923,7 @@ export function iniciarAgencia(h) {
 
   // Embudo en 3D: cono con aros por nivel, brillo, etiquetas al lado con línea guía y resumen abajo.
   function embudoSvg(pasos) {
-    const n = pasos.length, H = 60, arriba = 22, cx = 110, wTop = 104, wBot = 26, W = 412;
+    const n = pasos.length, H = 54, arriba = 22, cx = 110, wTop = 104, wBot = 26, W = 412;
     const ancho = (t) => wBot + (wTop - wBot) * Math.pow(1 - t, 1.5);
     const yDe = (t) => arriba + t * n * H;
     const ry = (w) => Math.max(4, w * 0.16);
@@ -1940,13 +1942,13 @@ export function iniciarAgencia(h) {
       const d = `M${izq.join(" L")} A${f(w1)},${f(ry(w1))} 0 0 0 ${der[0]} L${der.slice(1).join(" L")} A${f(w0)},${f(ry(w0))} 0 0 1 ${f(cx - w0)},${f(y0)} Z`;
       const ym = (y0 + y1) / 2 + ry(w0) / 2, xr = cx + ancho((t0 + t1) / 2);
       const p = pct(i);
-      return `<g class="crm-f f${i}"><title>${esc(nombre)}: ${enteroCrm(v)}${p === null ? "" : ` (${pctTxt(p)} del paso anterior)`}</title>
+      return `<g class="crm-f f${i}"><title>${esc(nombre)}: ${enteroCrm(v)}${p === null ? "" : p > 100 ? " (más que en el paso anterior: también llegan de otros lados)" : ` (${pctTxt(p)} del paso anterior)`}</title>
         <path d="${d}" class="crm-f-cuerpo"/><path d="${d}" fill="url(#crmEmbSombra)"/>
         <path d="M${f(cx - w1)},${f(y1)} A${f(w1)},${f(ry(w1))} 0 0 0 ${f(cx + w1)},${f(y1)}" class="crm-f-aro"/>
         <text x="${cx}" y="${f(ym + 6)}" class="crm-f-num">${v >= 10000 ? cifra(v) : enteroCrm(v)}</text>
         <path d="M${f(xr + 4)},${f(ym)} L${W - 160},${f(ym)}" class="crm-f-guia"/><circle cx="${f(xr + 4)}" cy="${f(ym)}" r="2.2" class="crm-f-punto"/>
         <text x="${W - 154}" y="${f(ym - 3)}" class="crm-f-nom">${esc(nombre)}</text>
-        <text x="${W - 154}" y="${f(ym + 14)}" class="crm-f-pct">${p === null ? "inicio" : `${pctTxt(p)} pasa`}</text></g>`;
+        <text x="${W - 154}" y="${f(ym + 14)}" class="crm-f-pct">${p === null ? "inicio" : p > 100 ? "más que el paso anterior" : `${pctTxt(p)} pasa`}</text></g>`;
     }).join("");
     const r0 = ry(wTop);
     const borde = `<ellipse cx="${cx}" cy="${arriba}" rx="${wTop}" ry="${f(r0)}" class="crm-f-boca"/><ellipse cx="${cx}" cy="${f(arriba + 1.5)}" rx="${wTop - 10}" ry="${f(r0 - 3.5)}" class="crm-f-hueco"/>`;
@@ -1956,7 +1958,8 @@ export function iniciarAgencia(h) {
       <defs><linearGradient id="crmEmbSombra" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".38"/><stop offset=".28" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#fff" stop-opacity=".14"/><stop offset=".78" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/></linearGradient></defs>
       ${bandas}${borde}${brillo}</svg>`;
     // Resumen abajo: conversión total, el paso que mejor convierte y donde más se pierde.
-    const tasas = pasos.map((_, i) => ({ i, p: pct(i) })).filter((x) => x.p !== null && pasos[x.i - 1][1]);
+    // Un paso con más gente que el anterior (prospectos que llegan por otros lados) no cuenta como "mejor paso".
+    const tasas = pasos.map((_, i) => ({ i, p: pct(i) })).filter((x) => x.p !== null && x.p <= 100 && pasos[x.i - 1][1]);
     // Con anuncios, "de principio a fin" se mide desde que llega al CRM (de impresiones a venta sale un número diminuto).
     const ini = Math.max(0, pasos.findIndex(([k]) => k.startsWith("Prospectos")));
     const total = pasos[ini][1] ? (pasos[n - 1][1] / pasos[ini][1]) * 100 : null;
@@ -1996,6 +1999,71 @@ export function iniciarAgencia(h) {
       ${marcas.map((i) => `<text x="${x(i).toFixed(1)}" y="${H - 6}" class="crm-x" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${esc(etiquetaCubeta(cub.grupos[i], cub.tipo))}</text>`).join("")}
       ${zonas}
     </svg>`;
+  }
+
+
+  // ---- Mapa de la República: de dónde son los prospectos (por lada) o quién respondió a los anuncios (Meta) ----
+  let mapaMx = null, mapaPidiendo = false, mapaModo = "crm";
+  const ESTADOS_MX = { agu: "Aguascalientes", bcn: "Baja California", bcs: "Baja California Sur", cam: "Campeche", chp: "Chiapas", chh: "Chihuahua", coa: "Coahuila", col: "Colima", dur: "Durango", gua: "Guanajuato", gro: "Guerrero", hid: "Hidalgo", jal: "Jalisco", cmx: "Ciudad de México", mex: "Estado de México", mic: "Michoacán", mor: "Morelos", nay: "Nayarit", nle: "Nuevo León", oax: "Oaxaca", pue: "Puebla", que: "Querétaro", roo: "Quintana Roo", slp: "San Luis Potosí", sin: "Sinaloa", son: "Sonora", tab: "Tabasco", tam: "Tamaulipas", tla: "Tlaxcala", ver: "Veracruz", yuc: "Yucatán", zac: "Zacatecas" };
+  function pintarMapa(D) {
+    const caja = $("#crm-mapa"), modo = $("#crm-mapa-modo");
+    if (!mapaMx) {
+      caja.innerHTML = `<p class="ct-vacia">Cargando mapa…</p>`;
+      if (!mapaPidiendo) {
+        mapaPidiendo = true;
+        fetch("/mapa-mexico.json").then((r) => r.json()).then((m) => { mapaMx = m; pintarMapa(datosReporte()); }).catch(() => { caja.innerHTML = `<p class="ct-vacia">No se pudo cargar el mapa.</p>`; });
+      }
+      return;
+    }
+    const crmCuenta = new Map();
+    let sinLada = 0;
+    for (const p of D.pros || []) { if (p.estado) crmCuenta.set(p.estado, (crmCuenta.get(p.estado) || 0) + 1); else sinLada++; }
+    const metaCuenta = new Map((D.r?.anuncios?.regiones || []).filter((x) => x.resultados).map((x) => [x.estado, x.resultados]));
+    const hay = { crm: crmCuenta.size > 0, meta: metaCuenta.size > 0 };
+    const modoVer = hay[mapaModo] ? mapaModo : hay.crm ? "crm" : hay.meta ? "meta" : mapaModo;
+    modo.hidden = !(hay.crm && hay.meta);
+    modo.innerHTML = `<button type="button" data-crm-mapa="crm" class="${modoVer === "crm" ? "activa" : ""}">Prospectos</button><button type="button" data-crm-mapa="meta" class="${modoVer === "meta" ? "activa" : ""}">Meta</button>`;
+    const cuenta = modoVer === "crm" ? crmCuenta : metaCuenta;
+    const max = Math.max(0, ...cuenta.values());
+    const total = [...cuenta.values()].reduce((a, b) => a + b, 0);
+    const nivel = (n) => (!n ? 0 : Math.min(5, 1 + Math.floor((n / max) * 4.999)));
+    const formas = mapaMx.estados.map((e) => {
+      const n = cuenta.get(e.id) || 0;
+      return `<path d="${e.d}" class="mx-e n${nivel(n)}"><title>${ESTADOS_MX[e.id] || e.id}: ${enteroCrm(n)}${total ? ` (${Math.round((n / total) * 100)} %)` : ""}</title></path>`;
+    }).join("");
+    const top = [...cuenta.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const lista = top.map(([k, n]) => `<li><span>${ESTADOS_MX[k] || k}</span><b>${enteroCrm(n)}</b><span class="pg-barra"><i data-ancho="${Math.max(3, Math.round((n / max) * 100))}"></i></span></li>`).join("");
+    const nota = modoVer === "crm"
+      ? `Según la lada del teléfono de ${enteroCrm(total)} prospecto${total === 1 ? "" : "s"}${sinLada ? ` (${enteroCrm(sinLada)} sin lada de México)` : ""}. Es aproximado: la lada dice dónde se dio de alta el número.`
+      : `Mensajes y registros de los anuncios por estado, según Meta.`;
+    caja.innerHTML = total
+      ? `<div class="crm-mapa-cuerpo"><svg viewBox="${mapaMx.viewBox}" class="crm-mapa-svg" role="img" aria-label="Mapa de México">${formas}</svg><ol class="crm-mapa-top">${lista}</ol></div><p class="tenue chico crm-mapa-nota">${nota}</p>`
+      : `<p class="ct-vacia">${D.r ? "Aún no hay de dónde sacar la ubicación: hace falta el teléfono con lada de los prospectos o que Meta dé el desglose por estado." : "Cargando…"}</p>`;
+    medidas(caja);
+  }
+
+  // ---- Edades: lo que Meta sabe de quién respondió a los anuncios ----
+  const MITAD_EDAD = { "13-17": 15.5, "18-24": 21.5, "25-34": 30, "35-44": 40, "45-54": 50, "55-64": 60, "65+": 69 };
+  function pintarEdades(D) {
+    const caja = $("#crm-edades"), prom = $("#crm-edades-prom");
+    const filas = (D.r?.anuncios?.edades || []).filter((e) => e.rango && e.rango !== "Unknown");
+    const valor = (e) => e.resultados || 0;
+    let total = filas.reduce((a, e) => a + valor(e), 0);
+    const usarImp = !total; // si no hubo mensajes ni registros, se reparte por impresiones
+    const v = (e) => (usarImp ? e.impresiones || 0 : valor(e));
+    total = filas.reduce((a, e) => a + v(e), 0);
+    if (!total) {
+      prom.textContent = "";
+      caja.innerHTML = `<p class="ct-vacia">${D.r ? "Las edades salen de Meta (quién respondió a los anuncios). En estas fechas no hay datos." : "Cargando…"}</p>`;
+      return;
+    }
+    const media = filas.reduce((a, e) => a + (MITAD_EDAD[e.rango] || 0) * v(e), 0) / total;
+    const max = Math.max(...filas.map(v));
+    prom.textContent = `edad promedio ≈ ${Math.round(media)} años`;
+    const mayor = filas.reduce((a, e) => (v(e) > v(a) ? e : a));
+    caja.innerHTML = `<ul class="crm-edades-lista">${filas.map((e) => `<li class="${e === mayor ? "mayor" : ""}"><span>${esc(e.rango)}</span><span class="crm-edad-barra"><i data-ancho="${Math.max(2, Math.round((v(e) / max) * 100))}"></i></span><b>${Math.round((v(e) / total) * 100)} %</b><small>${enteroCrm(v(e))}</small></li>`).join("")}</ul>
+      <p class="tenue chico">${usarImp ? "Por impresiones (no hubo mensajes ni registros en estas fechas)" : "Mensajes y registros por edad"}, según Meta. El rango con más gente es ${esc(mayor.rango)} años.</p>`;
+    medidas(caja);
   }
 
   function pintarMejores(D) {
@@ -2633,6 +2701,8 @@ export function iniciarAgencia(h) {
       seccionCrm.querySelector(`[data-crm-tab="${ir.dataset.crmIr}"]`)?.click();
       return void seccionCrm.querySelector(`.crm-col[data-crm-etapa="${ir.dataset.crmIr}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
+    const mapaBtn = e.target.closest("[data-crm-mapa]");
+    if (mapaBtn) { mapaModo = mapaBtn.dataset.crmMapa; return void pintarMapa(datosReporte()); }
     const verMas = e.target.closest("[data-crm-ver]");
     if (verMas) { const k = verMas.dataset.crmVer; verCrm[k] = (verCrm[k] || POR_COLUMNA) + POR_COLUMNA; return void pintarCrm(ultimaCrm); }
     if (e.target.closest("[data-crm-nuevo]")) return abrirProspecto();

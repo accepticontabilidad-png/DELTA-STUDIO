@@ -2264,13 +2264,49 @@ html[data-mood="dia"] .fabrica { --f-suelo: #e6e0f6; --f-camino: rgba(82,50,216,
 .dlg-depto .ag-cabeza { margin-bottom: 4px; }
 .dlg-depto .ir-tablero { font-size: 13px; }
 
-/* Embudo grande: ocupa todo el ancho de la fila; en PC el resumen va a un lado. */
-.crm-graficas .crm-trafico-caja { grid-column: 1 / -1; }
-.crm-emb-grande { display: grid; gap: 14px; align-items: center; }
-@media (min-width: 901px) {
-  .crm-emb-grande { grid-template-columns: minmax(0, 1fr) 240px; }
-  .crm-emb-grande .crm-emb-resumen { grid-template-columns: 1fr; gap: 10px; margin-top: 0; }
-  .crm-emb-grande .crm-emb-res { padding: 12px 14px; }
-  .crm-emb-grande .crm-emb-res b { font-size: 26px; }
-  .crm-emb-grande .crm-emb-res small, .crm-emb-grande .crm-emb-res span { font-size: 12.5px; }
+/* Tablero del CRM en dos columnas: embudo | mapa, día por día | mejores, edades. */
+.crm-graficas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.crm-emb-grande { display: grid; gap: 12px; align-items: center; }
+@media (min-width: 1100px) {
+  .crm-emb-grande { grid-template-columns: minmax(0, 1fr) 170px; }
+  .crm-emb-grande .crm-emb-resumen { grid-template-columns: 1fr; gap: 8px; margin-top: 0; }
+  .crm-emb-grande .crm-emb-res b { font-size: 20px; }
 }
+.crm-mapa-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 14px; align-items: center; }
+.crm-mapa-svg { width: 100%; height: auto; display: block; }
+.mx-e { stroke: var(--fondo, #0d0b1f); stroke-width: .8; transition: filter .15s; }
+.mx-e:hover { filter: brightness(1.25); }
+.mx-e.n0 { fill: rgba(149,144,192,.16); }
+.mx-e.n1 { fill: rgba(139,115,255,.35); }
+.mx-e.n2 { fill: rgba(139,115,255,.55); }
+.mx-e.n3 { fill: rgba(122,140,255,.75); }
+.mx-e.n4 { fill: rgba(98,190,255,.9); }
+.mx-e.n5 { fill: #4fe3b0; }
+.crm-mapa-top { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: mx; }
+.crm-mapa-top li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; font-size: 12.5px; }
+.crm-mapa-top li .pg-barra { grid-column: 1 / -1; }
+.crm-mapa-nota { margin: 10px 0 0; }
+.crm-edades-lista { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 9px; }
+.crm-edades-lista li { display: grid; grid-template-columns: 56px minmax(0, 1fr) 46px 60px; gap: 10px; align-items: center; font-size: 13px; }
+.crm-edades-lista small { color: var(--tenue); text-align: right; }
+.crm-edades-lista b { text-align: right; font-variant-numeric: tabular-nums; }
+.crm-edad-barra { height: 16px; border-radius: 8px; background: rgba(149,144,192,.14); overflow: hidden; }
+.crm-edad-barra i { display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #8b73ff, #62beff); }
+.crm-edades-lista li.mayor .crm-edad-barra i { background: linear-gradient(90deg, #62beff, #4fe3b0); box-shadow: 0 0 10px rgba(79,227,176,.45); }
+.crm-edades-lista li.mayor b { color: var(--verde); }
+html[data-mood="dia"] .mx-e { stroke: #fff; }
+html[data-mood="dia"] .mx-e.n0 { fill: #e7e3f6; }
+html[data-mood="dia"] .mx-e.n1 { fill: #c9bdf7; }
+html[data-mood="dia"] .mx-e.n2 { fill: #a08af0; }
+html[data-mood="dia"] .mx-e.n3 { fill: #6f63e6; }
+html[data-mood="dia"] .mx-e.n4 { fill: #3d7fe0; }
+html[data-mood="dia"] .mx-e.n5 { fill: #0f9a72; }
+html[data-mood="dia"] .crm-edad-barra { background: #ece8f8; }
+@media (max-width: 900px) {
+  .crm-graficas { grid-template-columns: minmax(0, 1fr); }
+  .crm-mapa-cuerpo { grid-template-columns: minmax(0, 1fr); }
+  .crm-mapa-top { grid-template-columns: 1fr 1fr; }
+  .crm-edades-lista li { grid-template-columns: 50px minmax(0, 1fr) 40px; }
+  .crm-edades-lista small { display: none; }
+}
+.crm-graficas .crm-edades-caja { grid-column: 1 / -1; }

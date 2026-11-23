@@ -383,19 +383,27 @@ export async function reporteAnunciosCliente(clienteId, { desde, hasta }) {
     const total = await intentar(() => todo(`/${a.id}/insights`, { fields: CAMPOS_REPORTE, level: "ad", time_range: rango }, undefined, 1500), errores, a.nombre);
     if (!total) return null;
     const diario = (await intentar(() => todo(`/${a.id}/insights`, { fields: CAMPOS_REPORTE.replace(",reach", ""), level: "ad", time_range: rango, time_increment: 1 }, undefined, 6000), errores, `${a.nombre} por día`)) || [];
+    // Desglose por edad y por estado (lo que Meta sabe de quién respondió a los anuncios).
+    const desglose = (b) => intentar(() => todo(`/${a.id}/insights`, { fields: "spend,impressions,actions", level: "account", time_range: rango, breakdowns: b }, undefined, 200), errores, `${a.nombre} por ${b === "age" ? "edad" : "estado"}`);
+    const [edad, region] = await Promise.all([desglose("age"), desglose("region")]);
+    const corta = (f) => ({ gasto: Number(f.spend) || 0, impresiones: Number(f.impressions) || 0, resultados: (() => { const r = resultadosDe(f); return (r.conversaciones || 0) + (r.prospectos || 0); })() });
     return {
       moneda: a.extra?.moneda || null,
       anuncios: total.map(filaReporte),
       dias: diario.map((f) => ({ fecha: f.date_start, ...filaReporte(f) })),
+      edades: (edad || []).map((f) => ({ rango: f.age, ...corta(f) })),
+      regiones: (region || []).map((f) => ({ nombre: f.region, ...corta(f) })),
     };
   }));
   const ok = porCuenta.filter(Boolean);
-  if (!ok.length) return { cuentas: cuentas.map((a) => a.nombre), moneda: null, anuncios: [], dias: [], errores };
+  if (!ok.length) return { cuentas: cuentas.map((a) => a.nombre), moneda: null, anuncios: [], dias: [], edades: [], regiones: [], errores };
   return {
     cuentas: cuentas.map((a) => a.nombre),
     moneda: ok.map((x) => x.moneda).find(Boolean) || null,
     anuncios: ok.flatMap((x) => x.anuncios),
     dias: ok.flatMap((x) => x.dias),
+    edades: ok.flatMap((x) => x.edades || []),
+    regiones: ok.flatMap((x) => x.regiones || []),
     errores,
   };
 }
