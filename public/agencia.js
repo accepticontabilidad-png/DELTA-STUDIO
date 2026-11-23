@@ -1712,6 +1712,7 @@ export function iniciarAgencia(h) {
     catch (err) { if (!clienteCrm) throw err; clienteCrm = ""; guardado.set("delta_crm_cliente", ""); t = await api(`/crm${q("")}`); }
     if (n !== pedidoCrm) return;
     ultimaCrm = t;
+    pintarAlDia();
     if (!reporteCrm || reporteCrm.desde !== d || reporteCrm.hasta !== hta || reporteCrm.cliente !== clienteCrm) reporteCrm = null;
     pintarCrm(t);
     try {
@@ -2256,6 +2257,25 @@ export function iniciarAgencia(h) {
     caja.innerHTML = html;
     caja.hidden = !html;
   }
+  // Cuándo se actualizó solo el CRM (cada hora) y botón para hacerlo ya.
+  function pintarAlDia() {
+    const a = ultimaCrm?.actualizado;
+    const min = a ? Math.max(0, Math.round((Date.now() - Date.parse(a)) / 60e3)) : null;
+    const hace = min === null ? "todavía no" : min < 1 ? "hace un momento" : min < 60 ? `hace ${min} min` : `hace ${Math.round(min / 60)} h`;
+    $("#crm-al-dia").textContent = `Actualizado ${hace} · se actualiza solo cada hora`;
+  }
+  setInterval(() => { if (ultimaCrm) pintarAlDia(); }, 60e3);
+  $("#crm-actualizar").addEventListener("click", async (ev) => {
+    const b = ev.currentTarget;
+    b.disabled = true;
+    b.textContent = "Actualizando…";
+    try {
+      await api("/crm/actualizar", { method: "POST", body: {} });
+      avisar("Estoy trayendo lo nuevo y leyendo los chats. Tarda uno o dos minutos; la pantalla se actualiza sola.");
+      for (const s of [20, 60, 120]) setTimeout(() => cargarCrm().catch(() => {}), s * 1000);
+    } catch (err) { avisar(err.message); }
+    finally { setTimeout(() => { b.disabled = false; b.textContent = "Actualizar ahora"; }, 20000); }
+  });
   $("#crm-meta").addEventListener("click", async (ev) => {
     const b = ev.currentTarget;
     if (!clienteCrm) return avisar("Elige primero un cliente");

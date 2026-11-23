@@ -514,6 +514,7 @@ export async function importarTodoMeta() {
   }
   const faltan = await meta.permisosFaltantes();
   if (faltan) setAjuste("crm_meta_faltan", JSON.stringify(faltan));
+  setAjuste("crm_actualizado", new Date().toISOString());
   if (nuevos) avisar(`Llegaron ${nuevos} prospecto${nuevos === 1 ? "" : "s"} nuevo${nuevos === 1 ? "" : "s"} de Meta (formularios y mensajes). Están en el CRM.`, "CRM").catch(() => {});
   return { nuevos, faltan };
 }
@@ -548,6 +549,7 @@ export function tableroCrm({ cliente, mes, desde, hasta } = {}) {
     borradores: db.prepare(`SELECT e.id, e.texto, e.fecha, p.id prospecto_id, p.nombre, c.nombre cliente FROM prospecto_eventos e JOIN prospectos p ON p.id = e.prospecto_id JOIN clientes c ON c.id = p.cliente_id
         WHERE e.tipo = 'borrador' AND e.estado = 'pendiente' ${cliente ? "AND p.cliente_id = ?" : ""} ORDER BY e.id DESC LIMIT 20`).all(...(cliente ? [clienteRequerido(cliente).id] : [])),
     embudo: e,
+    actualizado: getAjuste("crm_actualizado") || null, // última vez que DELTA trajo todo solo (cada hora)
     meta: { conectado: meta.metaConectado(), faltan: meta.metaConectado() ? faltanMeta() : [], paginas: cliente ? db.prepare("SELECT COUNT(*) n FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").get(clienteRequerido(cliente).id).n : null },
     embudo_anterior: embudo({ cliente, desde: ant.desde, hasta: ant.hasta }),
     fuentes: FUENTES,

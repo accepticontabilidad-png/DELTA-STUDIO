@@ -2133,3 +2133,4 @@ html[data-mood="dia"] .crm-ut-lista summary { color: var(--cian); }
 .crm-ver-mas small { color: var(--tenue); font-weight: 400; }
 .crm-tabla td.malo { color: var(--rojo); font-weight: 600; }
 html[data-mood="dia"] .crm-ver-mas { color: var(--cian); }
+.crm-al-dia { align-self: center; font-size: 12px; white-space: nowrap; }

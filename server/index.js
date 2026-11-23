@@ -376,6 +376,12 @@ api.post("/reportes/link", envolver((req) => {
 api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
 const periodoDe = (q) => ({ cliente: q.cliente ? String(q.cliente) : undefined, mes: q.mes ? String(q.mes) : undefined, desde: q.desde ? String(q.desde) : undefined, hasta: q.hasta ? String(q.hasta) : undefined });
 api.get("/crm", envolver((req) => crm.tableroCrm(periodoDe(req.query))));
+// "Actualizar ahora": trae Meta, Pancake/Kommo/GoHighLevel y lee chats en segundo plano (lo mismo que pasa solo cada hora).
+let crmActualizando = null;
+api.post("/crm/actualizar", envolver(() => {
+  crmActualizando ||= Promise.allSettled([crm.importarTodoMeta(), crmExternos.sincronizarTodas()]).finally(() => { crmActualizando = null; });
+  return { actualizando: true };
+}));
 api.get("/crm/reporte", envolver((req) => crmReporte.reporteCrm(periodoDe(req.query))));
 api.post("/crm/prospectos", envolver((req) => crm.crearProspecto(req.body || {})));
 api.get("/crm/prospectos/:id", envolver((req) => crm.fichaProspecto(Number(req.params.id))));

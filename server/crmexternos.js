@@ -1,7 +1,7 @@
 // Traer prospectos de otros CRM donde ya viven los clientes: Kommo, HighLevel (GoHighLevel) y Pancake.
 // SOLO LECTURA: DELTA nunca escribe, mueve ni manda nada en esos sistemas.
 // Cada conexión es de un cliente; la llave se guarda en la base de DELTA y nunca regresa a la pantalla.
-import { db } from "./db.js";
+import { db, setAjuste } from "./db.js";
 import { clienteRequerido } from "./agencia.js";
 import { crearProspecto, actualizarProspecto, normalizarTelefono, obtenerProspecto, notaProspecto } from "./crm.js";
 import { avisarPantalla } from "./avisos.js";
@@ -327,6 +327,7 @@ export async function sincronizarTodas() {
     const tipo = db.prepare("SELECT tipo FROM crm_fuentes WHERE id = ?").get(f.id)?.tipo;
     if (tipo === "pancake" && process.env.ANTHROPIC_API_KEY) await leerChats(f.id, { max: 30 }).catch((e) => console.error("[crm chats]", e.message));
   }
+  setAjuste("crm_actualizado", new Date().toISOString());
   return { nuevos };
 }
 
