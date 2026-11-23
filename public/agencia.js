@@ -1921,7 +1921,7 @@ export function iniciarAgencia(h) {
 
   // Embudo en 3D: cono con aros por nivel, brillo, etiquetas al lado con línea guía y resumen abajo.
   function embudoSvg(pasos) {
-    const n = pasos.length, H = 52, arriba = 22, cx = 110, wTop = 104, wBot = 26, W = 412;
+    const n = pasos.length, H = 60, arriba = 22, cx = 110, wTop = 104, wBot = 26, W = 412;
     const ancho = (t) => wBot + (wTop - wBot) * Math.pow(1 - t, 1.5);
     const yDe = (t) => arriba + t * n * H;
     const ry = (w) => Math.max(4, w * 0.16);
@@ -1968,7 +1968,7 @@ export function iniciarAgencia(h) {
       ${mejor ? tarjeta("Mejor paso", pctTxt(mejor.p), `${esc(pasos[mejor.i - 1][0])} → ${esc(pasos[mejor.i][0])}`, "bien") : ""}
       ${peor && peor !== mejor ? tarjeta("Donde más se pierde", pctTxt(peor.p), `${esc(pasos[peor.i - 1][0])} → ${esc(pasos[peor.i][0])}`, "ojo") : ""}
     </div>`;
-    return svg + resumen;
+    return `<div class="crm-emb-grande">${svg}${resumen}</div>`;
   }
 
   function lineasSvg(cub, A, B, nombres, hayAds) {
