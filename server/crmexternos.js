@@ -344,18 +344,43 @@ async function entenderChat(cliente, prospecto, chat) {
   claude ||= new Anthropic();
   const r = await claude.messages.create({
     model: process.env.DELTA_MODELO_CRM || "claude-haiku-5-5",
-    max_tokens: 500,
+    max_tokens: 800,
     system: `Lees chats de WhatsApp/Messenger entre un negocio y un cliente para acomodarlo en el embudo de ventas del negocio "${cliente.nombre}"${cliente.industria ? ` (${cliente.industria})` : ""}. Cada línea del chat empieza con su fecha.
 Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (SOLO si en ESTE chat se ve que compró, pagó, firmó o se le entregó. Preguntar precios, recibir cotización, decir "me interesa" o "lo pienso" NO es venta; si dudas, NO es venta), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
 Origen (de dónde salió esta persona): anuncio (llegó por un anuncio: menciona la publicidad o el primer mensaje es el automático de un anuncio), redes (llegó por Facebook, Instagram o WhatsApp sin decir que por recomendación), recomendado (dice que lo recomendó alguien o es familiar/amigo de un cliente), cliente (YA era cliente antes de este chat: escribe por servicio, seguimiento, garantía, pagos de algo que ya compró, o una segunda compra de alguien que ya compró), otro.
 Sé estricto: si ya era cliente y escribe por servicio o postventa, NO es una venta nueva (etapa según lo que pasa ahora, normalmente contactado) y origen "cliente".
 fecha_venta: el día (AAAA-MM-DD) en que se ve que compró o pagó, sacado de las fechas del chat; null si no es venta.
-Responde SOLO un JSON: {"etapa":"…","origen":"…","fecha_venta":"AAAA-MM-DD o null","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase de lo que pasó y qué sigue"}`,
+Responde SOLO un JSON: {"etapa":"…","origen":"…","fecha_venta":"AAAA-MM-DD o null","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase corta (máximo 30 palabras) de lo que pasó y qué sigue"}`,
     messages: [{ role: "user", content: `Cliente: ${prospecto.nombre}${prospecto.externo_etiquetas ? `\nEtiquetas que le pusieron en Pancake (la de VENTA se pone a cualquiera que ya es cliente, no la tomes como prueba): ${prospecto.externo_etiquetas}` : ""}${prospecto.campana ? `\nLlegó por el anuncio: ${prospecto.campana}` : ""}\n\nChat:\n${chat.slice(-9000)}` }],
   });
   const t = r.content.filter((b) => b.type === "text").map((b) => b.text).join("");
-  const m = t.match(/\{[\s\S]*\}/);
-  return m ? JSON.parse(m[0]) : null;
+  return leerRespuestaIA(t);
+}
+
+/** Saca el JSON de la respuesta de la IA aunque venga con texto alrededor, cortada o con la etapa con acentos/mayúsculas. */
+export function leerRespuestaIA(t) {
+  const txt = String(t || "").replace(/```(json)?/g, "");
+  const ini = txt.indexOf("{");
+  let x = null;
+  if (ini >= 0) {
+    const fin = txt.lastIndexOf("}");
+    for (const intento of [txt.slice(ini, fin + 1), txt.slice(ini) + '"}', txt.slice(ini) + "}"]) {
+      try { x = JSON.parse(intento); break; } catch { /* sigue */ }
+    }
+  }
+  if (!x) {
+    // Último recurso: campo por campo
+    const campo = (k) => { const m = new RegExp(`"${k}"\\s*:\\s*("([^"]*)"|[\\d.]+|null)`).exec(txt); return m ? (m[2] ?? (m[1] === "null" ? null : Number(m[1]))) : undefined; };
+    const etapa = campo("etapa");
+    if (!etapa) return { _crudo: txt.slice(0, 300) };
+    x = { etapa, origen: campo("origen"), fecha_venta: campo("fecha_venta"), valor: campo("valor"), interes: campo("interes"), motivo: campo("motivo"), resumen: campo("resumen") };
+  }
+  const n = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const e = n(x.etapa).replace(/\s+/g, "_");
+  x.etapa = { cita_agendada: "cita", asistio_a_la_cita: "asistio", vendido: "venta", compro: "venta", perdida: "perdido" }[e] || e;
+  if (x.origen) x.origen = n(x.origen).replace("anuncios", "anuncio").replace("recomendacion", "recomendado");
+  if (x.fecha_venta) { const f = String(x.fecha_venta).match(/\d{4}-\d{2}-\d{2}/); x.fecha_venta = f ? f[0] : null; }
+  return x;
 }
 
 const PENDIENTE = `(etapa = 'venta' AND venta_revisada IS NULL) OR (etapa != 'venta' AND COALESCE(externo_mensajes, 0) >= 4 AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado))`;
@@ -380,7 +405,12 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
       const x = await entenderChat(cliente, p, chat);
       r.leidos++;
       db.prepare("UPDATE prospectos SET ia_revisado = ? WHERE id = ?").run(ahora, p.id);
-      if (!x || !["nuevo", "contactado", "cita", "asistio", "venta", "perdido"].includes(x.etapa)) continue;
+      if (!x || !["nuevo", "contactado", "cita", "asistio", "venta", "perdido"].includes(x.etapa)) {
+        r.sin_entender = (r.sin_entender || 0) + 1;
+        r.ejemplo = String(x?._crudo || JSON.stringify(x) || "").slice(0, 300);
+        console.error("[crm chats] no entendí la respuesta", p.id, r.ejemplo);
+        continue;
+      }
       const cambios = {};
       const origen = ["anuncio", "redes", "recomendado", "cliente", "otro"].includes(x.origen) ? x.origen : null;
       const fechaVenta = /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha_venta || "")) ? x.fecha_venta : null;

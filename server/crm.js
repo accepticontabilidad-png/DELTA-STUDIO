@@ -376,12 +376,12 @@ function inversionPeriodo(clienteId, p) {
   return total;
 }
 
-/** Ventas CERRADAS en el periodo (por la fecha en que compró, no por cuándo escribió por primera vez), separadas en las de redes/anuncios y las demás. */
+/** Ventas de las personas que LLEGARON en el periodo (así las cuenta el cliente: "de los que escribieron en octubre, cuántos compraron"), separadas en las de redes/anuncios y las demás. */
 export function ventasCerradas({ clientes = null, desde, hasta }) {
-  const filas = db.prepare(`SELECT p.id, p.nombre, p.cliente_id, c.nombre AS cliente, p.campana, p.fuente, p.origen, p.valor, p.venta_fecha, p.etapa_desde, p.venta_revisada
+  const filas = db.prepare(`SELECT p.id, p.nombre, p.cliente_id, c.nombre AS cliente, p.campana, p.fuente, p.origen, p.valor, p.venta_fecha, p.creado, p.venta_revisada
       FROM prospectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.etapa = 'venta' AND c.estado != 'terminado' ${clientes ? `AND p.cliente_id IN (${clientes.map(() => "?").join(",") || "NULL"})` : ""}`)
     .all(...(clientes || []));
-  return filas.map((p) => ({ ...p, dia: p.venta_fecha || new Date(p.etapa_desde).toLocaleDateString("en-CA", { timeZone: zonaHoraria() }), redes: esDeRedes(p), origen_nombre: p.origen ? ORIGENES[p.origen] : null }))
+  return filas.map((p) => ({ ...p, dia: new Date(p.creado).toLocaleDateString("en-CA", { timeZone: zonaHoraria() }), redes: esDeRedes(p), origen_nombre: p.origen ? ORIGENES[p.origen] : null }))
     .filter((p) => p.dia >= desde && p.dia <= hasta)
     .sort((a, b) => b.dia.localeCompare(a.dia));
 }
@@ -435,7 +435,7 @@ export function embudo({ cliente, mes, desde: d0, hasta: h0 } = {}) {
       const l = ventasCerradas({ clientes: c ? [c.id] : null, desde: per.desde, hasta: per.hasta });
       const r = l.filter((x) => x.redes);
       return { redes: r.length, otras: l.length - r.length, valor_redes: dinero(r.reduce((s2, x) => s2 + (x.valor || 0), 0)),
-        lista: l.slice(0, 40).map((x) => ({ id: x.id, nombre: x.nombre, cliente: x.cliente, fecha: x.dia, origen: x.origen_nombre || (x.redes ? "Redes (sin confirmar)" : "Otro (sin confirmar)"), cuenta_como_redes: x.redes, valor: x.valor })) };
+        lista: l.slice(0, 40).map((x) => ({ id: x.id, nombre: x.nombre, cliente: x.cliente, llego: x.dia, compro: x.venta_fecha, origen: x.origen_nombre || (x.redes ? "Redes (sin confirmar)" : "Otro (sin confirmar)"), cuenta_como_redes: x.redes, valor: x.valor })) };
     })(),
     valor_ventas: dinero(valor),
     ticket_promedio: ventas.filter((p) => p.valor).length ? dinero(valor / ventas.filter((p) => p.valor).length) : null,

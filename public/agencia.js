@@ -1816,7 +1816,7 @@ export function iniciarAgencia(h) {
     const prosTodos = r?.prospectos ? (hayAds ? ligarProspectos(r.prospectos, filasTodas) : r.prospectos) : null;
     const pros = prosTodos ? (filtrando ? prosTodos.filter(pasa) : prosTodos) : null;
     const tot = filas.reduce(sumarEn, vacios());
-    // Ventas: las que se CERRARON en estas fechas (día en que compró). La tarjeta cuenta las de redes/anuncios; las de recomendación o de quien ya era cliente van aparte.
+    // Ventas: de quienes llegaron en estas fechas, cuántos compraron. La tarjeta cuenta las de redes/anuncios; las de recomendación o de quien ya era cliente van aparte.
     const ventasTodas = r?.ventas ? (hayAds ? ligarProspectos(r.ventas, filasTodas) : r.ventas).filter((v) => !filtrando || pasa(v)) : null;
     const ventasRedes = ventasTodas ? ventasTodas.filter((v) => v.redes) : null;
     const crm = pros
@@ -2125,7 +2125,7 @@ export function iniciarAgencia(h) {
       ${!cfg && c.sin_monto ? `<p class="tenue chico crm-ut-nota">${c.sin_monto} venta${c.sin_monto === 1 ? "" : "s"} sin monto. Elige un cliente para poner cuánto vale una venta en promedio.</p>` : ""}
       ${formulario}
       ${(D.ventas || []).length || c.ventas ? `<details class="crm-ut-lista" id="crm-ut-lista" ${verVentas ? "open" : ""}><summary>Ver ${c.ventas === 1 ? "la venta" : `las ${c.ventas} ventas`} de redes${c.ventas_otras ? ` y ${c.ventas_otras} más` : ""} de estas fechas</summary>
-        <p class="tenue chico">Toca a alguien para abrir su ficha. Si no compró, cámbialo de etapa; si no vino de redes, cambia "De dónde salió". Fecha = día en que compró.</p>
+        <p class="tenue chico">Toca a alguien para abrir su ficha. Si no compró, cámbialo de etapa; si no vino de redes, cambia "De dónde salió". La fecha es el día en que llegó.</p>
         <ul>${(D.ventas || (D.pros || []).filter((p) => p.alcanzo >= 4)).slice().sort((a, b) => (a.redes === false) - (b.redes === false) || b.dia.localeCompare(a.dia)).map((p) => `<li${p.redes === false ? ' class="crm-ut-otra"' : ""}><button type="button" data-prospecto="${p.id}"><b>${esc(p.nombre || "Sin nombre")}</b><span class="tenue">${esc(p.dia.split("-").reverse().slice(0, 2).join("/"))} · ${esc(p.origen ? ORIGEN_VENTA[p.origen] : ultimaCrm.fuentes[p.fuente] || p.fuente)}${p.redes === false ? " · no cuenta como de redes" : p.confirmada === false ? " · sin confirmar" : ""}${p.campana ? ` · ${esc(p.campana)}` : ""}</span><span class="crm-ut-monto">${p.valor ? dinero(p.valor) : p.ticket ? `${dinero(p.ticket)} <small class="tenue">promedio</small>` : `<small class="tenue">sin monto</small>`}</span></button></li>`).join("")}</ul>
       </details>` : ""}`;
   }

@@ -71,9 +71,9 @@ export async function reporteCrm({ cliente, desde, hasta, mes } = {}) {
     clientes_con_cuenta: conCuenta.length,
     anuncios,
     prospectos,
-    // Ventas cerradas en estas fechas (por el día en que compró), marcando cuáles vinieron de redes o anuncios.
+    // Ventas de quienes llegaron en estas fechas, marcando cuáles vinieron de redes o anuncios.
     ventas: ((cfg) => ventasCerradas({ clientes: ids, desde: per.desde, hasta: per.hasta }).map((v) => ({
-      id: v.id, nombre: v.nombre, dia: v.dia, cliente: nombre.get(v.cliente_id), campana: v.campana || null, fuente: v.fuente,
+      id: v.id, nombre: v.nombre, dia: v.dia, compro: v.venta_fecha || null, cliente: nombre.get(v.cliente_id), campana: v.campana || null, fuente: v.fuente,
       origen: v.origen || null, redes: v.redes, confirmada: v.venta_revisada === 1, valor: v.valor || 0,
       ticket: cfg.get(v.cliente_id)?.ticket ?? null, margen: cfg.get(v.cliente_id)?.margen ?? null,
     })))(new Map(db.prepare("SELECT cliente_id, ticket, margen FROM crm_config").all().map((k) => [k.cliente_id, k]))),
