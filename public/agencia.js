@@ -1648,6 +1648,7 @@ export function iniciarAgencia(h) {
     const sel = $("#crm-cliente");
     sel.innerHTML = `<option value="">Todos los clientes</option>` + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCrm) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
     $("#crm-config").hidden = !clienteCrm;
+    $("#crm-meta").hidden = !clienteCrm;
     const e = t.embudo, a = t.embudo_anterior;
     const mesNombre = MESES_LARGOS[Number(e.mes.slice(5)) - 1];
     const cambio = (x, y) => (y ? `${x >= y ? "+" : "−"}${Math.abs(Math.round(((x - y) / y) * 100))} % vs. mes pasado` : x ? "primer mes con datos" : "");
@@ -1682,6 +1683,11 @@ export function iniciarAgencia(h) {
       e.costo_venta ? ["Costo por venta", dinero(e.costo_venta)] : null,
       e.ticket_promedio ? ["Ticket promedio", dinero(e.ticket_promedio)] : null,
     ].filter(Boolean);
+    if (e.meta) {
+      costos.unshift(["Conversaciones por anuncios (Meta)", `${e.meta.conversaciones}${e.meta.costo_conversacion ? ` · ${dinero(e.meta.costo_conversacion)} c/u` : ""}`]);
+      if (e.meta.formularios) costos.splice(1, 0, ["Formularios llenados (Meta)", String(e.meta.formularios)]);
+    }
+    pintarAvisoMeta(t);
     $("#crm-costos").innerHTML = costos.length
       ? costos.map(([k, v]) => `<div><span class="tenue">${esc(k)}</span><b>${esc(v)}</b></div>`).join("")
       : e.prospectos ? `<p class="tenue chico">Anota el gasto de anuncios en Paid media para ver cuánto cuesta cada prospecto, cita y venta.</p>` : "";
@@ -1710,6 +1716,41 @@ export function iniciarAgencia(h) {
       </section>`).join("");
     medidas($('[data-seccion="crm"]'));
   }
+
+  // Por qué puede estar vacío y qué falta para que se llene solo
+  function pintarAvisoMeta(t) {
+    const caja = $("#crm-aviso-meta");
+    const e = t.embudo;
+    const vacio = !t.etapas.some((x) => x.prospectos.length);
+    let html = "";
+    if (t.meta.conectado && !t.meta.permiso_formularios) {
+      html = `<b>Falta un permiso de Meta para traer los formularios de tus anuncios.</b>
+        <p class="tenue chico">Ve a Ajustes ⚙ → Conectar Meta, vuelve a entrar con tu Facebook y acepta todo lo que te pida (incluye "clientes potenciales"). Después toca <b>Traer de Meta</b> y cada persona que llenó un formulario aparece aquí sola.</p>`;
+    } else if (vacio && e.meta?.conversaciones) {
+      html = `<b>Tus anuncios abrieron ${e.meta.conversaciones === 1 ? "1 conversación" : `${e.meta.conversaciones} conversaciones`} este mes (WhatsApp, Messenger o Instagram), pero esas personas viven en los chats de la clínica.</b>
+        <p class="tenue chico">Para que lleguen aquí solas hay que conectar el WhatsApp del cliente (te guío paso a paso). Mientras, agrégalas con <b>+ Prospecto</b> o díselo a DELTA: "llegó Ana López para ${esc(t.cliente || "el cliente")}, quiere consulta".</p>`;
+    } else if (vacio && t.cliente && t.meta.paginas === 0) {
+      html = `<b>Este cliente todavía no tiene su página de Facebook ligada.</b><p class="tenue chico">Lígala en Cuentas → Meta para traer sus formularios de anuncios.</p>`;
+    }
+    caja.innerHTML = html;
+    caja.hidden = !html;
+  }
+  $("#crm-meta").addEventListener("click", async (ev) => {
+    const b = ev.currentTarget;
+    if (!clienteCrm) return avisar("Elige primero un cliente");
+    b.disabled = true;
+    const antes = b.textContent;
+    b.textContent = "Buscando…";
+    try {
+      const r = await api("/crm/meta", { method: "POST", body: { cliente: clienteCrm } });
+      if (r.sin_permiso) avisar("Meta todavía no da permiso para ver los formularios. Vuelve a conectar Meta en Ajustes y acepta todo.");
+      else if (!r.paginas) avisar("Este cliente no tiene página de Facebook ligada. Lígala en Cuentas → Meta.");
+      else if (!r.formularios) avisar(`${r.cliente} no tiene formularios de anuncios en Meta. Si sus anuncios son de mensajes, esas personas están en su WhatsApp.`);
+      else avisar(r.nuevos ? `Traje ${r.nuevos} prospecto${r.nuevos === 1 ? "" : "s"} nuevo${r.nuevos === 1 ? "" : "s"} de Meta.` : "No hay formularios nuevos en Meta.");
+      await cargarCrm();
+    } catch (err) { avisar(err.message); }
+    finally { b.disabled = false; b.textContent = antes; }
+  });
 
   const prospectoPorId = (id) => ultimaCrm?.etapas.flatMap((e) => e.prospectos).find((p) => p.id === Number(id));
 
