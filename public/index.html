@@ -801,8 +801,18 @@
 
       <section class="seccion" data-seccion="departamentos">
         <div class="panel cabeza-seccion">
-          <h2>Departamentos</h2>
+          <div class="deptos-cabeza">
+            <h2>Departamentos</h2>
+            <div class="segmento" role="tablist" aria-label="Vista de departamentos">
+              <button type="button" data-vista-fab="fabrica" class="activa">Oficina</button>
+              <button type="button" data-vista-fab="lista">Lista</button>
+            </div>
+          </div>
           <p class="tenue">Cada departamento es un especialista con IA. Encárgueles algo aquí o pídaselo a DELTA de viva voz; trabajan en segundo plano y le avisan al terminar. Lo que tenga que salir de la agencia o cueste dinero llega a Aprobaciones.</p>
+        </div>
+        <div class="fab-zona">
+          <div class="fab-barra" id="fab-barra"></div>
+          <div id="fabrica" class="fabrica"></div>
         </div>
         <div id="deptos" class="deptos"></div>
       </section>
@@ -1135,6 +1145,11 @@
     <p id="mt-msg" class="voz-msg" role="status"></p>
     <ul id="mt-lista" class="mt-lista"></ul>
   </dialog>
+  <dialog id="dlg-depto" class="dialogo ancho dlg-depto">
+    <div class="ag-cabeza"><a id="dd-tablero" class="ir-tablero" href="#/agencia" hidden>Abrir su tablero →</a><span></span><button type="button" class="icono-cerrar" id="dd-cerrar" aria-label="Cerrar">✕</button></div>
+    <div id="dd-cuerpo"></div>
+  </dialog>
+
   <dialog id="dlg-trabajo" class="dialogo ancho">
     <span id="tr-meta" class="det-tipo"></span>
     <div id="tr-cuerpo" class="md"></div>
