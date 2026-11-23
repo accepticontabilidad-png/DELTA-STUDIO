@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>DELTA Mac</string>
+  <key>CFBundleDisplayName</key><string>DELTA Mac</string>
+  <key>CFBundleIdentifier</key><string>com.delta.mac</string>
+  <key>CFBundleExecutable</key><string>DELTA Mac</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleIconFile</key><string>Icono</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>DELTA escucha aquí mismo, en su Mac, si usted truena los dedos dos veces para llamarla. El sonido nunca se graba ni se envía a internet.</string>
+  <key>NSAppleEventsUsageDescription</key><string>DELTA usa esto para subir o bajar el volumen cuando usted se lo pide.</string>
+  <key>NSDesktopFolderUsageDescription</key><string>DELTA guarda en el Escritorio las notas que usted le pide.</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>DELTA busca y abre los archivos que usted le pide.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>DELTA busca y abre los archivos que usted le pide.</string>
+</dict>
+</plist>

@@ -1219,6 +1219,17 @@
         <button type="button" id="btn-prueba">Enviar aviso de prueba</button>
         <button type="button" id="btn-instalar" hidden>Instalar app</button>
       </div>
+      <h3 class="aj-sub">Mi Mac</h3>
+      <p class="tenue">Con la app DELTA Mac, DELTA abre apps y archivos, escribe y más en su Mac, y se enciende con dos chasquidos de dedos. Lo delicado siempre se lo pregunta en la Mac.</p>
+      <p id="mac-estado" class="tenue"></p>
+      <ul id="mac-lista" class="lista habilidades"></ul>
+      <label class="fila" id="mac-fila-control" hidden><input id="aj-mac-control" type="checkbox" /> Dejar que DELTA maneje mi Mac (si se apaga, solo queda el chasquido)</label>
+      <div class="botones">
+        <button type="button" id="mac-copiar">1. Copiar comando para instalar</button>
+        <button type="button" id="mac-codigo">2. Vincular mi Mac</button>
+      </div>
+      <p class="tenue">Para instalar: copie el comando, abra la app Terminal (Cmd + Espacio, escriba «Terminal»), péguelo con Cmd + V y presione Enter. También puede <a id="mac-descargar" href="#" target="_blank" rel="noopener">descargar el .zip</a>.</p>
+      <p id="mac-msg" class="voz-msg" role="status"></p>
       <h3 class="aj-sub">Habilidades de DELTA</h3>
       <p class="tenue">Las mismas skills que usas con Claude (carruseles, guiones, ganchos…). Sube un .zip, un .skill o un SKILL.md; puede ser un .zip con muchas a la vez. Se guardan en privado dentro de DELTA y sus departamentos las usan solos cuando aplican.</p>
       <label>Subir habilidades <input id="hab-archivo" type="file" accept=".zip,.skill,.md,application/zip" multiple /></label>

@@ -1579,6 +1579,7 @@ const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognitio
 let reconocedor = null;
 let escuchando = false;
 let manosLibres = guardado.get("delta_manos") === "1";
+let sinPalabraClave = false; // la siguiente frase se atiende aunque no empiece con "Delta" (chasquido)
 
 function vozEspanol() {
   const voces = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("es"));
@@ -1742,7 +1743,9 @@ function escuchar() {
     $("#btn-mic").classList.remove("escuchando");
     let texto = (final || $("#texto").value).trim();
     $("#texto").value = "";
-    if (manosLibres) {
+    const libre = sinPalabraClave;
+    sinPalabraClave = false;
+    if (manosLibres && !libre) {
       // En manos libres solo se atiende lo que empieza con "Delta".
       const m = texto.match(/^\s*(oye\s+)?delta[\s,.:]*(.*)$/i);
       if (!m) { orbe.estado("reposo"); return setTimeout(() => manosLibres && !ocupado && escuchar(), 300); }
@@ -2108,6 +2111,8 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
+    if (d.tipo === "despertar") despertarPorChasquido();
+    if (d.tipo === "mac" && $("#ajustes").open) cargarMac();
     if (d.tipo === "crm" && seccionActual === "crm") refrescar("crm", true);
     if (d.tipo === "agencia" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
     if (d.tipo === "aviso" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
@@ -2151,6 +2156,8 @@ $("#btn-ajustes").addEventListener("click", () => {
   $("#voz-msg").textContent = "";
   $("#hab-msg").textContent = "";
   cargarHabilidades();
+  $("#mac-msg").textContent = "";
+  cargarMac();
   $("#ajustes").showModal();
 });
 $("#btn-push").addEventListener("click", activarPush);
@@ -2231,6 +2238,67 @@ for (const id of ["#aj-msg", "#voz-msg"]) {
   new MutationObserver(() => { if ($(id).textContent) $(id).scrollIntoView({ block: "nearest", behavior: "smooth" }); })
     .observe($(id), { childList: true, characterData: true, subtree: true });
 }
+
+// ---------------- Ajustes: Mi Mac (app DELTA Mac) ----------------
+const haceCuanto = (iso) => {
+  if (!iso) return "nunca";
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60e3);
+  if (min < 1) return "hace un momento";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+};
+async function cargarMac() {
+  let d;
+  try { d = await api("/mac"); } catch (e) { $("#mac-estado").textContent = e.message; return; }
+  $("#mac-descargar").href = d.descarga;
+  $("#mac-copiar").dataset.comando = d.instalar;
+  $("#mac-fila-control").hidden = !d.macs.length;
+  $("#aj-mac-control").checked = d.control_activo;
+  $("#mac-estado").textContent = !d.macs.length
+    ? "Todavía no hay una Mac vinculada. 1) Instale DELTA Mac. 2) Toque «Vincular mi Mac» y escriba el código en la app."
+    : d.macs.some((m) => m.en_linea) ? "Su Mac está conectada. Truene los dedos dos veces para llamarme." : "Su Mac está vinculada pero ahora no está conectada (apagada, dormida o con DELTA Mac cerrada).";
+  $("#mac-lista").innerHTML = d.macs
+    .map((m) => `<li><span class="punto-mac ${m.en_linea ? "on" : ""}" aria-hidden="true"></span><div class="cuerpo">${esc(m.nombre)}<span class="sub">${m.en_linea ? "Conectada" : "Última vez " + haceCuanto(m.ultimo_contacto)}${m.version ? " · versión " + esc(m.version) : ""}</span></div><button type="button" data-mac-quitar="${m.id}">Desvincular</button></li>`)
+    .join("");
+}
+$("#mac-copiar").addEventListener("click", async (e) => {
+  const comando = e.currentTarget.dataset.comando || "";
+  try {
+    await navigator.clipboard.writeText(comando);
+    $("#mac-msg").textContent = "Copiado. Ahora péguelo en la Terminal y presione Enter.";
+  } catch {
+    $("#mac-msg").textContent = comando;
+  }
+});
+$("#mac-codigo").addEventListener("click", async () => {
+  try {
+    const { codigo, minutos } = await api("/mac/codigo", { method: "POST" });
+    $("#mac-msg").innerHTML = `Escriba este código en la app DELTA Mac: <strong class="mac-codigo">${codigo.slice(0, 3)} ${codigo.slice(3)}</strong> (vale ${minutos} minutos).`;
+  } catch (e) { $("#mac-msg").textContent = e.message; }
+});
+$("#mac-lista").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-mac-quitar]");
+  if (!b) return;
+  if (b.dataset.seguro !== "1") { b.dataset.seguro = "1"; b.textContent = "¿Seguro?"; return; }
+  await api("/mac/desvincular", { method: "POST", body: { id: Number(b.dataset.macQuitar) } }).catch((err) => { $("#mac-msg").textContent = err.message; });
+  cargarMac();
+});
+$("#aj-mac-control").addEventListener("change", async (e) => {
+  await api("/mac/control", { method: "POST", body: { activo: e.target.checked } }).catch((err) => { $("#mac-msg").textContent = err.message; });
+});
+
+// Dos chasquidos en la Mac: DELTA se pone a escuchar (si la pantalla está abierta, o al abrirse por eso).
+let ultimoChasquido = 0;
+function despertarPorChasquido() {
+  if (Date.now() - ultimoChasquido < 3000) return;
+  ultimoChasquido = Date.now();
+  if (ocupado) return;
+  sinPalabraClave = true; // tras el chasquido no hace falta decir "Delta…"
+  orbe.pulso();
+  if (!escuchando) escuchar();
+}
+api("/mac/despertar").then((d) => { if (d?.despertar) setTimeout(despertarPorChasquido, 1200); }).catch(() => {});
 
 // ---------------- Ajustes: voz de DELTA ----------------
 let borrarVozPendiente = false;

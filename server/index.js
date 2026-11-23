@@ -36,6 +36,7 @@ import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
 import * as higgsfield from "./higgsfield.js";
 import * as meta from "./meta.js";
+import * as mac from "./mac.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
@@ -151,6 +152,38 @@ app.get("/r/:token", (req, res) => {
   if (!d) return res.status(404).type("html").send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reporte</title><link rel="stylesheet" href="/reporte.css"><body class="rp-pagina"><article class="rp"><p class="rp-vacio">Este reporte ya no está disponible. Pídele a tu agencia un link nuevo.</p></article></body>');
   res.type("html").send(reportes.paginaReporte(d, { imprimir: req.query.imprimir === "1" }));
 });
+
+// ---------- La app DELTA Mac (se identifica con su propia llave, no con la sesión del navegador) ----------
+app.post("/mac/vincular", async (req, res) => {
+  const ip = req.ip;
+  const espera = seg.bloqueado(ip);
+  if (espera) return res.status(429).json({ error: `Demasiados intentos. Intente de nuevo en ${espera} min.` });
+  try {
+    res.json(mac.vincular(req.body || {}));
+  } catch (e) {
+    seg.registrarFallo(ip);
+    await new Promise((r) => setTimeout(r, 600));
+    res.status(400).json({ error: e.message });
+  }
+});
+function conMac(fn) {
+  return async (req, res) => {
+    const llave = (req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const m = mac.macDeLlave(llave);
+    if (!m) return res.status(401).json({ error: "Esta Mac ya no está vinculada. Vincúlela de nuevo desde DELTA → Ajustes → Mi Mac." });
+    try { res.json(await fn(m, req, res)); } catch (e) { res.status(400).json({ error: e.message }); }
+  };
+}
+app.get("/mac/ordenes", conMac(async (m, req, res) => {
+  let cerrada = false;
+  res.on("close", () => { if (!res.writableEnded) cerrada = true; });
+  const ordenes = await mac.esperarOrdenes(m, { version: req.get("x-delta-mac-version") });
+  // Si la Mac colgó mientras esperaba, la orden vuelve a la fila para la próxima vez.
+  if (cerrada && ordenes.length) { mac.devolver(ordenes); return { ordenes: [] }; }
+  return { ordenes, control_activo: mac.estado().control_activo };
+}));
+app.post("/mac/resultado", conMac((m, req) => mac.recibirResultado(m, req.body || {})));
+app.post("/mac/despertar", conMac((m) => mac.despertar(m)));
 
 // ---------- API del panel ----------
 const api = express.Router();
@@ -527,6 +560,13 @@ api.post("/salir-de-todo", (_req, res) => {
   res.json({ ok: true });
 });
 api.post("/push/prueba", envolver(async () => { await avisar("Prueba de aviso. Si ves esto, todo funciona perfecto."); return { ok: true }; }));
+
+// Mi Mac (solo el dueño: el equipo no tiene permiso para estas rutas)
+api.get("/mac", envolver(() => mac.estado()));
+api.post("/mac/codigo", envolver(() => mac.nuevoCodigo()));
+api.post("/mac/desvincular", envolver((req) => mac.desvincular(req.body?.id)));
+api.post("/mac/control", envolver((req) => mac.activarControl(Boolean(req.body?.activo))));
+api.get("/mac/despertar", envolver(() => mac.despertarReciente()));
 
 // Avisos en tiempo real para la pantalla abierta
 api.get("/vivo", (req, res) => {
