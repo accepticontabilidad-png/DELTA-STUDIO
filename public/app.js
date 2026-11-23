@@ -2293,8 +2293,24 @@ let ultimoChasquido = 0;
 // Cuándo pasó DELTA al frente por última vez (si acaba de pasar, es que el chasquido la trajo).
 let ultimaVezAlFrente = 0;
 addEventListener("focus", () => { ultimaVezAlFrente = Date.now(); });
+// Como app instalada (ventana propia), DELTA se agranda sola a toda la pantalla. No necesita
+// ningún permiso en la Mac; en el navegador normal o en el celular no hace nada.
+function agrandarVentana() {
+  try {
+    if (!matchMedia("(display-mode: standalone)").matches) return;
+    const s = screen;
+    const x = s.availLeft ?? 0, y = s.availTop ?? 0;
+    if (Math.abs(outerWidth - s.availWidth) < 8 && Math.abs(outerHeight - s.availHeight) < 8) return;
+    moveTo(x, y);
+    resizeTo(s.availWidth, s.availHeight);
+  } catch {}
+}
+agrandarVentana();
+addEventListener("load", agrandarVentana);
+
 // Con la pantalla ya abierta: la bienvenida completa (animación y sonido) y luego DELTA escucha.
 function despertarPorChasquido() {
+  agrandarVentana();
   if (Date.now() - ultimoChasquido < 3000) return;
   ultimoChasquido = Date.now();
   if (ocupado || !$("#arranque").hidden) return;
