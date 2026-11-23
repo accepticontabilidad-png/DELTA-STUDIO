@@ -301,15 +301,52 @@ export function listarProspectos({ cliente, etapa, q } = {}) {
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
 const dinero = (n) => (n === null || n === undefined ? null : Math.round(n * 100) / 100);
 
-/** Embudo del mes: de los prospectos que llegaron ese mes, cuántos llegaron a cada paso, y cuánto costó cada uno. */
-export function embudo({ cliente, mes } = {}) {
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const diaMas = (f, n) => new Date(Date.parse(`${f}T12:00:00Z`) + n * DIA).toISOString().slice(0, 10);
+const diasEntre = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / DIA) + 1;
+const finDeMes = (m) => { const [a, n] = m.split("-").map(Number); return new Date(Date.UTC(a, n, 0)).toISOString().slice(0, 10); };
+
+/** El periodo pedido: un mes (AAAA-MM) o un rango de fechas (AAAA-MM-DD, incluidas). Por omisión, este mes. */
+export function periodo({ mes, desde, hasta } = {}) {
+  if (desde || hasta) {
+    const d = String(desde || hasta), h = String(hasta || desde);
+    if (!FECHA.test(d) || !FECHA.test(h) || Number.isNaN(Date.parse(d)) || Number.isNaN(Date.parse(h))) throw new Error("Fecha no válida (AAAA-MM-DD)");
+    const [a, b] = d <= h ? [d, h] : [h, d];
+    if (diasEntre(a, b) > 800) throw new Error("El periodo es muy largo (máximo 2 años)");
+    return { desde: a, hasta: b, dias: diasEntre(a, b), mes: a.slice(0, 7), es_mes: a.endsWith("-01") && b === finDeMes(a.slice(0, 7)) };
+  }
   const m = mes || ahoraLocalISO().slice(0, 7);
   if (!MES.test(m)) throw new Error("Mes no válido (AAAA-MM)");
+  const ini = `${m}-01`, fin = finDeMes(m);
+  return { desde: ini, hasta: fin, dias: diasEntre(ini, fin), mes: m, es_mes: true };
+}
+
+/** El periodo de la misma duración justo antes (para comparar). Un mes completo se compara con el mes anterior. */
+export function periodoAnterior(p) {
+  if (p.es_mes) { const [a, n] = p.mes.split("-").map(Number); return periodo({ mes: `${n === 1 ? a - 1 : a}-${String(n === 1 ? 12 : n - 1).padStart(2, "0")}` }); }
+  return periodo({ desde: diaMas(p.desde, -p.dias), hasta: diaMas(p.desde, -1) });
+}
+
+/** Inversión en anuncios (de Paid media) de un cliente en el periodo; si el periodo corta un mes, se reparte por días. */
+function inversionPeriodo(clienteId, p) {
+  let total = 0;
+  for (let m = p.desde.slice(0, 7); m <= p.hasta.slice(0, 7); m = diaMas(finDeMes(m), 1).slice(0, 7)) {
+    const g = gastoDelMes(clienteId, m) || 0;
+    if (!g) continue;
+    const ini = p.desde > `${m}-01` ? p.desde : `${m}-01`;
+    const fin = p.hasta < finDeMes(m) ? p.hasta : finDeMes(m);
+    total += g * (diasEntre(ini, fin) / diasEntre(`${m}-01`, finDeMes(m)));
+  }
+  return total;
+}
+
+/** Embudo del periodo (un mes o un rango de fechas): de los prospectos que llegaron, cuántos llegaron a cada paso, y cuánto costó cada uno. */
+export function embudo({ cliente, mes, desde: d0, hasta: h0 } = {}) {
+  const per = periodo({ mes, desde: d0, hasta: h0 });
+  const m = per.mes;
   const c = cliente ? clienteRequerido(cliente) : null;
-  const desde = localAUTC(`${m}-01T00:00`);
-  const [a, n] = m.split("-").map(Number);
-  const sig = `${n === 12 ? a + 1 : a}-${String(n === 12 ? 1 : n + 1).padStart(2, "0")}`;
-  const hasta = localAUTC(`${sig}-01T00:00`);
+  const desde = localAUTC(`${per.desde}T00:00`);
+  const hasta = localAUTC(`${diaMas(per.hasta, 1)}T00:00`);
   const filas = db.prepare(`SELECT p.* FROM prospectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.creado >= ? AND p.creado < ? AND c.estado != 'terminado' ${c ? "AND p.cliente_id = ?" : ""}`)
     .all(desde, hasta, ...(c ? [c.id] : []));
   const llego = (r) => filas.filter((p) => p.alcanzo >= r).length;
@@ -327,18 +364,22 @@ export function embudo({ cliente, mes } = {}) {
   const mediana = tiempos.length ? tiempos[Math.floor((tiempos.length - 1) / 2)] : null;
   // Inversión en anuncios del mes (de Paid media) para el costo por paso.
   const ids = c ? [c.id] : [...new Set(filas.map((p) => p.cliente_id))];
-  const inversion = ids.reduce((s, id) => s + (gastoDelMes(id, m) || 0), 0);
+  const inversion = Math.round(ids.reduce((s, id) => s + inversionPeriodo(id, per), 0) * 100) / 100;
   const porFuente = Object.entries(FUENTES).map(([k, nombre]) => {
     const l = filas.filter((p) => p.fuente === k);
     return { fuente: k, nombre, prospectos: l.length, citas: l.filter((p) => p.alcanzo >= 2).length, ventas: l.filter((p) => p.alcanzo >= 4).length };
   }).filter((x) => x.prospectos).sort((x, y) => y.prospectos - x.prospectos);
   // Lo que dice Meta del mes: conversaciones que abrieron los anuncios de mensajes y formularios llenados.
-  const fotos = ids.map((id) => db.prepare("SELECT datos FROM meta_fotos WHERE cliente_id = ? AND fecha LIKE ? ORDER BY fecha DESC LIMIT 1").get(id, `${m}%`)).filter(Boolean)
+  const fotos = !per.es_mes ? [] : ids.map((id) => db.prepare("SELECT datos FROM meta_fotos WHERE cliente_id = ? AND fecha LIKE ? ORDER BY fecha DESC LIMIT 1").get(id, `${m}%`)).filter(Boolean)
     .map((f) => { try { return JSON.parse(f.datos).anuncios; } catch { return null; } }).filter(Boolean);
   const metaMes = fotos.length ? { conversaciones: fotos.reduce((s2, a) => s2 + (a.conversaciones || 0), 0), formularios: fotos.reduce((s2, a) => s2 + (a.prospectos || 0), 0), gasto: fotos.reduce((s2, a) => s2 + (a.gasto_mes || 0), 0) } : null;
   if (metaMes) metaMes.costo_conversacion = metaMes.conversaciones ? dinero(metaMes.gasto / metaMes.conversaciones) : null;
   return {
     mes: m,
+    desde: per.desde,
+    hasta: per.hasta,
+    dias: per.dias,
+    es_mes: per.es_mes,
     meta: metaMes,
     pasos,
     prospectos: total,
@@ -435,14 +476,14 @@ export function iniciarCrm() {
 }
 
 /** El tablero del CRM: columnas por etapa, lo urgente y el embudo del mes. */
-export function tableroCrm({ cliente, mes } = {}) {
+export function tableroCrm({ cliente, mes, desde, hasta } = {}) {
   const lista = listarProspectos({ cliente });
   const hace30 = new Date(Date.now() - 30 * DIA).toISOString();
   // Ventas y perdidos solo de los últimos 30 días, para que el tablero no se llene.
   const visibles = lista.filter((p) => !["venta", "perdido"].includes(p.etapa) || p.etapa_desde >= hace30);
   const orden = (a, b) => (b.sin_responder - a.sin_responder) || String(a.cita || "9").localeCompare(String(b.cita || "9")) || b.creado.localeCompare(a.creado);
-  const e = embudo({ cliente, mes });
-  const mesAnt = (() => { const [a, n] = e.mes.split("-").map(Number); return `${n === 1 ? a - 1 : a}-${String(n === 1 ? 12 : n - 1).padStart(2, "0")}`; })();
+  const e = embudo({ cliente, mes, desde, hasta });
+  const ant = periodoAnterior(periodo({ mes, desde, hasta }));
   return {
     cliente: cliente ? clienteRequerido(cliente).nombre : null,
     etapas: ETAPAS.map((x) => ({ ...x, prospectos: visibles.filter((p) => p.etapa === x.clave).sort(orden) })),
@@ -454,7 +495,7 @@ export function tableroCrm({ cliente, mes } = {}) {
         WHERE e.tipo = 'borrador' AND e.estado = 'pendiente' ${cliente ? "AND p.cliente_id = ?" : ""} ORDER BY e.id DESC LIMIT 20`).all(...(cliente ? [clienteRequerido(cliente).id] : [])),
     embudo: e,
     meta: { conectado: meta.metaConectado(), faltan: meta.metaConectado() ? faltanMeta() : [], paginas: cliente ? db.prepare("SELECT COUNT(*) n FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").get(clienteRequerido(cliente).id).n : null },
-    embudo_anterior: embudo({ cliente, mes: mesAnt }),
+    embudo_anterior: embudo({ cliente, desde: ant.desde, hasta: ant.hasta }),
     fuentes: FUENTES,
   };
 }

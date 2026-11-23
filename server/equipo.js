@@ -131,7 +131,7 @@ const PERMISOS = [
   ["GET", /^\/cuentas$/, null],
   ["POST", /^\/tareas$/, null],
   ["PATCH", /^\/tareas\/\d+$/, null],
-  ["GET", /^\/crm$/, "crm"],
+  ["GET", /^\/crm(\/reporte)?$/, "crm"],
   ["*", /^\/crm\/prospectos(\/\d+(\/(nota|sugerir|borrador|enviar|enviado))?)?$/, "crm"],
   ["DELETE", /^\/crm\/borradores\/\d+$/, "crm"],
   ["GET", /^\/contenido$/, "contenido"],
@@ -147,7 +147,7 @@ const PERMISOS = [
   ["GET", /^\/reportes(\/pagina)?$/, "analitica"],
 ];
 // Pantallas que trabajan un cliente a la vez: si no dice cuál, se usa el primero que puede ver.
-const UN_CLIENTE = [/^\/crm$/, /^\/contenido$/];
+const UN_CLIENTE = [/^\/crm(\/reporte)?$/, /^\/contenido$/];
 // De qué cliente es cada cosa que se toca por id.
 const DUENO_DE = [
   [/^\/crm\/prospectos\/(\d+)/, "SELECT cliente_id FROM prospectos WHERE id = ?"],

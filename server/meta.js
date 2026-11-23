@@ -355,6 +355,51 @@ async function numerosAnuncios(a, errores) {
   };
 }
 
+// ---------- Reporte por fechas (tablero del CRM, estilo Looker) ----------
+let insightsDePrueba = null;
+export const _insightsDePrueba = (fn) => { insightsDePrueba = fn; };
+const CAMPOS_REPORTE = "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,actions,action_values";
+const filaReporte = (f) => ({
+  campana_id: f.campaign_id, campana: f.campaign_name || f.campaign_id,
+  conjunto_id: f.adset_id, conjunto: f.adset_name || f.adset_id,
+  anuncio_id: f.ad_id, anuncio: f.ad_name || f.ad_id,
+  gasto: Number(f.spend) || 0, impresiones: Number(f.impressions) || 0, alcance: Number(f.reach) || 0,
+  clics: Number(f.clicks) || 0, clics_enlace: Number(f.inline_link_clicks) || 0,
+  ...resultadosDe(f),
+});
+
+/**
+ * Números de cada anuncio de las cuentas de anuncios de un cliente entre dos fechas (AAAA-MM-DD, incluidas):
+ * { cuentas, moneda, anuncios: [totales por anuncio], dias: [por anuncio y por día] }. Solo lee.
+ */
+export async function reporteAnunciosCliente(clienteId, { desde, hasta }) {
+  const cuentas = db.prepare("SELECT * FROM meta_activos WHERE cliente_id = ? AND tipo = 'anuncios'").all(clienteId).map((a) => ({ ...a, extra: JSON.parse(a.extra || "{}") }));
+  if (!cuentas.length) return null;
+  if (insightsDePrueba) return insightsDePrueba(clienteId, { desde, hasta, cuentas });
+  if (!metaConectado()) return null;
+  const rango = { since: desde, until: hasta };
+  const errores = [];
+  const porCuenta = await Promise.all(cuentas.map(async (a) => {
+    const total = await intentar(() => todo(`/${a.id}/insights`, { fields: CAMPOS_REPORTE, level: "ad", time_range: rango }, undefined, 1500), errores, a.nombre);
+    if (!total) return null;
+    const diario = (await intentar(() => todo(`/${a.id}/insights`, { fields: CAMPOS_REPORTE.replace(",reach", ""), level: "ad", time_range: rango, time_increment: 1 }, undefined, 6000), errores, `${a.nombre} por día`)) || [];
+    return {
+      moneda: a.extra?.moneda || null,
+      anuncios: total.map(filaReporte),
+      dias: diario.map((f) => ({ fecha: f.date_start, ...filaReporte(f) })),
+    };
+  }));
+  const ok = porCuenta.filter(Boolean);
+  if (!ok.length) return { cuentas: cuentas.map((a) => a.nombre), moneda: null, anuncios: [], dias: [], errores };
+  return {
+    cuentas: cuentas.map((a) => a.nombre),
+    moneda: ok.map((x) => x.moneda).find(Boolean) || null,
+    anuncios: ok.flatMap((x) => x.anuncios),
+    dias: ok.flatMap((x) => x.dias),
+    errores,
+  };
+}
+
 /** Suma los números de varias páginas, perfiles o cuentas del mismo cliente. */
 function sumar(lista) {
   const r = {};
