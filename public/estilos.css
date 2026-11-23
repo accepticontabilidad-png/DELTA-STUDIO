@@ -2310,3 +2310,8 @@ html[data-mood="dia"] .crm-edad-barra { background: #ece8f8; }
   .crm-edades-lista small { display: none; }
 }
 .crm-graficas .crm-edades-caja { grid-column: 1 / -1; }
+
+/* Ajustes → Mi Mac */
+.punto-mac { width: 10px; height: 10px; border-radius: 50%; background: rgba(160,160,180,.5); flex: none; align-self: center; }
+.punto-mac.on { background: #3ddc97; box-shadow: 0 0 8px rgba(61,220,151,.7); }
+.mac-codigo { font-size: 1.35em; letter-spacing: .12em; font-variant-numeric: tabular-nums; }

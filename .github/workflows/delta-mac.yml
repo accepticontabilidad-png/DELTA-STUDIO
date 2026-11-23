@@ -1,0 +1,31 @@
+name: DELTA Mac
+
+on:
+  push:
+    paths:
+      - "mac/**"
+      - ".github/workflows/delta-mac.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  construir:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la app
+        run: ./mac/construir.sh
+      - name: Guardar el zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: DELTA-Mac
+          path: mac/salida/DELTA-Mac.zip
+      - name: Publicar la descarga (solo desde main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view delta-mac >/dev/null 2>&1 || gh release create delta-mac --title "DELTA Mac" --notes "App de DELTA para la Mac: doble chasquido y control de la Mac. Se instala con el comando que aparece en DELTA → Ajustes → Mi Mac."
+          gh release upload delta-mac mac/salida/DELTA-Mac.zip mac/instalar.sh --clobber

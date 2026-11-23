@@ -19,6 +19,7 @@ import * as seo from "./seo.js";
 import * as crm from "./crm.js";
 import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
+import * as mac from "./mac.js";
 
 const MODELO = process.env.DELTA_MODELO || "claude-opus-5-5";
 const ESFUERZO = process.env.DELTA_ESFUERZO || "medium";
@@ -94,6 +95,14 @@ La agencia (eres su directora):
 - Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
 - Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
 
+Su Mac (app DELTA Mac, en la barra de arriba de su Mac):
+- Con usar_mac manejas su Mac de verdad: abrir y cerrar aplicaciones, ver cuáles están abiertas, abrir páginas web, buscar archivos en su carpeta personal y abrirlos o mostrarlos en el Finder, escribir texto donde esté el cursor, presionar atajos de teclado, subir o bajar el volumen, crear una nota en el Escritorio y mandar un archivo a la Papelera.
+- Para "ábreme el contrato de Kardia": primero buscar_archivos, luego abrir_archivo con la ruta que salió. Si salen varios parecidos, pregunta cuál.
+- Lo delicado (cerrar apps, escribir, atajos, Papelera) la Mac se lo pregunta a él con un cuadro; avísale en una frase que lo confirme en la Mac. Si dice que no o nadie contesta, no se hizo: dilo así.
+- Nunca borres, cierres ni escribas algo que él no pidió claramente. Nunca escribas claves ni datos de tarjetas.
+- Si la Mac no está conectada o vinculada, dilo tal cual y explica que se vincula en Ajustes → Mi Mac.
+- Se enciende con dos chasquidos de dedos cerca de la Mac: la app abre DELTA y te pone a escuchar.
+
 Reglas:
 - Honestidad ante todo. Solo puedes decir que hiciste algo (agendar, anotar, programar, mover, completar, borrar, guardar) si llamaste la herramienta en ESTE turno y respondió bien. Si una herramienta falla, dilo tal cual.
 - Para cualquier cambio en la agenda, llama la herramienta correspondiente antes de responder. Nunca digas "listo" o "hecho" sin haberla llamado.
@@ -103,7 +112,7 @@ Reglas:
 - Nunca agregues confesiones del tipo "te debo la verdad" o "en mis mensajes anteriores...". Lo pasado ya está resuelto; no lo vuelvas a mencionar.
 - No muestres ids internos al usuario salvo que los pida; refiérete a las cosas por su nombre.
 - Si te piden abrir o ver una sección de la app (agenda, calendario, tareas, correo, bolsa, noticias), ábrela con abrir_seccion y responde en una frase.
-- No inventes datos ni capacidades. Si te piden algo que no puedes hacer (por ejemplo controlar la computadora, la casa o cuentas de clientes), di claramente que aún no puedes.
+- No inventes datos ni capacidades. Si te piden algo que no puedes hacer (por ejemplo controlar la casa), di claramente que aún no puedes.
 - Las fechas que pases a las herramientas van en hora local del usuario con formato AAAA-MM-DDTHH:MM. Calcula fechas relativas ("mañana", "el viernes") a partir de la fecha y hora actuales que se te dan en cada mensaje.
 - Si falta un dato imprescindible (por ejemplo la hora de una cita), pregúntalo en una sola frase. Si un dato es razonable suponerlo, supónlo y dilo.
 - Tus respuestas a menudo se leen en voz alta o en WhatsApp: sé breve (1 a 4 frases), sin tablas ni markdown pesado. Usa listas cortas solo cuando enumeres varias cosas.
@@ -980,6 +989,30 @@ herramientasBase.push(
 );
 herramientasBase.push(
   betaTool({
+    name: "usar_mac",
+    description:
+      "Maneja la Mac del dueño a través de la app DELTA Mac. Acciones: " +
+      Object.entries(mac.ACCIONES).map(([k, v]) => `${k}: ${v.texto}${v.riesgo ? " [se confirma en la Mac]" : ""}`).join("; ") +
+      ". Devuelve lo que hizo la Mac o el motivo por el que no se pudo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accion: { type: "string", enum: Object.keys(mac.ACCIONES) },
+        app: { type: "string", description: "Nombre de la aplicación (abrir_app, cerrar_app)" },
+        url: { type: "string", description: "Dirección https (abrir_url)" },
+        consulta: { type: "string", description: "Qué buscar (buscar_archivos): parte del nombre o palabras del contenido" },
+        ruta: { type: "string", description: "Ruta completa del archivo o carpeta (abrir_archivo, mostrar_en_finder, mover_a_papelera)" },
+        texto: { type: "string", description: "Texto a escribir (escribir_texto) o contenido de la nota (crear_nota)" },
+        titulo: { type: "string", description: "Nombre de la nota (crear_nota)" },
+        teclas: { type: "string", description: "Atajo, ej. 'cmd+c', 'cmd+shift+4', 'enter', 'esc' (atajo_teclado)" },
+        nivel: { type: "number", description: "Volumen de 0 a 100 (volumen); 0 silencia" },
+      },
+      required: ["accion"],
+      additionalProperties: false,
+    },
+    run: async ({ accion, ...datos }) => json({ ok: true, resultado: await mac.pedir(accion, datos) }),
+  }),
+  betaTool({
     name: "abrir_seccion",
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
@@ -1004,7 +1037,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
   "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia", "registrar_resultados_anuncios", "crear_contenido", "mover_contenido", "compartir_reporte",
   "configurar_tendencias", "buscar_tendencias", "usar_idea", "configurar_seo", "revisar_sitio",
-  "crear_prospecto", "actualizar_prospecto", "borrador_whatsapp",
+  "crear_prospecto", "actualizar_prospecto", "borrador_whatsapp", "usar_mac",
 ]);
 
 /**
