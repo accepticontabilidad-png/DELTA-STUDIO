@@ -148,20 +148,24 @@ test("Pancake: etiquetas dan la etapa y DELTA lee los chats para acomodar ventas
   const leidos = [];
   ext._iaDePrueba(async (p, chat) => {
     leidos.push(p.nombre);
-    if (/22222/.test(chat)) return { etapa: "venta", valor: 316450, interes: "Jaecco 7", resumen: "Pagó placas, cita de entrega" };
+    if (/22222/.test(chat)) return { etapa: "venta", origen: "anuncio", fecha_venta: "2026-10-15", valor: 316450, interes: "Jaecco 7", resumen: "Pagó placas, cita de entrega" };
+    if (/11111/.test(chat)) return { etapa: "contactado", origen: "cliente", resumen: "Ya era cliente, pregunta por su servicio" };
     if (/33333/.test(chat)) return { etapa: "perdido", motivo: "Rechazada por buró", resumen: "No pasó buró" };
     return { etapa: "contactado", resumen: "Sigue en trámite" };
   });
   const r = await ext.conectarFuente({ cliente: "Chirey", tipo: "pancake", cuenta: "waba_1", token: "tok-chirey-12345" });
   assert.equal(r.nuevos, 4);
-  assert.equal(crm.buscarProspecto({ nombre: "Jorge Antonio" }).etapa, "venta", "etiqueta VENTA");
+  assert.equal(crm.buscarProspecto({ nombre: "Jorge Antonio" }).etapa, "contactado", "la etiqueta VENTA sola no hace venta");
   assert.equal(crm.buscarProspecto({ nombre: "Gerardo" }).etapa, "cita", "etiqueta APROBADO");
   const l = await ext.leerChats(r.id);
-  assert.equal(l.leidos, 2, "no relee ventas ni chats de pocos mensajes");
-  assert.deepEqual(leidos.sort(), ["Mafer", "Miguel Ángel"]);
+  assert.equal(l.leidos, 3, "no lee chats de pocos mensajes");
+  assert.deepEqual(leidos.sort(), ["Jorge Antonio", "Mafer", "Miguel Ángel"]);
+  assert.equal(crm.buscarProspecto({ nombre: "Jorge Antonio" }).origen, "cliente");
   const miguel = crm.buscarProspecto({ nombre: "Miguel Ángel" });
   assert.equal(miguel.etapa, "venta");
   assert.equal(miguel.valor, 316450);
+  assert.equal(miguel.venta_fecha, "2026-10-15");
+  assert.equal(miguel.origen, "anuncio");
   assert.match(crm.fichaProspecto(miguel.id).historial.at(-1).texto, /DELTA leyó el chat: Pagó placas/);
   const mafer = crm.buscarProspecto({ nombre: "Mafer" });
   assert.equal(mafer.etapa, "perdido");
@@ -192,4 +196,41 @@ test("una venta que solo venía de la etiqueta 'Tratamiento facial' se corrige",
   assert.equal(x.alcanzo, 1);
   assert.equal(x.ia_revisado, null);
   assert.equal(ext.revisarVentasPorEtiqueta(), 0);
+});
+
+test("ventas sin confirmar se releen: se quitan si no compró y se cuentan por fecha de compra y origen", async () => {
+  const c = agencia.crearCliente({ nombre: "Betzy Ventas" });
+  const r = await (async () => {
+    ext._fetchDePrueba(async () => ({ success: true, conversations: [] }));
+    const x = await ext.conectarFuente({ cliente: c.id, tipo: "pancake", cuenta: "waba_9", token: "tok-betzy-99999" });
+    return x;
+  })();
+  const nueva = (nombre, id) => {
+    const p = crm.crearProspecto({ cliente: c.id, nombre, fuente: "whatsapp", etapa: "venta" });
+    db.prepare("UPDATE prospectos SET externo_id = ?, externo_mensajes = 20, venta_revisada = NULL, creado = '2026-10-02T15:00:00Z' WHERE id = ?").run(`pancake:waba_9:${id}`, p.id);
+    return p.id;
+  };
+  const a = nueva("Ana Real", "a"), b = nueva("Beto Viejo", "b"), d = nueva("Dora Recomendada", "d");
+  ext._chatsDePrueba(async (conv) => `chat ${conv}`);
+  ext._iaDePrueba(async (p) => p.nombre === "Ana Real" ? { etapa: "venta", origen: "anuncio", fecha_venta: "2026-11-05", resumen: "Pagó" }
+    : p.nombre === "Beto Viejo" ? { etapa: "contactado", origen: "cliente", resumen: "Pregunta por su servicio" }
+    : { etapa: "venta", origen: "recomendado", fecha_venta: "2026-10-20", resumen: "La mandó su hermana, pagó" });
+  const l = await ext.leerChats(r.id);
+  assert.equal(l.quitadas, 1);
+  assert.equal(l.confirmadas, 2);
+  assert.equal(crm.obtenerProspecto(b).etapa, "contactado");
+  assert.equal(crm.obtenerProspecto(b).alcanzo < 4, true);
+  const oct = crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas;
+  const nov = crm.embudo({ cliente: c.id, mes: "2026-11" }).ventas_cerradas;
+  assert.equal(oct.redes, 0); assert.equal(oct.otras, 1);
+  assert.equal(nov.redes, 1); assert.equal(nov.lista[0].nombre, "Ana Real");
+  // Ya confirmadas, no se vuelven a leer
+  assert.equal((await ext.leerChats(r.id)).leidos, 0);
+  // El dueño (o DELTA cuando se lo pide) corrige el origen y la fecha a mano
+  crm.actualizarProspecto(d, { origen: "redes", venta_fecha: "2026-10-21" });
+  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas.redes, 1);
+  crm.actualizarProspecto(a, { etapa: "perdido" });
+  assert.equal(crm.obtenerProspecto(a).venta_fecha, null);
+  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-11" }).ventas_cerradas.redes, 0);
+  ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
 });

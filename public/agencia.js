@@ -1769,6 +1769,8 @@ export function iniciarAgencia(h) {
     return `${d} ${MESES[m - 1]}`;
   };
 
+  const ORIGEN_VENTA = { anuncio: "Anuncio", redes: "Redes sociales", recomendado: "Recomendación", cliente: "Ya era cliente", otro: "Otro" };
+
   // A qué campaña, conjunto o anuncio pertenece cada prospecto del CRM (por el nombre que trae de Meta/Pancake).
   function ligarProspectos(prospectos, filas) {
     const completo = new Map(), porAnuncio = new Map(), porCampana = new Map(), repetidos = new Set();
@@ -1814,9 +1816,13 @@ export function iniciarAgencia(h) {
     const prosTodos = r?.prospectos ? (hayAds ? ligarProspectos(r.prospectos, filasTodas) : r.prospectos) : null;
     const pros = prosTodos ? (filtrando ? prosTodos.filter(pasa) : prosTodos) : null;
     const tot = filas.reduce(sumarEn, vacios());
+    // Ventas: las que se CERRARON en estas fechas (día en que compró). La tarjeta cuenta las de redes/anuncios; las de recomendación o de quien ya era cliente van aparte.
+    const ventasTodas = r?.ventas ? (hayAds ? ligarProspectos(r.ventas, filasTodas) : r.ventas).filter((v) => !filtrando || pasa(v)) : null;
+    const ventasRedes = ventasTodas ? ventasTodas.filter((v) => v.redes) : null;
     const crm = pros
-      ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, ventas: pros.filter((p) => p.alcanzo >= 4).length, contactados: pros.filter((p) => p.alcanzo >= 1).length, ...sumarVentas(pros.filter((p) => p.alcanzo >= 4)) }
-      : { prospectos: t.embudo.prospectos, citas: t.embudo.citas, asistieron: t.embudo.pasos[3].n, ventas: t.embudo.ventas, contactados: t.embudo.pasos[1].n, valor: t.embudo.valor_ventas || 0 };
+      ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, contactados: pros.filter((p) => p.alcanzo >= 1).length,
+          ...(ventasRedes ? { ventas: ventasRedes.length, ventas_otras: ventasTodas.length - ventasRedes.length, ...sumarVentas(ventasRedes) } : { ventas: pros.filter((p) => p.alcanzo >= 4).length, ...sumarVentas(pros.filter((p) => p.alcanzo >= 4)) }) }
+      : { prospectos: t.embudo.prospectos, citas: t.embudo.citas, asistieron: t.embudo.pasos[3].n, ventas: t.embudo.ventas_cerradas?.redes ?? t.embudo.ventas, ventas_otras: t.embudo.ventas_cerradas?.otras || 0, contactados: t.embudo.pasos[1].n, valor: t.embudo.ventas_cerradas?.valor_redes ?? t.embudo.valor_ventas ?? 0 };
     // Series por día (o semana/mes)
     const hoy = hoyLocal();
     const cub = cubetas(desde, hasta > hoy && desde <= hoy ? hoy : hasta);
@@ -1825,7 +1831,7 @@ export function iniciarAgencia(h) {
     for (const d of diasAds) { const i = cub.de(d.fecha); if (i >= 0) sumarEn(porDia[i], d); }
     const prosDia = cub.grupos.map(() => ({ prospectos: 0, citas: 0 }));
     for (const p of pros || []) { const i = cub.de(p.dia); if (i >= 0) { prosDia[i].prospectos++; if (p.alcanzo >= 2) prosDia[i].citas++; } }
-    return { t, r, desde, hasta, hayAds, filas, filasTodas, prosTodos, pros, tot, crm, cub, porDia, prosDia, filtrando };
+    return { t, r, desde, hasta, hayAds, filas, filasTodas, prosTodos, pros, ventas: ventasTodas, tot, crm, cub, porDia, prosDia, filtrando };
   }
 
   function pintarReporte() {
@@ -1850,7 +1856,8 @@ export function iniciarAgencia(h) {
         <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
         ${k.serie ? spark(k.serie) : ""}
       </div>`;
-    const ventasK = { nombre: "Ventas", valor: String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: crm.valor ? `total de venta ${dinero(crm.valor)}${hayAds && tot.gasto ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}` : `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}`, ir: "ventas-lista" };
+    const otras = crm.ventas_otras ? ` · +${crm.ventas_otras} por recomendación o clientes de antes` : "";
+    const ventasK = { nombre: "Ventas de redes", valor: String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: (crm.valor ? `total de venta ${dinero(crm.valor)}${hayAds && tot.gasto ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}` : `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}`) + otras, ir: "ventas-lista" };
     const sinResp = { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null };
     let tarjetas;
     if (hayAds) {
@@ -2117,9 +2124,9 @@ export function iniciarAgencia(h) {
       ${!margenTodas && c.valor && puedeEditar && !editandoUtilidad && !falta ? `<p class="tenue chico crm-ut-nota">Es lo vendido menos los anuncios. Si pones el margen del cliente en <b>Ajustar</b>, DELTA descuenta también lo que le cuesta dar el servicio.</p>` : ""}
       ${!cfg && c.sin_monto ? `<p class="tenue chico crm-ut-nota">${c.sin_monto} venta${c.sin_monto === 1 ? "" : "s"} sin monto. Elige un cliente para poner cuánto vale una venta en promedio.</p>` : ""}
       ${formulario}
-      ${c.ventas ? `<details class="crm-ut-lista" id="crm-ut-lista" ${verVentas ? "open" : ""}><summary>Ver ${c.ventas === 1 ? "la venta" : `las ${c.ventas} ventas`} de estas fechas</summary>
-        <p class="tenue chico">Toca a alguien para abrir su ficha. Si no compró, cámbialo de etapa y deja de contar como venta.</p>
-        <ul>${(D.pros || []).filter((p) => p.alcanzo >= 4).sort((a, b) => b.dia.localeCompare(a.dia)).map((p) => `<li><button type="button" data-prospecto="${p.id}"><b>${esc(p.nombre || "Sin nombre")}</b><span class="tenue">${esc(p.dia.split("-").reverse().slice(0, 2).join("/"))} · ${esc(ultimaCrm.fuentes[p.fuente] || p.fuente)}${p.campana ? ` · ${esc(p.campana)}` : ""}</span><span class="crm-ut-monto">${p.valor ? dinero(p.valor) : p.ticket ? `${dinero(p.ticket)} <small class="tenue">promedio</small>` : `<small class="tenue">sin monto</small>`}</span></button></li>`).join("")}</ul>
+      ${(D.ventas || []).length || c.ventas ? `<details class="crm-ut-lista" id="crm-ut-lista" ${verVentas ? "open" : ""}><summary>Ver ${c.ventas === 1 ? "la venta" : `las ${c.ventas} ventas`} de redes${c.ventas_otras ? ` y ${c.ventas_otras} más` : ""} de estas fechas</summary>
+        <p class="tenue chico">Toca a alguien para abrir su ficha. Si no compró, cámbialo de etapa; si no vino de redes, cambia "De dónde salió". Fecha = día en que compró.</p>
+        <ul>${(D.ventas || (D.pros || []).filter((p) => p.alcanzo >= 4)).slice().sort((a, b) => (a.redes === false) - (b.redes === false) || b.dia.localeCompare(a.dia)).map((p) => `<li${p.redes === false ? ' class="crm-ut-otra"' : ""}><button type="button" data-prospecto="${p.id}"><b>${esc(p.nombre || "Sin nombre")}</b><span class="tenue">${esc(p.dia.split("-").reverse().slice(0, 2).join("/"))} · ${esc(p.origen ? ORIGEN_VENTA[p.origen] : ultimaCrm.fuentes[p.fuente] || p.fuente)}${p.redes === false ? " · no cuenta como de redes" : p.confirmada === false ? " · sin confirmar" : ""}${p.campana ? ` · ${esc(p.campana)}` : ""}</span><span class="crm-ut-monto">${p.valor ? dinero(p.valor) : p.ticket ? `${dinero(p.ticket)} <small class="tenue">promedio</small>` : `<small class="tenue">sin monto</small>`}</span></button></li>`).join("")}</ul>
       </details>` : ""}`;
   }
   let verVentas = false;
@@ -2322,6 +2329,8 @@ export function iniciarAgencia(h) {
     $("#crm-valor").value = f?.valor ?? "";
     $("#crm-responsable").value = f?.responsable || "";
     $("#crm-motivo").value = f?.motivo_perdido || "";
+    $("#crm-origen").value = f?.origen || "";
+    $("#crm-venta-fecha").value = f?.venta_fecha || "";
     $("#crm-notas").value = f?.notas || "";
     $("#crm-notas-l").hidden = Boolean(f && !f.notas);
     $("#crm-nota").value = "";
@@ -2336,7 +2345,7 @@ export function iniciarAgencia(h) {
     $("#dlg-prospecto").showModal();
     if (!f) setTimeout(() => $("#crm-nombre").focus(), 50);
   }
-  const mostrarMotivo = () => { $("#crm-motivo-l").hidden = $("#crm-etapa").value !== "perdido"; };
+  const mostrarMotivo = () => { $("#crm-motivo-l").hidden = $("#crm-etapa").value !== "perdido"; $("#crm-venta-l").hidden = $("#crm-etapa").value !== "venta"; };
   $("#crm-etapa").addEventListener("change", mostrarMotivo);
   $("#crm-mensaje").addEventListener("input", actualizarBotonesWa);
 
@@ -2352,6 +2361,7 @@ export function iniciarAgencia(h) {
       notas: $("#crm-notas").value.trim() || null,
     };
     if ($("#crm-etapa").value === "perdido") datos.motivo_perdido = $("#crm-motivo").value.trim() || null;
+    if ($("#crm-etapa").value === "venta") { datos.origen = $("#crm-origen").value || null; if ($("#crm-venta-fecha").value) datos.venta_fecha = $("#crm-venta-fecha").value; }
     if (!datos.nombre && !datos.telefono) return errorCrm(new Error("Pon al menos el nombre o el teléfono"));
     try {
       const r = await api(id ? `/crm/prospectos/${id}` : "/crm/prospectos", { method: id ? "PATCH" : "POST", body: datos });

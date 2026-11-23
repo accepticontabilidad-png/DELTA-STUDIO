@@ -11,7 +11,7 @@
 import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { clienteRequerido, obtenerCliente, gastoDelMes } from "./agencia.js";
-import { ahoraLocalISO, localAUTC, utcALocal } from "./tiempo.js";
+import { ahoraLocalISO, localAUTC, utcALocal, zonaHoraria } from "./tiempo.js";
 import { avisar, avisarPantalla } from "./avisos.js";
 import { db, getAjuste, setAjuste } from "./db.js";
 import * as meta from "./meta.js";
@@ -82,6 +82,26 @@ CREATE TABLE IF NOT EXISTS crm_config (
   bienvenida TEXT                                -- texto del formulario
 );
 `);
+// De dónde salió y cuándo se cerró cada venta (para contar las ventas de redes del mes en que se cerraron).
+for (const col of ["venta_fecha TEXT", "origen TEXT", "venta_revisada INTEGER"]) { try { db.exec(`ALTER TABLE prospectos ADD COLUMN ${col}`); } catch { /* ya existe */ } }
+export const ORIGENES = { anuncio: "Anuncio", redes: "Redes sociales", recomendado: "Recomendación", cliente: "Ya era cliente", otro: "Otro" };
+const REDES = new Set(["anuncios", "instagram", "facebook", "whatsapp"]);
+/** ¿Esta venta cuenta como venta de redes/anuncios? Si DELTA o el dueño ya dijeron de dónde salió, manda eso. */
+export function esDeRedes(p) {
+  if (p.origen) return p.origen === "anuncio" || p.origen === "redes";
+  return !!p.campana || REDES.has(p.fuente);
+}
+function origenValido(x) {
+  if (x === null || x === "") return null;
+  const t = String(x).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  if (ORIGENES[t]) return t;
+  if (/anunc|publicidad|campa|\bad/.test(t)) return "anuncio";
+  if (/redes|instagram|facebook|whats|social|tiktok/.test(t)) return "redes";
+  if (/recomend|referid|conocid|amig/.test(t)) return "recomendado";
+  if (/cliente|ya compr|anterior|postventa|servicio/.test(t)) return "cliente";
+  if (/otro|directo|llam|visit/.test(t)) return "otro";
+  throw new Error(`Origen no válido: ${x}. Usa anuncio, redes, recomendado, cliente u otro`);
+}
 // Ventas que ya no están en "venta" (se corrigieron a mano antes de este arreglo) dejan de contar como venta.
 db.exec("UPDATE prospectos SET alcanzo = 3 WHERE alcanzo >= 4 AND etapa != 'venta'");
 // Para la utilidad del cliente: cuánto vale una venta en promedio (si no se anotó el monto) y su margen (%).
@@ -202,7 +222,7 @@ export function crearProspecto({ cliente, nombre, telefono, correo, fuente, camp
   return obtenerProspecto(id);
 }
 
-export function actualizarProspecto(id, cambios = {}) {
+export function actualizarProspecto(id, cambios = {}, opciones = {}) {
   const p = prospectoRequerido(id);
   const sets = [], vals = [];
   const poner = (col, v) => { sets.push(`${col} = ?`); vals.push(v); };
@@ -214,6 +234,14 @@ export function actualizarProspecto(id, cambios = {}) {
   if (cambios.notas !== undefined) poner("notas", cambios.notas ? String(cambios.notas).slice(0, 2000) : null);
   if (cambios.valor !== undefined) poner("valor", numeroValido(cambios.valor));
   if (cambios.cliente !== undefined) poner("cliente_id", clienteRequerido(cambios.cliente).id);
+  if (cambios.origen !== undefined) poner("origen", origenValido(cambios.origen));
+  if (cambios.venta_fecha !== undefined) {
+    const f = cambios.venta_fecha ? String(cambios.venta_fecha).slice(0, 10) : null;
+    if (f && !/^\d{4}-\d{2}-\d{2}$/.test(f)) throw new Error("La fecha de venta va como AAAA-MM-DD");
+    poner("venta_fecha", f);
+  }
+  // Cuando la venta la confirma el dueño (o DELTA leyendo el chat), ya no se vuelve a revisar sola.
+  if (!opciones.automatico && (cambios.etapa === "venta" || p.etapa === "venta" || cambios.origen !== undefined)) poner("venta_revisada", 1);
   let e = p.etapa;
   if (cambios.cita !== undefined) {
     const ci = cambios.cita ? citaValida(cambios.cita) : null;
@@ -224,6 +252,8 @@ export function actualizarProspecto(id, cambios = {}) {
   if (cambios.etapa !== undefined) e = etapaValida(cambios.etapa);
   if (e !== p.etapa) {
     poner("etapa", e);
+    if (e === "venta" && cambios.venta_fecha === undefined) poner("venta_fecha", ahoraLocalISO().slice(0, 10));
+    if (p.etapa === "venta" && e !== "venta" && cambios.venta_fecha === undefined) poner("venta_fecha", null);
     sets.push("etapa_desde = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
     // Lo más lejos que llegó se conserva para el embudo, salvo la venta: si sale de "venta" es que no fue venta.
     if (p.etapa === "venta" && e !== "venta") poner("alcanzo", RANGO[e] ?? Math.min(p.alcanzo, RANGO.asistio));
@@ -346,6 +376,16 @@ function inversionPeriodo(clienteId, p) {
   return total;
 }
 
+/** Ventas CERRADAS en el periodo (por la fecha en que compró, no por cuándo escribió por primera vez), separadas en las de redes/anuncios y las demás. */
+export function ventasCerradas({ clientes = null, desde, hasta }) {
+  const filas = db.prepare(`SELECT p.id, p.nombre, p.cliente_id, c.nombre AS cliente, p.campana, p.fuente, p.origen, p.valor, p.venta_fecha, p.etapa_desde, p.venta_revisada
+      FROM prospectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.etapa = 'venta' AND c.estado != 'terminado' ${clientes ? `AND p.cliente_id IN (${clientes.map(() => "?").join(",") || "NULL"})` : ""}`)
+    .all(...(clientes || []));
+  return filas.map((p) => ({ ...p, dia: p.venta_fecha || new Date(p.etapa_desde).toLocaleDateString("en-CA", { timeZone: zonaHoraria() }), redes: esDeRedes(p), origen_nombre: p.origen ? ORIGENES[p.origen] : null }))
+    .filter((p) => p.dia >= desde && p.dia <= hasta)
+    .sort((a, b) => b.dia.localeCompare(a.dia));
+}
+
 /** Embudo del periodo (un mes o un rango de fechas): de los prospectos que llegaron, cuántos llegaron a cada paso, y cuánto costó cada uno. */
 export function embudo({ cliente, mes, desde: d0, hasta: h0 } = {}) {
   const per = periodo({ mes, desde: d0, hasta: h0 });
@@ -391,6 +431,12 @@ export function embudo({ cliente, mes, desde: d0, hasta: h0 } = {}) {
     prospectos: total,
     citas: llego(2),
     ventas: ventas.length,
+    ventas_cerradas: (() => {
+      const l = ventasCerradas({ clientes: c ? [c.id] : null, desde: per.desde, hasta: per.hasta });
+      const r = l.filter((x) => x.redes);
+      return { redes: r.length, otras: l.length - r.length, valor_redes: dinero(r.reduce((s2, x) => s2 + (x.valor || 0), 0)),
+        lista: l.slice(0, 40).map((x) => ({ id: x.id, nombre: x.nombre, cliente: x.cliente, fecha: x.dia, origen: x.origen_nombre || (x.redes ? "Redes (sin confirmar)" : "Otro (sin confirmar)"), cuenta_como_redes: x.redes, valor: x.valor })) };
+    })(),
     valor_ventas: dinero(valor),
     ticket_promedio: ventas.filter((p) => p.valor).length ? dinero(valor / ventas.filter((p) => p.valor).length) : null,
     cierre_pct: pct(ventas.length, total),
