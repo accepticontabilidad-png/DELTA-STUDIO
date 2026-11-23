@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS crm_config (
   bienvenida TEXT                                -- texto del formulario
 );
 `);
+// Ventas que ya no están en "venta" (se corrigieron a mano antes de este arreglo) dejan de contar como venta.
+db.exec("UPDATE prospectos SET alcanzo = 3 WHERE alcanzo >= 4 AND etapa != 'venta'");
 // Para la utilidad del cliente: cuánto vale una venta en promedio (si no se anotó el monto) y su margen (%).
 for (const col of ["ticket REAL", "margen REAL"]) { try { db.exec(`ALTER TABLE crm_config ADD COLUMN ${col}`); } catch { /* ya existe */ } }
 try {
@@ -223,7 +225,9 @@ export function actualizarProspecto(id, cambios = {}) {
   if (e !== p.etapa) {
     poner("etapa", e);
     sets.push("etapa_desde = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
-    if (RANGO[e] !== undefined) poner("alcanzo", Math.max(p.alcanzo, RANGO[e]));
+    // Lo más lejos que llegó se conserva para el embudo, salvo la venta: si sale de "venta" es que no fue venta.
+    if (p.etapa === "venta" && e !== "venta") poner("alcanzo", RANGO[e] ?? Math.min(p.alcanzo, RANGO.asistio));
+    else if (RANGO[e] !== undefined) poner("alcanzo", Math.max(p.alcanzo, RANGO[e]));
     if (e !== "nuevo" && !p.primer_contacto) poner("primer_contacto", ahoraISO());
     evento(p.id, "etapa", `${p.etapa_nombre} → ${ETAPAS.find((x) => x.clave === e).nombre}${e === "perdido" && cambios.motivo_perdido ? ` (${cambios.motivo_perdido})` : ""}`);
   }

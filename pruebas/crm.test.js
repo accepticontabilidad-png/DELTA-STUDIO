@@ -51,7 +51,7 @@ test("mover por el embudo: cita, asistió, venta; primer contacto y lo más lejo
   assert.equal(x.alcanzo, 4);
   x = crm.moverProspecto(p.id, -1);
   assert.equal(x.etapa, "asistio");
-  assert.equal(x.alcanzo, 4); // ya había llegado a venta
+  assert.equal(x.alcanzo, 3); // si sale de venta, no fue venta (corrección)
   crm.actualizarProspecto(p.id, { etapa: "venta" });
   const f = crm.fichaProspecto(p.id);
   assert.ok(f.historial.some((e) => e.tipo === "nota" && /volvió a escribir/.test(e.texto)));

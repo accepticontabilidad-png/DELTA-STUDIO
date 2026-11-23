@@ -1850,7 +1850,7 @@ export function iniciarAgencia(h) {
         <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
         ${k.serie ? spark(k.serie) : ""}
       </div>`;
-    const ventasK = { nombre: "Total de venta", valor: crm.valor ? dinero(crm.valor) : String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}${hayAds && tot.gasto && crm.valor ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}`, ir: "venta" };
+    const ventasK = { nombre: "Ventas", valor: String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: crm.valor ? `total de venta ${dinero(crm.valor)}${hayAds && tot.gasto ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}` : `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}`, ir: "ventas-lista" };
     const sinResp = { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null };
     let tarjetas;
     if (hayAds) {
@@ -2116,8 +2116,14 @@ export function iniciarAgencia(h) {
       </div>
       ${!margenTodas && c.valor && puedeEditar && !editandoUtilidad && !falta ? `<p class="tenue chico crm-ut-nota">Es lo vendido menos los anuncios. Si pones el margen del cliente en <b>Ajustar</b>, DELTA descuenta también lo que le cuesta dar el servicio.</p>` : ""}
       ${!cfg && c.sin_monto ? `<p class="tenue chico crm-ut-nota">${c.sin_monto} venta${c.sin_monto === 1 ? "" : "s"} sin monto. Elige un cliente para poner cuánto vale una venta en promedio.</p>` : ""}
-      ${formulario}`;
+      ${formulario}
+      ${c.ventas ? `<details class="crm-ut-lista" id="crm-ut-lista" ${verVentas ? "open" : ""}><summary>Ver ${c.ventas === 1 ? "la venta" : `las ${c.ventas} ventas`} de estas fechas</summary>
+        <p class="tenue chico">Toca a alguien para abrir su ficha. Si no compró, cámbialo de etapa y deja de contar como venta.</p>
+        <ul>${(D.pros || []).filter((p) => p.alcanzo >= 4).sort((a, b) => b.dia.localeCompare(a.dia)).map((p) => `<li><button type="button" data-prospecto="${p.id}"><b>${esc(p.nombre || "Sin nombre")}</b><span class="tenue">${esc(p.dia.split("-").reverse().slice(0, 2).join("/"))} · ${esc(ultimaCrm.fuentes[p.fuente] || p.fuente)}${p.campana ? ` · ${esc(p.campana)}` : ""}</span><span class="crm-ut-monto">${p.valor ? dinero(p.valor) : p.ticket ? `${dinero(p.ticket)} <small class="tenue">promedio</small>` : `<small class="tenue">sin monto</small>`}</span></button></li>`).join("")}</ul>
+      </details>` : ""}`;
   }
+  let verVentas = false;
+  $("#crm-utilidad").addEventListener("toggle", (e) => { if (e.target.id === "crm-ut-lista") verVentas = e.target.open; }, true);
   $("#crm-utilidad").addEventListener("click", (e) => {
     if (e.target.closest("#crm-ut-ajustar")) { editandoUtilidad = true; pintarReporte(); setTimeout(() => $("#crm-ut-ticket")?.focus(), 30); }
     if (e.target.closest("#crm-ut-cancelar")) { editandoUtilidad = false; pintarReporte(); }
@@ -2566,6 +2572,11 @@ export function iniciarAgencia(h) {
     const ir = e.target.closest("[data-crm-ir]");
     if (ir) {
       if (ir.dataset.crmIr === "hoy") return void $("#crm-hoy").scrollIntoView({ behavior: "smooth", block: "center" });
+      if (ir.dataset.crmIr === "ventas-lista") {
+        const l = $("#crm-ut-lista");
+        if (l) { l.open = true; verVentas = true; return void l.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        ir.dataset.crmIr = "venta";
+      }
       seccionCrm.querySelector(`[data-crm-tab="${ir.dataset.crmIr}"]`)?.click();
       return void seccionCrm.querySelector(`.crm-col[data-crm-etapa="${ir.dataset.crmIr}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
