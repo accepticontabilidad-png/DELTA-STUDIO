@@ -208,12 +208,16 @@ enum Acciones {
         return (app.localizedName ?? "").lowercased().hasPrefix("delta")
     }
 
-    static func darToqueADelta(esperarQueAparezca: Bool = true) {
+    static func darToqueADelta(esperarQueAparezca: Bool = true, agrandar: Bool = false) {
         guard Permisos.accesibilidad(preguntar: false) else { return }
         Task { @MainActor in
             for _ in 0..<(esperarQueAparezca ? 30 : 1) {
                 if esDelta(NSWorkspace.shared.frontmostApplication) {
                     let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                    if agrandar, let pid {
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        agrandarVentana(pid: pid)
+                    }
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // que la página termine de cargar
                     guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
                     let fuente = CGEventSource(stateID: .combinedSessionState)
@@ -225,6 +229,30 @@ enum Acciones {
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
         }
+    }
+
+    /// Pone la ventana de DELTA a pantalla completa (todo el espacio, dejando la barra de arriba y el Dock).
+    static func agrandarVentana(pid: pid_t) {
+        let app = AXUIElementCreateApplication(pid)
+        var valor: CFTypeRef?
+        var ventana: AXUIElement?
+        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &valor) == .success, let v = valor {
+            ventana = (v as! AXUIElement)
+        } else if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &valor) == .success, let lista = valor as? [AXUIElement] {
+            ventana = lista.first
+        }
+        guard let ventana else { Registro.anotar("No encontré la ventana de DELTA para agrandarla"); return }
+        let raton = NSEvent.mouseLocation
+        guard let pantalla = NSScreen.screens.first(where: { NSMouseInRect(raton, $0.frame, false) }) ?? NSScreen.main,
+              let principal = NSScreen.screens.first else { return }
+        let marco = pantalla.visibleFrame
+        // Las coordenadas de Accesibilidad empiezan arriba a la izquierda de la pantalla principal.
+        var punto = CGPoint(x: marco.origin.x, y: principal.frame.height - marco.origin.y - marco.height)
+        var tam = CGSize(width: marco.width, height: marco.height)
+        if let p = AXValueCreate(.cgPoint, &punto) { AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p) }
+        if let t = AXValueCreate(.cgSize, &tam) { AXUIElementSetAttributeValue(ventana, kAXSizeAttribute as CFString, t) }
+        // Algunas ventanas solo aceptan el tamaño después de moverlas: se repite una vez.
+        if let p = AXValueCreate(.cgPoint, &punto) { AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p) }
     }
 
     // MARK: Apps
