@@ -176,7 +176,7 @@ function conMac(fn) {
 }
 app.get("/mac/ordenes", conMac(async (m, req, res) => {
   let cerrada = false;
-  req.on("close", () => { cerrada = true; });
+  res.on("close", () => { if (!res.writableEnded) cerrada = true; });
   const ordenes = await mac.esperarOrdenes(m, { version: req.get("x-delta-mac-version") });
   // Si la Mac colgó mientras esperaba, la orden vuelve a la fila para la próxima vez.
   if (cerrada && ordenes.length) { mac.devolver(ordenes); return { ordenes: [] }; }

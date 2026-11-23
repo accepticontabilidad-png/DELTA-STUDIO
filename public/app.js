@@ -2295,7 +2295,6 @@ function despertarPorChasquido() {
   ultimoChasquido = Date.now();
   if (ocupado) return;
   sinPalabraClave = true; // tras el chasquido no hace falta decir "Delta…"
-  sonar("escuchar");
   orbe.pulso();
   if (!escuchando) escuchar();
 }
