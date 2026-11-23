@@ -88,7 +88,9 @@ export const ORIGENES = { anuncio: "Anuncio", redes: "Redes sociales", recomenda
 const REDES = new Set(["anuncios", "instagram", "facebook", "whatsapp"]);
 /** ¿Esta venta cuenta como venta de redes/anuncios? Si DELTA o el dueño ya dijeron de dónde salió, manda eso. */
 export function esDeRedes(p) {
-  if (p.origen) return p.origen === "anuncio" || p.origen === "redes";
+  // Solo la recomendación o quien ya era cliente quedan fuera; "otro" en un chat de redes sigue siendo de redes.
+  if (p.origen === "anuncio" || p.origen === "redes") return true;
+  if (p.origen === "recomendado" || p.origen === "cliente") return false;
   return !!p.campana || REDES.has(p.fuente);
 }
 function origenValido(x) {

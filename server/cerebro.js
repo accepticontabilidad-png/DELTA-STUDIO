@@ -949,7 +949,7 @@ herramientasBase.push(
       type: "object",
       properties: {
         prospecto: { type: "string", description: "Nombre o teléfono (o el id de la lista de ventas)" }, id: { type: "integer", description: "id del prospecto, si lo tienes de la lista de ventas" }, cliente: { type: "string" },
-        origen: { type: "string", enum: ["anuncio", "redes", "recomendado", "cliente", "otro"], description: "De dónde salió: anuncio o redes cuentan como venta de redes; recomendado, cliente (ya era cliente) u otro no" },
+        origen: { type: "string", enum: ["anuncio", "redes", "recomendado", "cliente", "otro"], description: "De dónde salió: recomendado o cliente (ya era cliente) NO cuentan como venta de redes; anuncio, redes u otro sí (si llegó por chat de redes)" },
         venta_fecha: { type: "string", description: "AAAA-MM-DD: día en que compró" },
         etapa: { type: "string" }, cita: { type: "string", description: "AAAA-MM-DDTHH:MM hora local" }, valor: { type: "number" },
         motivo_perdido: { type: "string" }, interes: { type: "string" }, nota: { type: "string" },
