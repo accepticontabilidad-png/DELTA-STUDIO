@@ -1892,7 +1892,7 @@ export function iniciarAgencia(h) {
 
     // Embudo
     const pasos = hayAds
-      ? [["Impresiones", tot.impresiones], ["Clics al enlace", tot.clics_enlace], ["Mensajes y registros", resultadosDe(tot)], ["Prospectos en el CRM", crm.prospectos], ["Citas agendadas", crm.citas], ["Ventas", crm.ventas]]
+      ? [["Impresiones", tot.impresiones], ["Clics al enlace", tot.clics_enlace], ["Mensajes y registros", resultadosDe(tot)], ["Prospectos (CRM)", crm.prospectos], ["Citas agendadas", crm.citas], ["Ventas", crm.ventas]]
       : [["Prospectos", crm.prospectos], ["Contactados", crm.contactados], ["Citas agendadas", crm.citas], ["Asistieron", crm.asistieron], ["Ventas", crm.ventas]];
     $("#crm-trafico").innerHTML = pasos[0][1] ? embudoSvg(pasos) : `<p class="ct-vacia">${cargando ? "Cargando…" : "Cuando lleguen prospectos en estas fechas vas a ver aquí cuántos pasan de un paso al siguiente."}</p>`;
 
@@ -1919,18 +1919,56 @@ export function iniciarAgencia(h) {
     medidas($('[data-seccion="crm"]'));
   }
 
+  // Embudo en 3D: cono con aros por nivel, brillo, etiquetas al lado con línea guía y resumen abajo.
   function embudoSvg(pasos) {
-    const W = 320, H = 52, n = pasos.length, ancho = (i) => W * (1 - (i / n) * 0.62);
-    const partes = pasos.map(([nombre, v], i) => {
-      const y = i * H, wt = ancho(i), wb = ancho(i + 1);
-      const pct = i && pasos[i - 1][1] ? (v / pasos[i - 1][1]) * 100 : null;
-      const pctTxt = pct === null ? "" : ` · ${pct < 10 ? pct.toLocaleString("es-MX", { maximumFractionDigits: 1 }) : Math.round(pct)} %`;
-      return `<g class="crm-f f${i}"><title>${esc(nombre)}: ${enteroCrm(v)}${pctTxt ? ` (${pctTxt.slice(3)} del paso anterior)` : ""}</title>
-        <path d="M${(W - wt) / 2},${y} L${(W + wt) / 2},${y} L${(W + wb) / 2},${y + H - 4} L${(W - wb) / 2},${y + H - 4} Z"/>
-        <text x="${W / 2}" y="${y + 22}" class="crm-f-num">${v >= 100000 ? cifra(v) : enteroCrm(v)}</text>
-        <text x="${W / 2}" y="${y + 38}" class="crm-f-nom">${esc(nombre)}${pctTxt}</text></g>`;
+    const n = pasos.length, H = 52, arriba = 22, cx = 110, wTop = 104, wBot = 26, W = 412;
+    const ancho = (t) => wBot + (wTop - wBot) * Math.pow(1 - t, 1.5);
+    const yDe = (t) => arriba + t * n * H;
+    const ry = (w) => Math.max(4, w * 0.16);
+    const f = (x) => x.toFixed(1);
+    // Orilla del cono entre t0 y t1 (la última punta sube 3 px para dejar ver el aro).
+    const lado = (t0, t1, signo) => {
+      const pts = [];
+      for (let k = 0; k <= 8; k++) { const t = t0 + ((t1 - t0) * k) / 8; pts.push(`${f(cx + signo * ancho(t))},${f(yDe(t) - (k === 8 ? 3 : 0))}`); }
+      return pts;
+    };
+    const pct = (i) => (i && pasos[i - 1][1] ? (pasos[i][1] / pasos[i - 1][1]) * 100 : null);
+    const pctTxt = (p) => (p === null ? "" : `${p && p < 0.1 ? p.toLocaleString("es-MX", { maximumSignificantDigits: 2 }) : p < 10 ? p.toLocaleString("es-MX", { maximumFractionDigits: 1 }) : Math.round(p)} %`);
+    const bandas = pasos.map(([nombre, v], i) => {
+      const t0 = i / n, t1 = (i + 1) / n, w0 = ancho(t0), w1 = ancho(t1), y0 = yDe(t0), y1 = yDe(t1) - 3;
+      const izq = lado(t0, t1, -1), der = lado(t0, t1, 1).reverse();
+      const d = `M${izq.join(" L")} A${f(w1)},${f(ry(w1))} 0 0 0 ${der[0]} L${der.slice(1).join(" L")} A${f(w0)},${f(ry(w0))} 0 0 1 ${f(cx - w0)},${f(y0)} Z`;
+      const ym = (y0 + y1) / 2 + ry(w0) / 2, xr = cx + ancho((t0 + t1) / 2);
+      const p = pct(i);
+      return `<g class="crm-f f${i}"><title>${esc(nombre)}: ${enteroCrm(v)}${p === null ? "" : ` (${pctTxt(p)} del paso anterior)`}</title>
+        <path d="${d}" class="crm-f-cuerpo"/><path d="${d}" fill="url(#crmEmbSombra)"/>
+        <path d="M${f(cx - w1)},${f(y1)} A${f(w1)},${f(ry(w1))} 0 0 0 ${f(cx + w1)},${f(y1)}" class="crm-f-aro"/>
+        <text x="${cx}" y="${f(ym + 6)}" class="crm-f-num">${v >= 10000 ? cifra(v) : enteroCrm(v)}</text>
+        <path d="M${f(xr + 4)},${f(ym)} L${W - 160},${f(ym)}" class="crm-f-guia"/><circle cx="${f(xr + 4)}" cy="${f(ym)}" r="2.2" class="crm-f-punto"/>
+        <text x="${W - 154}" y="${f(ym - 3)}" class="crm-f-nom">${esc(nombre)}</text>
+        <text x="${W - 154}" y="${f(ym + 14)}" class="crm-f-pct">${p === null ? "inicio" : `${pctTxt(p)} pasa`}</text></g>`;
     }).join("");
-    return `<svg viewBox="0 0 ${W} ${n * H}" class="crm-embudo-svg" role="img" aria-label="Embudo: ${esc(pasos.map(([k, v]) => `${k} ${v}`).join(", "))}">${partes}</svg>`;
+    const r0 = ry(wTop);
+    const borde = `<ellipse cx="${cx}" cy="${arriba}" rx="${wTop}" ry="${f(r0)}" class="crm-f-boca"/><ellipse cx="${cx}" cy="${f(arriba + 1.5)}" rx="${wTop - 10}" ry="${f(r0 - 3.5)}" class="crm-f-hueco"/>`;
+    const brillo = `<path d="M${f(cx + wTop * 0.42)},${f(arriba + r0)} C${f(cx + wTop * 0.3)},${f(arriba + n * H * 0.45)} ${f(cx + wBot * 0.55)},${f(arriba + n * H * 0.8)} ${f(cx + wBot * 0.45)},${f(arriba + n * H - 4)}" class="crm-f-brillo"/>`;
+    const alto = arriba + n * H + ry(wBot) + 6;
+    const svg = `<svg viewBox="0 0 ${W} ${f(alto)}" class="crm-embudo-svg" role="img" aria-label="Embudo: ${esc(pasos.map(([k, v]) => `${k} ${v}`).join(", "))}">
+      <defs><linearGradient id="crmEmbSombra" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".38"/><stop offset=".28" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#fff" stop-opacity=".14"/><stop offset=".78" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".42"/></linearGradient></defs>
+      ${bandas}${borde}${brillo}</svg>`;
+    // Resumen abajo: conversión total, el paso que mejor convierte y donde más se pierde.
+    const tasas = pasos.map((_, i) => ({ i, p: pct(i) })).filter((x) => x.p !== null && pasos[x.i - 1][1]);
+    // Con anuncios, "de principio a fin" se mide desde que llega al CRM (de impresiones a venta sale un número diminuto).
+    const ini = Math.max(0, pasos.findIndex(([k]) => k.startsWith("Prospectos")));
+    const total = pasos[ini][1] ? (pasos[n - 1][1] / pasos[ini][1]) * 100 : null;
+    const mejor = tasas.length ? tasas.reduce((a, b) => (b.p > a.p ? b : a)) : null;
+    const peor = tasas.length ? tasas.reduce((a, b) => (b.p < a.p ? b : a)) : null;
+    const tarjeta = (titulo, valor, pie, clase = "") => `<div class="crm-emb-res ${clase}"><small>${titulo}</small><b>${valor}</b><span>${pie}</span></div>`;
+    const resumen = `<div class="crm-emb-resumen">
+      ${tarjeta(ini ? "De prospecto a venta" : "De principio a fin", total === null ? "—" : pctTxt(total), `${esc(pasos[ini][0])} → ${esc(pasos[n - 1][0])}`)}
+      ${mejor ? tarjeta("Mejor paso", pctTxt(mejor.p), `${esc(pasos[mejor.i - 1][0])} → ${esc(pasos[mejor.i][0])}`, "bien") : ""}
+      ${peor && peor !== mejor ? tarjeta("Donde más se pierde", pctTxt(peor.p), `${esc(pasos[peor.i - 1][0])} → ${esc(pasos[peor.i][0])}`, "ojo") : ""}
+    </div>`;
+    return svg + resumen;
   }
 
   function lineasSvg(cub, A, B, nombres, hayAds) {
