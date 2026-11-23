@@ -6,6 +6,7 @@
 // - Por defecto se piden DOS seguidos (entre 0.12 y 1 s de separación), con un poco de silencio
 //   antes y después, para que no se dispare al teclear. Se puede pedir uno solo.
 import AVFoundation
+import QuartzCore
 
 final class Chasquidos: @unchecked Sendable {
     var alDetectar: (@MainActor () -> Void)?
@@ -19,6 +20,11 @@ final class Chasquidos: @unchecked Sendable {
     private(set) var llamados = 0
     private(set) var ultimoDescarte = ""
     private(set) var errorMicro = ""
+
+    /// Hora de la última tecla o clic (el teclado y el trackpad suenan parecido a un chasquido).
+    private var ultimaTecla: CFTimeInterval = 0
+    func marcarTecla() { ultimaTecla = CACurrentMediaTime() }
+    private var tecleandoHace: CFTimeInterval { CACurrentMediaTime() - ultimaTecla }
 
     private let motor = AVAudioEngine()
     private var observador: NSObjectProtocol?
@@ -167,6 +173,12 @@ final class Chasquidos: @unchecked Sendable {
     }
 
     private func disparar() {
+        // Si usted tecleó o hizo clic durante los chasquidos, eran teclas: no se llama a DELTA.
+        if tecleandoHace < 2.0 {
+            ultimoDescarte = "Eran teclas o clics, no chasquidos."
+            Registro.anotar("Descartado: hubo teclas o clics")
+            return
+        }
         enfriarHasta = t + 2.5
         llamados += 1
         ultimoDescarte = ""
@@ -184,6 +196,11 @@ final class Chasquidos: @unchecked Sendable {
 
     private func golpe(en tg: Double) {
         if tg < enfriarHasta { ultimoSonido = tg; return }
+        if tecleandoHace < 0.8 { // fue una tecla o un clic
+            ruido(en: tg)
+            ultimoDescarte = "Eran teclas o clics, no chasquidos."
+            return
+        }
         golpes = golpes.filter { tg - $0 < 1.2 }
         if golpes.isEmpty { silencioAntesDelPrimero = tg - ultimoSonido }
         ultimoSonido = tg

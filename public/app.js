@@ -2290,11 +2290,19 @@ $("#aj-mac-control").addEventListener("change", async (e) => {
 
 // Dos chasquidos en la Mac: DELTA se pone a escuchar (si la pantalla está abierta, o al abrirse por eso).
 let ultimoChasquido = 0;
+// Cuándo pasó DELTA al frente por última vez (si acaba de pasar, es que el chasquido la trajo).
+let ultimaVezAlFrente = 0;
+addEventListener("focus", () => { ultimaVezAlFrente = Date.now(); });
 // Con la pantalla ya abierta: la bienvenida completa (animación y sonido) y luego DELTA escucha.
 function despertarPorChasquido() {
   if (Date.now() - ultimoChasquido < 3000) return;
   ultimoChasquido = Date.now();
   if (ocupado || !$("#arranque").hidden) return;
+  // Si DELTA ya estaba al frente, no se repite la bienvenida: solo se pone a escuchar.
+  if (document.hasFocus() && !document.hidden && Date.now() - ultimaVezAlFrente > 4000) {
+    sonar("escuchar");
+    return escucharTrasChasquido();
+  }
   if (escuchando) reconocedor?.stop();
   arranque(true, true).then(() => setTimeout(escucharTrasChasquido, 300));
 }

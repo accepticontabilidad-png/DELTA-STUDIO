@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.5"
+let VERSION = "1.6"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
@@ -60,6 +60,17 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pintar()
 
         chasquidos.alDetectar = { [weak self] in self?.alChasquear() }
+        // Teclas y clics (en cualquier app) para no confundirlos con chasquidos. Solo se anota la hora,
+        // nunca qué tecla fue. La F13 que DELTA Mac presiona sola no cuenta.
+        let ch = chasquidos
+        NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .flagsChanged]) { e in
+            if e.type == .keyDown && e.keyCode == 105 { return }
+            ch.marcarTecla()
+        }
+        NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { e in
+            ch.marcarTecla()
+            return e
+        }
         prepararMicro()
 
         conexion.alCambiar = { [weak self] e in self?.estado = e }
