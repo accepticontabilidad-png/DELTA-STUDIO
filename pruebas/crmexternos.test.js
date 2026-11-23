@@ -130,3 +130,43 @@ test("Pancake: conversaciones del mes como prospectos; una llave mala no se guar
   ext._fetchDePrueba(null);
   assert.ok(db);
 });
+
+test("Pancake: etiquetas dan la etapa y DELTA lee los chats para acomodar ventas y perdidos", async () => {
+  agencia.crearCliente({ nombre: "Chirey" });
+  const conv = (id, nombre, extra = {}) => ({ id, type: "INBOX", inserted_at: hace(3).toISOString(), updated_at: hace(1).toISOString(), message_count: 12,
+    customers: [{ name: nombre, fb_id: `wa_52122233${String(id).slice(-5).padStart(5, "0")}` }], from: { id: `wa_${id}` }, last_sent_by: { id: `wa_${id}` }, ...extra });
+  ext._fetchDePrueba(async (url) => {
+    if (/\/tags\?/.test(url)) return { tags: [{ id: 1, text: "PERFILAMIENTO" }, { id: 2, text: "APROBADO" }, { id: 3, text: "VENTA" }] };
+    return { success: true, total: 4, conversations: [
+      conv("waba_1_11111", "Jorge Antonio", { tags: [3] }),
+      conv("waba_1_22222", "Miguel Ángel"),
+      conv("waba_1_33333", "Mafer"),
+      conv("waba_1_44444", "Gerardo", { tags: [1, 2], message_count: 2 }),
+    ] };
+  });
+  ext._chatsDePrueba(async (c) => `Cliente: hola\nNegocio: ${c}`);
+  const leidos = [];
+  ext._iaDePrueba(async (p, chat) => {
+    leidos.push(p.nombre);
+    if (/22222/.test(chat)) return { etapa: "venta", valor: 316450, interes: "Jaecco 7", resumen: "Pagó placas, cita de entrega" };
+    if (/33333/.test(chat)) return { etapa: "perdido", motivo: "Rechazada por buró", resumen: "No pasó buró" };
+    return { etapa: "contactado", resumen: "Sigue en trámite" };
+  });
+  const r = await ext.conectarFuente({ cliente: "Chirey", tipo: "pancake", cuenta: "waba_1", token: "tok-chirey-12345" });
+  assert.equal(r.nuevos, 4);
+  assert.equal(crm.buscarProspecto({ nombre: "Jorge Antonio" }).etapa, "venta", "etiqueta VENTA");
+  assert.equal(crm.buscarProspecto({ nombre: "Gerardo" }).etapa, "cita", "etiqueta APROBADO");
+  const l = await ext.leerChats(r.id);
+  assert.equal(l.leidos, 2, "no relee ventas ni chats de pocos mensajes");
+  assert.deepEqual(leidos.sort(), ["Mafer", "Miguel Ángel"]);
+  const miguel = crm.buscarProspecto({ nombre: "Miguel Ángel" });
+  assert.equal(miguel.etapa, "venta");
+  assert.equal(miguel.valor, 316450);
+  assert.match(crm.fichaProspecto(miguel.id).historial.at(-1).texto, /DELTA leyó el chat: Pagó placas/);
+  const mafer = crm.buscarProspecto({ nombre: "Mafer" });
+  assert.equal(mafer.etapa, "perdido");
+  assert.equal(mafer.motivo_perdido, "Rechazada por buró");
+  // Sin cambios en Pancake, no se vuelve a leer (no se gasta de más)
+  assert.equal((await ext.leerChats(r.id)).leidos, 0);
+  ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
+});

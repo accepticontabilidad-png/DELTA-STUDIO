@@ -1973,11 +1973,19 @@ export function iniciarAgencia(h) {
     const r = await api(`/crm/fuentes?cliente=${encodeURIComponent(clienteCrm)}`).catch(() => ({ fuentes: [] }));
     $("#crm-ext-lista").innerHTML = r.fuentes.map((f) => `<li class="crm-fuente-fila">
         <span><b>${esc(f.nombre)}</b> <small class="tenue">${esc(f.cuenta)} · llave ${esc(f.token_final || "")}</small><br>
-        <small class="${f.error ? "t-rojo" : "tenue"}">${f.error ? esc(f.error) : f.ultimo ? `Última vez ${haceRato(f.ultimo)}${f.resultado ? ` · ${f.resultado.nuevos} nuevo${f.resultado.nuevos === 1 ? "" : "s"}` : ""}` : "Conectado"}</small></span>
-        <span class="crm-link-botones"><button type="button" data-ext-sinc="${f.id}">Traer ahora</button><button type="button" class="peligro" data-ext-quitar="${f.id}">Quitar</button></span>
+        <small class="${f.error ? "t-rojo" : "tenue"}">${f.error ? esc(f.error) : f.ultimo ? `Última vez ${haceRato(f.ultimo)}${f.resultado ? ` · ${f.resultado.nuevos} nuevo${f.resultado.nuevos === 1 ? "" : "s"}` : ""}` : "Conectado"}</small>
+        ${f.tipo === "pancake" ? `<br><small class="tenue">${f.resultado?.chats ? `DELTA leyó ${f.resultado.chats.leidos} chat${f.resultado.chats.leidos === 1 ? "" : "s"} ${haceRato(f.resultado.chats.fecha)}: ${f.resultado.chats.movidos} acomodados (${f.resultado.chats.ventas} venta${f.resultado.chats.ventas === 1 ? "" : "s"}, ${f.resultado.chats.perdidos} perdido${f.resultado.chats.perdidos === 1 ? "" : "s"})${f.resultado.chats.pendientes ? ` · faltan ${f.resultado.chats.pendientes}` : ""}` : "DELTA lee los chats y acomoda a cada quien en su etapa."}</small>` : ""}</span>
+        <span class="crm-link-botones"><button type="button" data-ext-sinc="${f.id}">Traer ahora</button>${f.tipo === "pancake" ? `<button type="button" data-ext-leer="${f.id}">Leer chats</button>` : ""}<button type="button" class="peligro" data-ext-quitar="${f.id}">Quitar</button></span>
       </li>`).join("") || `<li class="tenue chico">Ninguno conectado todavía.</li>`;
   }
   $("#crm-ext-lista").addEventListener("click", async (e) => {
+    const l = e.target.closest("[data-ext-leer]");
+    if (l) {
+      l.disabled = true; l.textContent = "Leyendo…";
+      try { await api(`/crm/fuentes/${l.dataset.extLeer}/leer`, { method: "POST" }); avisar("DELTA está leyendo los chats. En unos minutos verás a cada quien en su etapa (ventas, citas, perdidos)."); }
+      catch (err) { avisar(err.message); l.disabled = false; l.textContent = "Leer chats"; }
+      return;
+    }
     const s = e.target.closest("[data-ext-sinc]"), q = e.target.closest("[data-ext-quitar]");
     if (!s && !q) return;
     const b = s || q;
