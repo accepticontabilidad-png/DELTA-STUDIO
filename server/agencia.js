@@ -1,5 +1,6 @@
 // La agencia: clientes, proyectos, trabajos de los departamentos y aprobaciones.
 import { db } from "./db.js";
+import { puedeVerCliente } from "./alcance.js";
 import { localAUTC, ahoraLocalISO } from "./tiempo.js";
 import { deltaScore } from "./score.js";
 import { estadoContenido } from "./contenido.js";
@@ -28,7 +29,8 @@ export function crearCliente(datos) {
 const numero = (x) => (x === undefined || x === null || x === "" ? null : Number(x));
 
 export function obtenerCliente(id) {
-  return db.prepare("SELECT * FROM clientes WHERE id = ?").get(Number(id));
+  const c = db.prepare("SELECT * FROM clientes WHERE id = ?").get(Number(id));
+  return c && puedeVerCliente(c.id) ? c : undefined; // alguien del equipo solo ve sus clientes
 }
 
 /** Busca por id o por nombre (exacto o parecido). */
@@ -36,8 +38,9 @@ export function buscarCliente(clave, exacto = false) {
   if (clave === undefined || clave === null || clave === "") return null;
   if (/^\d+$/.test(String(clave))) return obtenerCliente(clave);
   const t = String(clave).trim();
-  return db.prepare("SELECT * FROM clientes WHERE lower(nombre) = lower(?)").get(t)
+  const c = db.prepare("SELECT * FROM clientes WHERE lower(nombre) = lower(?)").get(t)
     || (exacto ? null : db.prepare("SELECT * FROM clientes WHERE nombre LIKE ? ORDER BY length(nombre) LIMIT 1").get(`%${t}%`));
+  return c && puedeVerCliente(c.id) ? c : null;
 }
 
 export function clienteRequerido(clave) {
@@ -51,7 +54,7 @@ export function listarClientes({ estado } = {}) {
     ? db.prepare("SELECT * FROM clientes WHERE estado = ? ORDER BY nombre").all(estado)
     : db.prepare("SELECT * FROM clientes ORDER BY estado = 'activo' DESC, nombre").all();
   const abiertos = db.prepare("SELECT COUNT(*) n FROM proyectos WHERE cliente_id = ? AND estado NOT IN ('entregado','cancelado')");
-  return filas.map((c) => ({ ...c, proyectos_abiertos: abiertos.get(c.id).n }));
+  return filas.filter((c) => puedeVerCliente(c.id)).map((c) => ({ ...c, proyectos_abiertos: abiertos.get(c.id).n }));
 }
 
 export function actualizarCliente(clave, cambios) {

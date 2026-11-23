@@ -88,6 +88,7 @@ La agencia (eres su directora):
 - Contenido por etapas (pantalla Contenido): cada pieza de cada cliente (reel, carrusel, post, historia…) pasa por planeado → por grabar → en edición → esperando al cliente → aprobado → publicado. "Atrasada" = no publicada y ya pasó su fecha. Usa contenido_agencia para "cómo va el contenido", crear_contenido para agregar piezas y mover_contenido cuando digan "ya grabamos el reel de Kardia", "se lo mandé al cliente", "ya lo aprobó", "ya salió" o cambien la fecha. Una pieza atrasada pone al cliente en amarillo (rojo con más de 3 días) y baja su Delta Score; esperar al cliente 2 días o más también resta.
 - Tendencias (pantalla Tendencias): por cliente, lo que está funcionando en su nicho (publicaciones de sus cuentas de Instagram de referencia muy por encima de su promedio), las búsquedas de Google de hoy que tocan su tema y noticias de la semana, más ideas listas (gancho, formato, pasos). Cada lunes temprano se buscan solas. Para "qué está de moda", "dame ideas para Kardia" usa tendencias_cliente; si no hay o son viejas, buscar_tendencias. Para configurar su nicho o sus cuentas de referencia, configurar_tendencias. Para "pásala a contenido" usa usar_idea. Instagram solo deja ver cuentas de empresa o creador.
 - SEO y web (pantalla SEO y web): DELTA revisa el sitio de cada cliente cada lunes (títulos, descripciones, encabezados, imágenes sin texto, si Google lo puede ver, sitemap y velocidad en celular) y avisa si un sitio no abre. Si Google está conectado para SEO, también ve visitas (Analytics) y clics y posición en Google (Search Console). Para "cómo va la web de Kardia" usa seo_cliente y empieza por lo rojo y las oportunidades "casi en primera página"; para revisar ya, revisar_sitio; para anotar su sitio, configurar_seo. Explica sin tecnicismos ("posición promedio en Google", no "avg position"). Solo lees: no cambias el sitio.
+- Equipo (pantalla Equipo): personas que trabajan con el dueño y entran a DELTA con su propio usuario. Solo ven las secciones y clientes que él les permite, sus tareas y nada personal (ni a ti, ni agenda, correo, bolsa, finanzas o ajustes). Para "ponle a Sofi que…", "pídele a Sofi…" usa crear_tarea con para. Dar o quitar accesos y permisos se hace en la pantalla Equipo (abrir_seccion "equipo"); tú no creas usuarios ni claves.
 - CRM y embudo (pantalla CRM): los prospectos de cada cliente (pacientes potenciales) y su embudo: nuevo → contactado → cita agendada → asistió → venta (o perdido). Llegan a mano, por el formulario público de cada cliente o por el WhatsApp del cliente si está conectado. Para "cómo va el embudo", "cuántas citas", "quién no ha recibido respuesta" usa crm_agencia y empieza por los que llevan más de un día sin respuesta. Cuando digan "entró un prospecto", usa crear_prospecto; "ya agendó", "ya vino", "compró 12 mil", "no le interesó", usa actualizar_prospecto. Para escribirle a un prospecto usa borrador_whatsapp: NUNCA envías mensajes; queda como borrador y el dueño lo manda desde CRM. Di "prospectos" o "pacientes potenciales", no "leads".
 - Paid media (pantalla Paid media): inversión en anuncios de cada cliente, contactos (mensajes + prospectos), costo por contacto, ventas y retorno (ROAS: pesos vendidos por cada peso invertido; 3 o más es bueno, menos de 1 pierde dinero). Los números de campañas vienen de Meta; lo que el cliente reporta (prospectos, ventas, cuánto vendió) se anota con registrar_resultados_anuncios y manda sobre Meta. Para "cómo van los anuncios", "qué campaña no sirve" o "cuánto le cuesta cada cliente" usa paid_media y empieza por los avisos rojos (campañas gastando sin resultados). Explica en palabras sencillas: "costo por contacto", no "CPL". Solo lees: no puedes apagar ni cambiar campañas; recomienda qué hacer y el dueño lo hace en Meta.
 - Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
@@ -140,11 +141,12 @@ const HORA = { type: "string", description: "Hora local del usuario, formato AAA
 const herramientasBase = [
   betaTool({
     name: "crear_tarea",
-    description: "Crea una tarea pendiente.",
+    description: "Crea una tarea pendiente. Con 'para' se le asigna a alguien del equipo (la verá al entrar con su usuario).",
     inputSchema: {
       type: "object",
       properties: {
         titulo: { type: "string" },
+        para: { type: "string", description: "Nombre o usuario de la persona del equipo a quien se le asigna. Omitir si es para el dueño." },
         notas: { type: "string" },
         cliente: { type: "string", description: "Cliente de la agencia relacionado, si aplica" },
         prioridad: { type: "string", enum: ["baja", "normal", "alta"] },
@@ -181,6 +183,7 @@ const herramientasBase = [
         prioridad: { type: "string", enum: ["baja", "normal", "alta"] },
         fecha_limite: HORA,
         estado: { type: "string", enum: ["pendiente", "hecha"] },
+        para: { type: "string", description: "Reasignarla a alguien del equipo por nombre; 'yo' la regresa al dueño." },
       },
       required: ["id"],
       additionalProperties: false,
@@ -979,7 +982,7 @@ herramientasBase.push(
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "contenido", "tendencias", "seo", "crm", "analitica", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "contenido", "tendencias", "seo", "crm", "equipo", "analitica", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },

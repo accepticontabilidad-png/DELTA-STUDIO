@@ -7,25 +7,41 @@ const PRIORIDADES = ["baja", "normal", "alta"];
 const REPETIR = ["no", "diario", "semanal", "mensual"];
 
 // ---------- Tareas ----------
-export function crearTarea({ titulo, notas, cliente, prioridad = "normal", fecha_limite }) {
+/** Para quién es la tarea: id o nombre/usuario de alguien del equipo. null = del dueño. */
+export function personaDeEquipo(para) {
+  if (para === undefined || para === null || para === "" || /^(yo|m[ií]|due[nñ]o)$/i.test(String(para).trim())) return null;
+  const t = String(para).trim();
+  const u = /^\d+$/.test(t)
+    ? db.prepare("SELECT id, nombre FROM usuarios WHERE id = ? AND activo = 1").get(Number(t))
+    : db.prepare("SELECT id, nombre FROM usuarios WHERE activo = 1 AND (lower(usuario) = lower(?) OR lower(nombre) = lower(?) OR lower(nombre) LIKE lower(?)) ORDER BY id LIMIT 1").get(t, t, `${t}%`);
+  if (!u) throw new Error(`No encuentro a "${para}" en tu equipo`);
+  return u;
+}
+
+export function crearTarea({ titulo, notas, cliente, prioridad = "normal", fecha_limite, para, asignada_a }) {
   if (!titulo?.trim()) throw new Error("La tarea necesita un título");
   if (!PRIORIDADES.includes(prioridad)) prioridad = "normal";
+  const persona = personaDeEquipo(asignada_a ?? para);
   const r = db
-    .prepare("INSERT INTO tareas (titulo, notas, cliente, prioridad, fecha_limite) VALUES (?, ?, ?, ?, ?)")
-    .run(titulo.trim(), notas || null, cliente || null, prioridad, fecha_limite ? localAUTC(fecha_limite) : null);
+    .prepare("INSERT INTO tareas (titulo, notas, cliente, prioridad, fecha_limite, asignada_a) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(titulo.trim(), notas || null, cliente || null, prioridad, fecha_limite ? localAUTC(fecha_limite) : null, persona?.id ?? null);
   return obtenerTarea(Number(r.lastInsertRowid));
 }
 
+const SELECT_TAREA = "SELECT t.*, u.nombre AS asignada_nombre FROM tareas t LEFT JOIN usuarios u ON u.id = t.asignada_a";
 export function obtenerTarea(id) {
-  return db.prepare("SELECT * FROM tareas WHERE id = ?").get(id);
+  return db.prepare(`${SELECT_TAREA} WHERE t.id = ?`).get(id);
 }
 
-export function listarTareas({ estado = "pendiente", cliente } = {}) {
-  let sql = "SELECT * FROM tareas WHERE 1=1";
+export function listarTareas({ estado = "pendiente", cliente, asignada_a } = {}) {
+  let sql = `${SELECT_TAREA} WHERE 1=1`;
   const args = [];
-  if (estado && estado !== "todas") { sql += " AND estado = ?"; args.push(estado); }
-  if (cliente) { sql += " AND cliente LIKE ?"; args.push(`%${cliente}%`); }
-  sql += " ORDER BY estado, CASE prioridad WHEN 'alta' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, fecha_limite IS NULL, fecha_limite, id";
+  if (estado && estado !== "todas") { sql += " AND t.estado = ?"; args.push(estado); }
+  if (cliente) { sql += " AND t.cliente LIKE ?"; args.push(`%${cliente}%`); }
+  if (asignada_a === "equipo") sql += " AND t.asignada_a IS NOT NULL";
+  else if (asignada_a === "dueno") sql += " AND t.asignada_a IS NULL";
+  else if (asignada_a !== undefined && asignada_a !== null) { sql += " AND t.asignada_a = ?"; args.push(Number(asignada_a)); }
+  sql += " ORDER BY t.estado, CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, t.fecha_limite IS NULL, t.fecha_limite, t.id";
   return db.prepare(sql).all(...args);
 }
 
@@ -34,12 +50,13 @@ export function actualizarTarea(id, cambios) {
   if (!actual) throw new Error(`No existe la tarea ${id}`);
   const n = { ...actual };
   for (const k of ["titulo", "notas", "cliente", "prioridad"]) if (cambios[k] !== undefined) n[k] = cambios[k];
+  if (cambios.asignada_a !== undefined || cambios.para !== undefined) n.asignada_a = personaDeEquipo(cambios.asignada_a ?? cambios.para)?.id ?? null;
   if (cambios.fecha_limite !== undefined) n.fecha_limite = cambios.fecha_limite ? localAUTC(cambios.fecha_limite) : null;
   if (cambios.estado === "hecha" && actual.estado !== "hecha") { n.estado = "hecha"; n.completada = new Date().toISOString(); }
   if (cambios.estado === "pendiente") { n.estado = "pendiente"; n.completada = null; }
   db.prepare(
-    "UPDATE tareas SET titulo=?, notas=?, cliente=?, prioridad=?, fecha_limite=?, estado=?, completada=? WHERE id=?",
-  ).run(n.titulo, n.notas, n.cliente, n.prioridad, n.fecha_limite, n.estado, n.completada, id);
+    "UPDATE tareas SET titulo=?, notas=?, cliente=?, prioridad=?, fecha_limite=?, estado=?, completada=?, asignada_a=? WHERE id=?",
+  ).run(n.titulo, n.notas, n.cliente, n.prioridad, n.fecha_limite, n.estado, n.completada, n.asignada_a ?? null, id);
   return obtenerTarea(id);
 }
 

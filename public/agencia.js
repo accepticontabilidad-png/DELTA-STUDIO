@@ -890,7 +890,8 @@ export function iniciarAgencia(h) {
   function pintarContenido(t) {
     // Filtro de cliente
     const sel = $("#ct-cliente");
-    sel.innerHTML = `<option value="">Todos los clientes</option>` + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCt) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
+    if (h.restringido() && !clienteCt && t.cliente) clienteCt = String(clientesFi.find((c) => c.nombre === t.cliente)?.id || "");
+    sel.innerHTML = (h.restringido() ? "" : `<option value="">Todos los clientes</option>`) + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCt) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
 
     const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi" ${k.ir ? `data-ct-ir="${k.ir}" role="button" tabindex="0"` : ""}>
         <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
@@ -1646,7 +1647,8 @@ export function iniciarAgencia(h) {
 
   function pintarCrm(t) {
     const sel = $("#crm-cliente");
-    sel.innerHTML = `<option value="">Todos los clientes</option>` + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCrm) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
+    if (h.restringido() && !clienteCrm && t.cliente) clienteCrm = String(clientesFi.find((c) => c.nombre === t.cliente)?.id || "");
+    sel.innerHTML = (h.restringido() ? "" : `<option value="">Todos los clientes</option>`) + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCrm) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
     $("#crm-config").hidden = !clienteCrm;
     $("#crm-meta").hidden = !clienteCrm;
     const e = t.embudo, a = t.embudo_anterior;
@@ -2103,5 +2105,172 @@ export function iniciarAgencia(h) {
     });
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarSeo, cargarAnalitica, cargarCrm: () => prepararFinanzas().then(cargarCrm), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  // =====================================================================
+  //  EQUIPO (solo el dueño)
+  // =====================================================================
+  let ultimaEq = null;
+  let filtroEq = "";
+  let todosEq = true;
+  async function cargarEquipo() {
+    const t = await api("/equipo");
+    ultimaEq = t;
+    pintarEquipo(t);
+  }
+  function pintarEquipo(t) {
+    const nomSec = (k) => t.secciones[k]?.nombre || k;
+    $("#eq-personas").innerHTML = t.personas.length
+      ? t.personas.map((u) => `<article class="panel eq-persona ${u.activo ? "" : "pausada"}" data-eq-persona="${u.id}" tabindex="0" role="button" aria-label="Editar a ${esc(u.nombre)}">
+          <div class="eq-p-cabeza"><span class="eq-avatar" aria-hidden="true">${esc(u.nombre.trim()[0] || "?").toUpperCase()}</span>
+            <span class="eq-p-nombre"><b>${esc(u.nombre)}</b><small class="tenue">@${esc(u.usuario)}</small></span>
+            <span class="tb-chip s-${u.activo ? "verde" : "amarillo"}">${u.activo ? "Con acceso" : "Pausada"}</span></div>
+          <div class="eq-chips">${u.secciones.length ? u.secciones.map((s) => `<span class="eq-chip">${esc(nomSec(s))}</span>`).join("") : `<span class="tenue chico">Solo sus tareas</span>`}</div>
+          <p class="chico"><span class="tenue">Clientes:</span> ${u.clientes_nombres ? esc(u.clientes_nombres.join(", ") || "ninguno") : "todos"}</p>
+          <p class="chico tenue">${u.ultimo_acceso ? `Entró ${haceRato(u.ultimo_acceso)}` : "Todavía no entra"} · ${u.tareas_pendientes} tarea${u.tareas_pendientes === 1 ? "" : "s"} pendiente${u.tareas_pendientes === 1 ? "" : "s"}</p>
+        </article>`).join("")
+      : `<div class="panel eq-vacio"><h2>Dale acceso a tu equipo</h2><p class="tenue">Crea un usuario para tu trabajadora: entra a DELTA con su propia clave y solo ve las secciones y los clientes que tú elijas. Nunca ve lo tuyo.</p><button type="button" class="ag-agregar" data-eq-nueva>+ Dar acceso</button></div>`;
+
+    const activos = t.personas.filter((u) => u.activo);
+    $("#eq-para").innerHTML = activos.map((u) => `<option value="${u.id}">${esc(u.nombre)}</option>`).join("") || `<option value="">Primero da acceso a alguien</option>`;
+    $("#eq-form-tarea").querySelectorAll("input,select,button").forEach((x) => { x.disabled = !activos.length; });
+    $("#eq-tareas-n").textContent = t.tareas.length ? `${t.tareas.length} pendiente${t.tareas.length === 1 ? "" : "s"}` : "";
+    const ahora = new Date().toISOString();
+    const fila = (x, hecha) => `<li class="${!hecha && x.fecha_limite && x.fecha_limite < ahora ? "vencida" : ""} ${hecha ? "hecha" : ""}">
+        ${hecha ? `<span class="eq-ok" aria-hidden="true">✓</span>` : `<input type="checkbox" data-eq-hecha="${x.id}" aria-label="Marcar como hecha" />`}
+        <div class="cuerpo">${esc(x.titulo)}<span class="sub">${[x.asignada_nombre, x.cliente, hecha ? `terminada ${haceRato(x.completada)}` : x.fecha_limite ? `para ${fmtDia(x.fecha_limite)}` : null].filter(Boolean).map(esc).join(" · ")}</span></div>
+        ${hecha ? "" : `<button type="button" class="eq-quitar" data-eq-quitar="${x.id}" aria-label="Quitar tarea">×</button>`}
+      </li>`;
+    $("#eq-tareas").innerHTML = (t.tareas.length ? t.tareas.map((x) => fila(x, false)).join("") : `<li class="vacio">Sin tareas pendientes del equipo.</li>`)
+      + (t.hechas.length ? `<li class="eq-sep tenue">Terminadas</li>${t.hechas.slice(0, 5).map((x) => fila(x, true)).join("")}` : "");
+
+    $("#eq-filtro").innerHTML = `<option value="">Todos</option><option value="equipo">Solo el equipo</option>` + t.personas.map((u) => `<option value="${u.id}">${esc(u.nombre)}</option>`).join("");
+    $("#eq-filtro").value = filtroEq;
+    pintarHistorialEq(filtroEq ? null : t.historial);
+  }
+  async function pintarHistorialEq(lista) {
+    if (!lista) lista = await api(`/equipo/historial?usuario=${encodeURIComponent(filtroEq)}`).catch(() => []);
+    $("#eq-historial").innerHTML = lista.length
+      ? lista.map((x) => `<li><span class="eq-h-quien ${x.usuario_id ? "" : "tu"}">${esc(x.quien)}</span><span class="eq-h-txt">${esc(x.accion)}${x.cliente ? ` <small class="tenue">· ${esc(x.cliente)}</small>` : ""}</span><small class="tenue eq-h-cuando">${esc(fmtDia(x.fecha))} ${esc(fmtHora(x.fecha))}</small></li>`).join("")
+      : `<li class="vacio tenue">Aquí vas a ver quién cambió qué: prospectos, piezas, tareas.</li>`;
+  }
+  $("#eq-filtro").addEventListener("change", (e) => { filtroEq = e.target.value; pintarHistorialEq(null); });
+
+  // Diálogo de una persona
+  const claveAzar = () => {
+    const l = "abcdefghjkmnpqrstuvwxyz23456789";
+    const a = crypto.getRandomValues(new Uint32Array(12));
+    return Array.from(a, (n) => l[n % l.length]).join("").replace(/(.{4})(?=.)/g, "$1-");
+  };
+  function pintarTodosEq() {
+    $("#form-persona").querySelectorAll("[data-eq-todos]").forEach((b) => b.classList.toggle("activa", (b.dataset.eqTodos === "1") === todosEq));
+    $("#eq-clientes").hidden = todosEq;
+    $("#eq-secciones").querySelectorAll("input[data-todos]").forEach((x) => {
+      x.disabled = !todosEq;
+      if (!todosEq) x.checked = false;
+      x.closest("label").classList.toggle("apagada", !todosEq);
+    });
+  }
+  function abrirPersona(u = null) {
+    const t = ultimaEq;
+    if (!t) return;
+    $("#eq-dlg-titulo").textContent = u ? u.nombre : "Dar acceso";
+    $("#eq-id").value = u?.id || "";
+    $("#eq-nombre").value = u?.nombre || "";
+    $("#eq-usuario").value = u?.usuario || "";
+    $("#eq-clave").value = u ? "" : claveAzar();
+    $("#eq-clave").required = !u;
+    $("#eq-clave-txt").textContent = u ? "Nueva clave (déjala vacía para no cambiarla)" : "Clave";
+    const marcadas = u ? u.secciones : ["crm", "contenido"];
+    $("#eq-secciones").innerHTML = Object.entries(t.secciones).map(([k, v]) => `<label class="eq-op"><input type="checkbox" value="${k}" ${marcadas.includes(k) ? "checked" : ""} ${v.todos ? "data-todos" : ""} /> ${esc(v.nombre)}${v.todos ? ` <small class="tenue">(todos los clientes)</small>` : ""}</label>`).join("");
+    $("#eq-clientes").innerHTML = t.clientes.map((c) => `<label class="eq-op"><input type="checkbox" value="${c.id}" ${u?.clientes?.includes(c.id) ? "checked" : ""} /> ${esc(c.nombre)}</label>`).join("") || `<p class="tenue chico">Todavía no tienes clientes.</p>`;
+    todosEq = !u || u.clientes === null;
+    pintarTodosEq();
+    $("#eq-listo").hidden = true;
+    $("#eq-msg").hidden = true;
+    $("#eq-guardar").hidden = false;
+    $("#eq-borrar").hidden = !u;
+    $("#eq-borrar").textContent = "Quitar acceso";
+    $("#eq-borrar").classList.remove("seguro");
+    $("#eq-pausar").hidden = !u;
+    $("#eq-pausar").textContent = u?.activo === false ? "Reactivar" : "Pausar";
+    $("#dlg-persona").showModal();
+    if (!u) setTimeout(() => $("#eq-nombre").focus(), 50);
+  }
+  const errorEq = (err) => { $("#eq-msg").textContent = err.message; $("#eq-msg").hidden = false; };
+  $("#eq-nombre").addEventListener("input", () => {
+    if ($("#eq-id").value || $("#eq-usuario").dataset.tocado) return;
+    $("#eq-usuario").value = $("#eq-nombre").value.trim().split(/\s+/)[0].normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9._-]/g, "");
+  });
+  $("#eq-usuario").addEventListener("input", (e) => { e.target.dataset.tocado = "1"; });
+  $("#eq-generar").addEventListener("click", () => { $("#eq-clave").value = claveAzar(); });
+  $("#form-persona").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-eq-todos]");
+    if (b) { todosEq = b.dataset.eqTodos === "1"; pintarTodosEq(); }
+    const c = e.target.closest("[data-eq-copiar]");
+    if (c) navigator.clipboard.writeText($("#eq-listo pre").textContent).then(() => { c.textContent = "¡Copiado!"; }).catch(() => { c.textContent = "Selecciónalo y cópialo"; });
+  });
+  $("#form-persona").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("#eq-id").value;
+    const datos = {
+      nombre: $("#eq-nombre").value.trim(), usuario: $("#eq-usuario").value.trim(),
+      secciones: [...$("#eq-secciones").querySelectorAll("input:checked")].map((x) => x.value),
+      clientes: todosEq ? null : [...$("#eq-clientes").querySelectorAll("input:checked")].map((x) => Number(x.value)),
+    };
+    const clave = $("#eq-clave").value.trim();
+    if (clave) datos.clave = clave;
+    if (!todosEq && !datos.clientes.length) return errorEq(new Error("Marca al menos un cliente, o elige Todos"));
+    try {
+      const u = await api(id ? `/equipo/personas/${id}` : "/equipo/personas", { method: id ? "PATCH" : "POST", body: datos });
+      sonar("accion");
+      await cargarEquipo();
+      if (!id || clave) {
+        // Los datos para pasárselos: la clave no se vuelve a mostrar
+        $("#eq-listo").innerHTML = `<b>Listo. Pásale estos datos a ${esc(u.nombre)}:</b>
+          <pre>DELTA: ${esc(location.origin)}\nUsuario: ${esc(u.usuario)}\nClave: ${esc(clave)}</pre>
+          <p class="tenue chico">Que toque "¿Eres del equipo?" al entrar. Esta clave ya no se vuelve a mostrar; si la pierde, le pones una nueva.</p>
+          <button type="button" data-eq-copiar>Copiar</button>`;
+        $("#eq-listo").hidden = false;
+        $("#eq-guardar").hidden = true;
+        $("#eq-id").value = u.id;
+      } else $("#dlg-persona").close();
+    } catch (err) { errorEq(err); }
+  });
+  $("#eq-cancelar").addEventListener("click", () => $("#dlg-persona").close());
+  $("#eq-pausar").addEventListener("click", async () => {
+    const u = ultimaEq?.personas.find((x) => String(x.id) === $("#eq-id").value);
+    if (!u) return;
+    try { await api(`/equipo/personas/${u.id}`, { method: "PATCH", body: { activo: !u.activo } }); sonar("accion"); $("#dlg-persona").close(); await cargarEquipo(); }
+    catch (err) { errorEq(err); }
+  });
+  $("#eq-borrar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Seguro? Toca otra vez"; return; }
+    try { await api(`/equipo/personas/${$("#eq-id").value}`, { method: "DELETE" }); sonar("accion"); $("#dlg-persona").close(); await cargarEquipo(); }
+    catch (err) { errorEq(err); }
+  });
+  $("#eq-nueva").addEventListener("click", () => abrirPersona());
+  const seccionEq = $('[data-seccion="equipo"]');
+  seccionEq.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-eq-nueva]")) return abrirPersona();
+    const hecha = e.target.closest("[data-eq-hecha]");
+    if (hecha) { await api(`/tareas/${hecha.dataset.eqHecha}`, { method: "PATCH", body: { estado: "hecha" } }).catch((err) => avisar(err.message)); sonar("accion"); return cargarEquipo(); }
+    const quitar = e.target.closest("[data-eq-quitar]");
+    if (quitar) { await api(`/tareas/${quitar.dataset.eqQuitar}`, { method: "DELETE" }).catch((err) => avisar(err.message)); return cargarEquipo(); }
+    const p = e.target.closest("[data-eq-persona]");
+    if (p) abrirPersona(ultimaEq.personas.find((x) => x.id === Number(p.dataset.eqPersona)));
+  });
+  seccionEq.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches?.("[data-eq-persona]")) e.target.click(); });
+  $("#eq-form-tarea").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const titulo = $("#eq-tarea").value.trim();
+    if (!titulo || !$("#eq-para").value) return;
+    try {
+      await api("/tareas", { method: "POST", body: { titulo, asignada_a: Number($("#eq-para").value), fecha_limite: $("#eq-fecha").value ? `${$("#eq-fecha").value}T18:00` : undefined } });
+      sonar("accion");
+      $("#eq-tarea").value = ""; $("#eq-fecha").value = "";
+      await cargarEquipo();
+    } catch (err) { avisar(err.message); }
+  });
+
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarSeo, cargarAnalitica, cargarCrm: () => prepararFinanzas().then(cargarCrm), cargarEquipo, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }

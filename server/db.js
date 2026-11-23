@@ -157,6 +157,37 @@ for (const col of [
     /* ya existe */
   }
 }
+// Equipo: personas que entran con su propio usuario y solo ven lo que el dueño les permite.
+db.exec(`
+CREATE TABLE IF NOT EXISTS usuarios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre TEXT NOT NULL,
+  usuario TEXT NOT NULL UNIQUE,                   -- con el que entra (minúsculas)
+  clave_hash TEXT NOT NULL,                       -- scrypt; nunca la clave
+  sal TEXT NOT NULL,
+  rol TEXT NOT NULL DEFAULT 'equipo',
+  secciones TEXT NOT NULL DEFAULT '[]',           -- JSON: secciones que puede abrir
+  clientes TEXT,                                  -- JSON con ids, o NULL = todos los clientes
+  activo INTEGER NOT NULL DEFAULT 1,
+  creado TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ultimo_acceso TEXT
+);
+CREATE TABLE IF NOT EXISTS bitacora (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fecha TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  usuario_id INTEGER,                             -- NULL = el dueño
+  quien TEXT NOT NULL,
+  seccion TEXT,
+  accion TEXT NOT NULL,
+  cliente_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_bitacora_fecha ON bitacora(fecha);
+`);
+try {
+  db.exec("ALTER TABLE tareas ADD COLUMN asignada_a INTEGER"); // id de usuarios; NULL = del dueño
+} catch {
+  /* ya existe */
+}
 // Gasto en anuncios por cliente, mes y plataforma. Hoy se captura a mano;
 // cuando se conecten Meta, Google o TikTok, escribirán aquí con su propia "fuente".
 db.exec(`

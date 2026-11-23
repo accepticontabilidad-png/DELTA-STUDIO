@@ -10,6 +10,11 @@ CREATE TABLE IF NOT EXISTS sesiones (
   equipo TEXT
 );
 `);
+try {
+  db.exec("ALTER TABLE sesiones ADD COLUMN usuario_id INTEGER"); // NULL = el dueño
+} catch {
+  /* ya existe */
+}
 
 const COOKIE = "delta_sesion";
 const DURACION_DIAS = 30;
@@ -38,20 +43,26 @@ export function claveCorrecta(intento, clave = process.env.CLAVE_ACCESO) {
 }
 
 // ---------- Sesiones ----------
-export function crearSesion(equipo = "") {
+export function crearSesion(equipo = "", usuarioId = null) {
   const id = crypto.randomBytes(32).toString("base64url");
   const ahora = new Date();
   const expira = new Date(ahora.getTime() + DURACION_DIAS * 864e5);
-  db.prepare("INSERT INTO sesiones (id_hash, creada, expira, equipo) VALUES (?, ?, ?, ?)")
-    .run(huellaHex(id), ahora.toISOString(), expira.toISOString(), String(equipo).slice(0, 200));
+  db.prepare("INSERT INTO sesiones (id_hash, creada, expira, equipo, usuario_id) VALUES (?, ?, ?, ?, ?)")
+    .run(huellaHex(id), ahora.toISOString(), expira.toISOString(), String(equipo).slice(0, 200), usuarioId);
   db.prepare("DELETE FROM sesiones WHERE expira < ?").run(ahora.toISOString());
   return { id, expira };
 }
 
-export function sesionValida(id) {
-  if (!id || id.length > 100) return false;
-  const s = db.prepare("SELECT expira FROM sesiones WHERE id_hash = ?").get(huellaHex(id));
-  return Boolean(s && s.expira > new Date().toISOString());
+/** La sesión vigente (con usuario_id: NULL si es el dueño) o null. */
+export function sesionDe(id) {
+  if (!id || id.length > 100) return null;
+  const s = db.prepare("SELECT expira, usuario_id FROM sesiones WHERE id_hash = ?").get(huellaHex(id));
+  return s && s.expira > new Date().toISOString() ? s : null;
+}
+export const sesionValida = (id) => Boolean(sesionDe(id));
+
+export function cerrarSesionesDe(usuarioId) {
+  db.prepare("DELETE FROM sesiones WHERE usuario_id = ?").run(Number(usuarioId));
 }
 
 export function cerrarSesion(id) {
@@ -84,7 +95,9 @@ export function borrarCookie(res) {
  * sitio web no puede añadir: así nadie puede usar tu sesión desde una página trampa.
  */
 export function protegido(req, res, next) {
-  if (!sesionValida(leerCookie(req))) return res.status(401).json({ error: "No autorizado" });
+  const s = sesionDe(leerCookie(req));
+  if (!s) return res.status(401).json({ error: "No autorizado" });
+  req.usuarioId = s.usuario_id ?? null;
   if (req.method !== "GET" && req.method !== "HEAD" && req.get("X-Delta") !== "1") {
     return res.status(403).json({ error: "Petición rechazada" });
   }
