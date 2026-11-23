@@ -715,6 +715,7 @@ const agenciaTableros = () => (agenciaUI ||= iniciarAgencia({
   api, esc, guardado, fmtDia, fmtHora, dinero, ESTADO_PROY, filaTrabajo, sonar,
   zona: () => zona,
   restringido: () => esEquipo() && !yo.todos_los_clientes, // ve solo algunos clientes: uno a la vez
+  esEquipo,
   nombreDepto,
   avisar: (texto) => burbuja("aviso", texto),
   editarCliente: (c) => abrirFormCliente(c),

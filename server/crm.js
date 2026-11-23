@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS crm_config (
   bienvenida TEXT                                -- texto del formulario
 );
 `);
+// Para la utilidad del cliente: cuánto vale una venta en promedio (si no se anotó el monto) y su margen (%).
+for (const col of ["ticket REAL", "margen REAL"]) { try { db.exec(`ALTER TABLE crm_config ADD COLUMN ${col}`); } catch { /* ya existe */ } }
 try {
   db.exec("ALTER TABLE prospectos ADD COLUMN meta_lead_id TEXT"); // formulario de anuncio de Meta del que vino
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_meta ON prospectos(meta_lead_id)");
@@ -528,6 +530,27 @@ export function configurarCrm({ cliente, wa_phone_id, wa_numero, formulario, bie
     if (!actual) db.prepare("UPDATE crm_config SET form_token = ? WHERE cliente_id = ?").run(crypto.randomBytes(12).toString("base64url"), c.id);
   } else if (formulario === false) db.prepare("UPDATE crm_config SET form_token = NULL WHERE cliente_id = ?").run(c.id);
   return configCrm(c.id);
+}
+
+/** Valor promedio de una venta y margen (%) de un cliente, para calcular su utilidad en el tablero. */
+export function utilidadConfig(cliente) {
+  const c = clienteRequerido(cliente);
+  const f = db.prepare("SELECT ticket, margen FROM crm_config WHERE cliente_id = ?").get(c.id) || {};
+  return { cliente: c.nombre, cliente_id: c.id, ticket: f.ticket ?? null, margen: f.margen ?? null };
+}
+
+export function guardarUtilidad({ cliente, ticket, margen } = {}) {
+  const c = clienteRequerido(cliente);
+  db.prepare("INSERT OR IGNORE INTO crm_config (cliente_id) VALUES (?)").run(c.id);
+  const num = (x, que, max) => {
+    if (x === null || x === "" || x === undefined) return null;
+    const n = Number(String(x).replace(/[$,%\s]/g, ""));
+    if (!Number.isFinite(n) || n < 0 || n > max) throw new Error(`${que} no es válido`);
+    return Math.round(n * 100) / 100;
+  };
+  if (ticket !== undefined) db.prepare("UPDATE crm_config SET ticket = ? WHERE cliente_id = ?").run(num(ticket, "El valor promedio de una venta", 1e9), c.id);
+  if (margen !== undefined) db.prepare("UPDATE crm_config SET margen = ? WHERE cliente_id = ?").run(num(margen, "El margen (de 0 a 100 %)", 100), c.id);
+  return utilidadConfig(c.id);
 }
 
 export function clientePorFormulario(token) {
