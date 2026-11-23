@@ -14,6 +14,7 @@ import { ahoraLocalISO, rangoDelDia } from "./tiempo.js";
 import * as agencia from "./agencia.js";
 import { avisosParaPulso } from "./paidmedia.js";
 import { sitiosCaidos } from "./seo.js";
+import { avisosCrm } from "./crm.js";
 import { listarContenido } from "./contenido.js";
 
 // Las tablas cobros y gastos_agencia se crean en db.js.
@@ -343,6 +344,12 @@ export function pulso() {
   meter("anuncios_sin_resultados", pm.sin_resultados.length, "rojo", pm.sin_resultados.length === 1 ? "campaña gastando sin resultados" : "campañas gastando sin resultados", "#/paidmedia",
     pm.sin_resultados.slice(0, 3).map((a) => a.campana ? `${a.campana} (${a.cliente})` : a.cliente));
   meter("anuncios_retorno", pm.retorno.length, "rojo", pm.retorno.length === 1 ? "cliente vende menos de lo que invierte en anuncios" : "clientes venden menos de lo que invierten en anuncios", "#/paidmedia", nombres(pm.retorno, "cliente"));
+
+  const crm = avisosCrm();
+  meter("crm_sin_responder", crm.sin_responder.length, "rojo", crm.sin_responder.length === 1 ? "prospecto lleva más de un día sin respuesta" : "prospectos llevan más de un día sin respuesta", "#/crm",
+    crm.sin_responder.slice(0, 3).map((p) => `${p.nombre} (${p.cliente})`));
+  meter("crm_citas_pasadas", crm.citas_pasadas.length, "amarillo", crm.citas_pasadas.length === 1 ? "cita ya pasó: ¿asistió?" : "citas ya pasaron: ¿asistieron?", "#/crm", crm.citas_pasadas.slice(0, 3).map((p) => `${p.nombre} (${p.cliente})`));
+  meter("crm_citas_hoy", crm.citas_hoy.length, "info", crm.citas_hoy.length === 1 ? "cita de prospecto hoy" : "citas de prospectos hoy", "#/crm", crm.citas_hoy.slice(0, 3).map((p) => `${p.nombre} ${p.cita.slice(11, 16)} (${p.cliente})`));
 
   const caidos = sitiosCaidos();
   meter("sitio_caido", caidos.length, "rojo", caidos.length === 1 ? "sitio web de cliente no abre" : "sitios web de clientes no abren", "#/seo", caidos.slice(0, 3));
