@@ -2,7 +2,7 @@
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
-import { iniciarInicioVivo, datosVivos } from "/inicio-vivo.js";
+import { iniciarInicioVivo, datosVivos, orbeVivo } from "/inicio-vivo.js";
 import { crearArranque } from "/arranque.js";
 import { pintarFabrica, tableroDe } from "/fabrica.js";
 const $ = (s) => document.querySelector(s);
@@ -1801,6 +1801,7 @@ const orbe = (() => {
     energia += (objetivo - energia) * (nivel != null ? 0.25 : 0.06);
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
+    orbeVivo.energia = energia; orbeVivo.estado = estado; // el polvo de estrellas reacciona a la voz
     const dia = document.documentElement.dataset.mood === "dia";
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
     // De día los trazos (anillos, marcas, cometa) van en un violeta más profundo y firme para que se lean sobre el fondo claro
@@ -2003,24 +2004,56 @@ const orbe = (() => {
 })();
 
 // ---------------- Fondo: cielo estrellado y malla de puntos ----------------
+// Todas las estrellas se mueven: derivan despacio en capas (las cercanas más rápido),
+// siguen un poco al cursor con paralaje y de vez en cuando cruza una estrella fugaz.
 (() => {
   const lienzo = $("#estrellas");
   const ctx = lienzo.getContext("2d");
-  let W, H, estrellas;
+  let W, H, estrellas, fugaz = null, proximaFugaz = 3500, antes = 0;
   const reducir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const cursor = { x: 0, y: 0, vx: 0, vy: 0 };
+  addEventListener("pointermove", (e) => { cursor.x = e.clientX / innerWidth - 0.5; cursor.y = e.clientY / innerHeight - 0.5; }, { passive: true });
   function medir() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = innerWidth; H = innerHeight;
     lienzo.width = W * dpr; lienzo.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    estrellas = Array.from({ length: Math.round((W * H) / 5000) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 + 0.2, f: Math.random() * 6 }));
+    estrellas = Array.from({ length: Math.round((W * H) / 5000) }, () => {
+      const z = 0.25 + Math.random() * 0.75; // profundidad: 1 = cerca
+      return { x: Math.random() * W, y: Math.random() * H, z, r: 0.2 + z * (0.3 + Math.random() * 1.1), f: Math.random() * 6, ang: Math.random() * Math.PI * 2 };
+    });
   }
   function dibujar(t = 0) {
+    const dt = Math.min(64, t - antes || 16) / 1000; antes = t;
     ctx.clearRect(0, 0, W, H);
+    cursor.vx += (cursor.x - cursor.vx) * 0.04; cursor.vy += (cursor.y - cursor.vy) * 0.04;
     for (const e of estrellas) {
-      const a = 0.35 + 0.45 * Math.abs(Math.sin(t / 1600 + e.f));
+      // Deriva solas (sin tocar nada) hacia arriba a la izquierda, con un vaivén propio
+      e.ang += dt * 0.2;
+      e.x += (-24 + Math.cos(e.ang + e.f) * 6) * e.z * dt;
+      e.y += (-11 + Math.sin(e.ang + e.f) * 6) * e.z * dt;
+      if (e.x < -30) e.x += W + 60; else if (e.x > W + 30) e.x -= W + 60;
+      if (e.y < -30) e.y += H + 60; else if (e.y > H + 30) e.y -= H + 60;
+      const px = e.x - cursor.vx * 28 * e.z, py = e.y - cursor.vy * 28 * e.z;
+      const a = (0.3 + 0.55 * Math.abs(Math.sin(t / 1600 + e.f))) * (0.55 + e.z * 0.45);
       ctx.fillStyle = e.r > 1 ? `rgba(201,191,255,${a})` : `rgba(255,255,255,${a * 0.8})`;
-      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, e.r, 0, Math.PI * 2); ctx.fill();
+    }
+    // Estrella fugaz de vez en cuando
+    proximaFugaz -= dt * 1000;
+    if (!fugaz && proximaFugaz < 0) {
+      fugaz = { x: W * (0.35 + Math.random() * 0.65), y: H * Math.random() * 0.35, vx: -(480 + Math.random() * 260), vy: 170 + Math.random() * 120, vida: 1 };
+      proximaFugaz = 7000 + Math.random() * 9000;
+    }
+    if (fugaz) {
+      fugaz.x += fugaz.vx * dt; fugaz.y += fugaz.vy * dt; fugaz.vida -= dt * 0.9;
+      const fx = fugaz.x - fugaz.vx * 0.22, fy = fugaz.y - fugaz.vy * 0.22;
+      const cola = ctx.createLinearGradient(fugaz.x, fugaz.y, fx, fy);
+      cola.addColorStop(0, `rgba(255,255,255,${0.9 * Math.max(0, fugaz.vida)})`);
+      cola.addColorStop(1, "rgba(180,160,255,0)");
+      ctx.strokeStyle = cola; ctx.lineWidth = 1.3; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(fugaz.x, fugaz.y); ctx.lineTo(fx, fy); ctx.stroke();
+      if (fugaz.vida <= 0 || fugaz.x < -100 || fugaz.y > H + 100) fugaz = null;
     }
     // Malla de puntos ondulada (como en la portada)
     const filas = 14, cols = Math.ceil(W / 18);
@@ -2033,7 +2066,9 @@ const orbe = (() => {
         ctx.fillRect(x, y, 1.6, 1.6);
       }
     }
-    if (!reducir) requestAnimationFrame(dibujar);
+    if (reducir) return;
+    if (document.hidden) setTimeout(() => requestAnimationFrame(dibujar), 500);
+    else requestAnimationFrame(dibujar);
   }
   addEventListener("resize", medir);
   medir();

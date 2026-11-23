@@ -109,12 +109,17 @@ html[data-mood="dia"] .anillo-texto text { fill: var(--cian); opacity: .7; }
 @keyframes vivo-onda { from { scale: 1; opacity: 1; } to { scale: 26; opacity: 0; } }
 html[data-mood="dia"] .orbe-onda { border-color: rgba(106,76,240,.8); box-shadow: 0 0 20px rgba(106,76,240,.5); }
 
-/* Modo DELTA minimalista: logo brillante que respira dentro de dos aros finos (como la bienvenida) */
+/* Polvo de estrellas alrededor del orbe (solo en Modo DELTA) */
+.orbe-polvo { display: none; position: absolute; pointer-events: none; z-index: 2; }
+.modo-delta .orbe-polvo { display: block; }
+/* Logo de DELTA más vivo en Modo DELTA: se mece en 3D y su brillo respira */
 .modo-delta .anillo-texto { display: none; }
-.seccion.inicio.modo-delta .orbe .logo-orbe { width: 30%; height: 30%; animation: flotar 6s ease-in-out infinite, vivo-logo-brillo 4.5s ease-in-out infinite; }
-@keyframes vivo-logo-brillo { 0%, 100% { opacity: .82; filter: drop-shadow(0 0 6px rgba(201,191,255,.85)) drop-shadow(0 0 24px rgba(123,92,255,.75)); } 50% { opacity: 1; filter: drop-shadow(0 0 10px rgba(233,230,255,1)) drop-shadow(0 0 40px rgba(139,115,255,.95)); } }
-.modo-delta .orbe[data-estado="escuchando"] .logo-orbe, .modo-delta .orbe[data-estado="hablando"] .logo-orbe, .modo-delta .orbe[data-estado="pensando"] .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-brillo 1.1s ease-in-out infinite; }
-html[data-mood="dia"] .seccion.inicio.modo-delta .orbe .logo-orbe { animation: flotar 6s ease-in-out infinite; }
+.seccion.inicio.modo-delta .orbe .logo-orbe { width: 30%; height: 30%; }
+.modo-delta .orbe .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite, vivo-logo-brillo 4s ease-in-out infinite; }
+@keyframes vivo-logo-mece { 0%, 100% { rotate: y -10deg; } 50% { rotate: y 10deg; } }
+@keyframes vivo-logo-brillo { 0%, 100% { filter: drop-shadow(0 0 6px rgba(201,191,255,.9)) drop-shadow(0 0 22px rgba(123,92,255,.8)); } 50% { filter: drop-shadow(0 0 12px rgba(240,236,255,1)) drop-shadow(0 0 44px rgba(139,115,255,1)) drop-shadow(0 0 80px rgba(255,158,232,.35)); } }
+.modo-delta .orbe[data-estado="hablando"] .logo-orbe, .modo-delta .orbe[data-estado="escuchando"] .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite, vivo-logo-brillo 1.2s ease-in-out infinite; }
+html[data-mood="dia"] .modo-delta .orbe .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite; }
 
 @media (max-width: 900px) {
   .hud-hero { flex-wrap: wrap; }
