@@ -53,11 +53,11 @@ export async function reporteCrm({ cliente, desde, hasta, mes } = {}) {
   // Lo que pasó en el CRM en esas fechas (por día de llegada), para el costo real por prospecto, cita y venta.
   const zona = zonaHoraria();
   const filas = ids.length
-    ? db.prepare(`SELECT p.cliente_id, p.creado, p.campana, p.fuente, p.alcanzo, p.etapa, p.valor, k.ticket, k.margen FROM prospectos p LEFT JOIN crm_config k ON k.cliente_id = p.cliente_id WHERE p.cliente_id IN (${ids.map(() => "?").join(",")}) AND p.creado >= ? AND p.creado < ?`)
+    ? db.prepare(`SELECT p.id, p.nombre, p.cliente_id, p.creado, p.campana, p.fuente, p.alcanzo, p.etapa, p.valor, k.ticket, k.margen FROM prospectos p LEFT JOIN crm_config k ON k.cliente_id = p.cliente_id WHERE p.cliente_id IN (${ids.map(() => "?").join(",")}) AND p.creado >= ? AND p.creado < ?`)
       .all(...ids, new Date(Date.parse(`${per.desde}T00:00:00Z`) - 864e5).toISOString(), new Date(Date.parse(`${per.hasta}T00:00:00Z`) + 2 * 864e5).toISOString())
     : [];
   const prospectos = filas
-    .map((p) => ({ dia: diaLocal(p.creado, zona), cliente: nombre.get(p.cliente_id), campana: p.campana || null, fuente: p.fuente, alcanzo: p.alcanzo, perdido: p.etapa === "perdido", valor: p.valor || 0, ticket: p.ticket ?? null, margen: p.margen ?? null }))
+    .map((p) => ({ id: p.id, nombre: p.alcanzo >= 4 ? p.nombre : undefined, dia: diaLocal(p.creado, zona), cliente: nombre.get(p.cliente_id), campana: p.campana || null, fuente: p.fuente, alcanzo: p.alcanzo, perdido: p.etapa === "perdido", valor: p.valor || 0, ticket: p.ticket ?? null, margen: p.margen ?? null }))
     .filter((p) => p.dia >= per.desde && p.dia <= per.hasta);
 
   // Valor promedio y margen del cliente elegido (para el recuadro de utilidad).

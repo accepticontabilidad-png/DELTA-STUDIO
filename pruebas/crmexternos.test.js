@@ -170,3 +170,26 @@ test("Pancake: etiquetas dan la etapa y DELTA lee los chats para acomodar ventas
   assert.equal((await ext.leerChats(r.id)).leidos, 0);
   ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
 });
+
+test("etiquetas que NO son venta y arreglo de ventas mal leídas de Pancake", async () => {
+  const ext = await import("../server/crmexternos.js");
+  for (const t of ["Tratamiento facial", "Página web", "Comprobante", "Pregunta por pago", "Ventas Facebook lead"]) assert.notEqual(ext.etapaPorNombre(t), "venta", t);
+  for (const t of ["VENTA", "Pagado", "Ganado", "Paciente activo", "En tratamiento", "Compró"]) assert.equal(ext.etapaPorNombre(t), "venta", t);
+});
+
+test("una venta que solo venía de la etiqueta 'Tratamiento facial' se corrige", async () => {
+  const ext = await import("../server/crmexternos.js");
+  const crm = await import("../server/crm.js");
+  const { db } = await import("../server/db.js");
+  const agencia = await import("../server/agencia.js");
+  const c = agencia.crearCliente({ nombre: "Betzy Prueba" });
+  const p = crm.crearProspecto({ cliente: c.id, nombre: "Clara", notas: "Viene de Pancake (etapa: Tratamiento facial)", etapa: "venta" });
+  db.prepare("UPDATE prospectos SET externo_id = 'pancake:1:clara', externo_etapa = 'venta' WHERE id = ?").run(p.id);
+  assert.equal(crm.obtenerProspecto(p.id).alcanzo, 4);
+  assert.equal(ext.revisarVentasPorEtiqueta(), 1);
+  const x = crm.obtenerProspecto(p.id);
+  assert.equal(x.etapa, "contactado");
+  assert.equal(x.alcanzo, 1);
+  assert.equal(x.ia_revisado, null);
+  assert.equal(ext.revisarVentasPorEtiqueta(), 0);
+});

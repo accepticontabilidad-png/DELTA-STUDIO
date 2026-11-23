@@ -52,7 +52,8 @@ async function pedir(url, opciones = {}) {
 const sinAcentos = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 export function etapaPorNombre(nombre) {
   const t = sinAcentos(nombre);
-  if (/(ganad|vend|venta|cerrad|pag[oa]|compr|won|paciente activ|tratamiento)/.test(t)) return "venta";
+  // Palabras completas: "página", "comprobante", "pregunta por pago" o "tratamiento facial" NO son venta.
+  if (/\b(ganad[oa]s?|vendid[oa]s?|venta|vend[ie]|cerrad[oa]|pagad[oa]|ya pago|compro|won)\b|paciente activ|cliente activ|en tratamiento|inicio (su )?tratamiento/.test(t)) return "venta";
   if (/(perdid|descart|no interes|no le interes|no contest|lost|basura|spam|cancel)/.test(t)) return "perdido";
   if (/(asisti|vino|atendid|consulta realiz|valorad|showed)/.test(t)) return "asistio";
   if (/(cita|agend|appoint|book|confirm|aprobad)/.test(t)) return "cita";
@@ -342,7 +343,7 @@ async function entenderChat(cliente, prospecto, chat) {
     model: process.env.DELTA_MODELO_CRM || "claude-haiku-5-5",
     max_tokens: 400,
     system: `Lees chats de WhatsApp/Messenger entre un negocio y un cliente para acomodarlo en el embudo de ventas del negocio "${cliente.nombre}"${cliente.industria ? ` (${cliente.industria})` : ""}.
-Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (compró, pagó, firmó, se le entregó; "ya es cliente"), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
+Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (SOLO si en el chat queda claro que ya compró, pagó, firmó o se le entregó; "ya es cliente". Preguntar precios, recibir cotización, decir "me interesa" o "lo pienso" NO es venta; si dudas, NO es venta), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
 Responde SOLO un JSON: {"etapa":"…","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase de lo que pasó y qué sigue"}`,
     messages: [{ role: "user", content: `Cliente: ${prospecto.nombre}\n\nChat:\n${chat.slice(-9000)}` }],
   });
@@ -401,3 +402,24 @@ export function leerChatsEnFondo(fuenteId, opciones) {
   if (!leyendo.has(k)) leyendo.set(k, leerChats(k, opciones).catch((e) => console.error("[crm chats]", e.message)).finally(() => leyendo.delete(k)));
   return { leyendo: true };
 }
+
+// ---------- Arreglo: ventas que salieron solo de una etiqueta de Pancake mal leída ----------
+// Antes, etiquetas como "Tratamiento facial", "Página" o "Comprobante" contaban como venta. Se vuelven a revisar
+// con la regla nueva; las que ya no son venta regresan a su etapa y DELTA vuelve a leer su chat para decidir.
+export function revisarVentasPorEtiqueta() {
+  const filas = db.prepare("SELECT id, notas FROM prospectos WHERE externo_id LIKE 'pancake:%' AND etapa = 'venta' AND externo_etapa = 'venta'").all();
+  let corregidas = 0;
+  for (const f of filas) {
+    const m = /\(etapa: ([^)\n]*)\)/.exec(f.notas || "");
+    const tags = m ? m[1].split(", ").filter(Boolean) : [];
+    let e = "contactado";
+    for (const t of tags) e = masAvanzada(e, etapaPorNombre(t));
+    if (e === "venta") continue;
+    actualizarProspecto(f.id, { etapa: e });
+    db.prepare("UPDATE prospectos SET externo_etapa = ?, ia_revisado = NULL WHERE id = ?").run(e, f.id);
+    notaProspecto(f.id, `DELTA quitó la venta: la etiqueta de Pancake${tags.length ? ` "${tags.join(", ")}"` : ""} no quiere decir que compró. Vuelvo a leer su chat para confirmarlo.`);
+    corregidas++;
+  }
+  return corregidas;
+}
+try { const n = revisarVentasPorEtiqueta(); if (n) console.log(`[crm] ${n} ventas por etiqueta corregidas`); } catch (e) { console.error("[crm ventas]", e.message); }
