@@ -8,8 +8,21 @@ import { zonaHoraria } from "./tiempo.js";
 import { conCache } from "./cache.js";
 import * as meta from "./meta.js";
 import { periodo, ventasCerradas } from "./crm.js";
+import { estadoPorTelefono, estadoPorNombre } from "./lada.js";
 
 const VIDA = 20 * 60e3; // 20 min: Meta no cambia tan rápido y así el tablero abre al instante
+
+/** Suma gasto, impresiones y resultados de filas con la misma clave. */
+function juntar(filas, clave) {
+  const m = new Map();
+  for (const f of filas) {
+    const k = clave(f); if (!k) continue;
+    const a = m.get(k) || { gasto: 0, impresiones: 0, resultados: 0 };
+    a.gasto += f.gasto || 0; a.impresiones += f.impresiones || 0; a.resultados += f.resultados || 0;
+    m.set(k, a);
+  }
+  return [...m.entries()].sort(([x], [y]) => (x < y ? -1 : 1));
+}
 
 const diaLocal = (iso, zona) => new Date(iso).toLocaleDateString("en-CA", { timeZone: zona });
 
@@ -47,17 +60,20 @@ export async function reporteCrm({ cliente, desde, hasta, mes } = {}) {
       gasto: d.gasto, impresiones: d.impresiones, clics: d.clics, clics_enlace: d.clics_enlace,
       conversaciones: d.conversaciones, prospectos: d.prospectos, compras: d.compras,
     }))),
+    // Por edad y por estado, sumando todas las cuentas.
+    edades: juntar(ok.flatMap((x) => x.edades || []), (e) => e.rango).map(([rango, v]) => ({ rango, ...v })),
+    regiones: juntar(ok.flatMap((x) => x.regiones || []).map((r) => ({ ...r, estado: estadoPorNombre(r.nombre) })).filter((r) => r.estado), (r) => r.estado).map(([estado, v]) => ({ estado, ...v })),
     errores: ok.flatMap((x) => x.errores || []).slice(0, 4),
   } : null;
 
   // Lo que pasó en el CRM en esas fechas (por día de llegada), para el costo real por prospecto, cita y venta.
   const zona = zonaHoraria();
   const filas = ids.length
-    ? db.prepare(`SELECT p.id, p.nombre, p.cliente_id, p.creado, p.campana, p.fuente, p.alcanzo, p.etapa, p.valor, k.ticket, k.margen FROM prospectos p LEFT JOIN crm_config k ON k.cliente_id = p.cliente_id WHERE p.cliente_id IN (${ids.map(() => "?").join(",")}) AND p.creado >= ? AND p.creado < ?`)
+    ? db.prepare(`SELECT p.id, p.nombre, p.cliente_id, p.creado, p.campana, p.fuente, p.alcanzo, p.etapa, p.valor, p.telefono, k.ticket, k.margen FROM prospectos p LEFT JOIN crm_config k ON k.cliente_id = p.cliente_id WHERE p.cliente_id IN (${ids.map(() => "?").join(",")}) AND p.creado >= ? AND p.creado < ?`)
       .all(...ids, new Date(Date.parse(`${per.desde}T00:00:00Z`) - 864e5).toISOString(), new Date(Date.parse(`${per.hasta}T00:00:00Z`) + 2 * 864e5).toISOString())
     : [];
   const prospectos = filas
-    .map((p) => ({ id: p.id, nombre: p.alcanzo >= 4 ? p.nombre : undefined, dia: diaLocal(p.creado, zona), cliente: nombre.get(p.cliente_id), campana: p.campana || null, fuente: p.fuente, alcanzo: p.alcanzo, perdido: p.etapa === "perdido", valor: p.valor || 0, ticket: p.ticket ?? null, margen: p.margen ?? null }))
+    .map((p) => ({ id: p.id, nombre: p.alcanzo >= 4 ? p.nombre : undefined, dia: diaLocal(p.creado, zona), cliente: nombre.get(p.cliente_id), campana: p.campana || null, fuente: p.fuente, alcanzo: p.alcanzo, perdido: p.etapa === "perdido", valor: p.valor || 0, ticket: p.ticket ?? null, margen: p.margen ?? null, estado: estadoPorTelefono(p.telefono) }))
     .filter((p) => p.dia >= per.desde && p.dia <= per.hasta);
 
   // Valor promedio y margen del cliente elegido (para el recuadro de utilidad).
