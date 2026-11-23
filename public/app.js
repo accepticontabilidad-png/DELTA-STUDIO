@@ -3,6 +3,7 @@ import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
 import { iniciarInicioVivo, datosVivos } from "/inicio-vivo.js";
+import { crearArranque } from "/arranque.js";
 import { pintarFabrica, tableroDe } from "/fabrica.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
@@ -2253,6 +2254,23 @@ function bienvenida() {
   decir("Bienvenido, señor.", { voz: vozMujer, rate: 0.9, pitch: 1.05, alTerminar: siguiente });
 }
 
+// Lo que se muestra en la intro: bienvenida, fecha y la lista de sistemas encendiéndose.
+function datosArranque() {
+  const p = hud.panel;
+  const ahora = new Date();
+  const fecha = new Intl.DateTimeFormat("es-MX", { timeZone: zona, weekday: "long", day: "numeric", month: "long" }).format(ahora);
+  const hora = new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "numeric", minute: "2-digit" }).format(ahora);
+  const sistemas = ["Núcleo DELTA en línea"];
+  if (p) {
+    sistemas.push(`Agenda · ${plural(p.hoy?.eventos || 0, "cita hoy", "citas hoy")}`);
+    sistemas.push(`Tareas · ${plural(p.hoy?.pendientes || 0, "pendiente", "pendientes")}`);
+    if (p.aprobaciones_pendientes) sistemas.push(`Agencia · ${p.aprobaciones_pendientes} por aprobar`);
+    else sistemas.push("Agencia lista");
+  }
+  sistemas.push(vozNatural?.activa ? "Voz natural" : "Voz lista", "Conexión cifrada");
+  return { saludo: "Bienvenido, señor", linea: `${momentoDelDia()} · ${fecha} · ${hora}`, sistemas };
+}
+
 function arranque(conToque) {
   return new Promise((listo) => {
     let visto = false;
@@ -2261,6 +2279,7 @@ function arranque(conToque) {
     try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
     const el = $("#arranque");
     const conSonido = sonidosActivos();
+    const cine = crearArranque(el);
     const reloj = [];
     let terminado = false;
     const terminar = () => {
@@ -2268,18 +2287,22 @@ function arranque(conToque) {
       terminado = true;
       reloj.forEach(clearTimeout);
       el.classList.add("saliendo");
-      setTimeout(() => { el.hidden = true; el.className = "arranque"; }, 700);
+      cine.terminar();
+      setTimeout(() => { el.hidden = true; el.className = "arranque"; el.querySelector(".arr-nombre").textContent = "DELTA"; }, 800);
       removeEventListener("keydown", tecla);
       listo();
     };
     const empezar = () => {
+      if (!el.classList.contains("esperando") && el.classList.contains("animando")) return;
       el.classList.remove("esperando");
       el.classList.add("animando");
+      const duracion = conSonido ? 4300 : 2900;
+      cine.animar(datosArranque(), duracion);
       if (conSonido) {
         sonar("arranque");
         reloj.push(setTimeout(bienvenida, 1900));
       }
-      reloj.push(setTimeout(terminar, conSonido ? 4300 : 2700));
+      reloj.push(setTimeout(terminar, duracion));
     };
     const tecla = (e) => {
       if (e.key === "Escape") { callarVoz(); terminar(); }
@@ -2287,7 +2310,9 @@ function arranque(conToque) {
     };
     addEventListener("keydown", tecla);
     $("#arr-saltar").onclick = (e) => { e.stopPropagation(); callarVoz(); terminar(); };
+    $("#arr-saltar").onpointerdown = (e) => e.stopPropagation(); // saltar no dispara la onda ni arranca la intro
     el.hidden = false;
+    cine.esperar();
     // Los navegadores no dejan sonar nada hasta que la persona toca la pantalla.
     if (conSonido && !conToque) {
       el.classList.add("esperando");
