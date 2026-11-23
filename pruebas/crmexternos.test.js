@@ -220,17 +220,21 @@ test("ventas sin confirmar se releen: se quitan si no compró y se cuentan por f
   assert.equal(l.confirmadas, 2);
   assert.equal(crm.obtenerProspecto(b).etapa, "contactado");
   assert.equal(crm.obtenerProspecto(b).alcanzo < 4, true);
+  // Se cuentan en el mes en que LLEGÓ (2 de octubre): Ana de anuncio cuenta como de redes, Dora (recomendada) va aparte
   const oct = crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas;
-  const nov = crm.embudo({ cliente: c.id, mes: "2026-11" }).ventas_cerradas;
-  assert.equal(oct.redes, 0); assert.equal(oct.otras, 1);
-  assert.equal(nov.redes, 1); assert.equal(nov.lista[0].nombre, "Ana Real");
+  assert.equal(oct.redes, 1); assert.equal(oct.otras, 1);
+  assert.equal(oct.lista.find((x) => x.nombre === "Ana Real").compro, "2026-11-05");
+  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-11" }).ventas_cerradas.redes, 0);
   // Ya confirmadas, no se vuelven a leer
   assert.equal((await ext.leerChats(r.id)).leidos, 0);
-  // El dueño (o DELTA cuando se lo pide) corrige el origen y la fecha a mano
-  crm.actualizarProspecto(d, { origen: "redes", venta_fecha: "2026-10-21" });
-  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas.redes, 1);
+  // El dueño (o DELTA cuando se lo pide) corrige el origen a mano
+  crm.actualizarProspecto(d, { origen: "redes" });
+  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas.redes, 2);
   crm.actualizarProspecto(a, { etapa: "perdido" });
   assert.equal(crm.obtenerProspecto(a).venta_fecha, null);
-  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-11" }).ventas_cerradas.redes, 0);
+  assert.equal(crm.embudo({ cliente: c.id, mes: "2026-10" }).ventas_cerradas.redes, 1);
+  // La respuesta de la IA se entiende aunque venga con texto, acentos o cortada
+  assert.equal(ext.leerRespuestaIA('Listo:\n```json\n{"etapa":"Venta","origen":"Anuncios","fecha_venta":"2026-11-19"}\n```').etapa, "venta");
+  assert.equal(ext.leerRespuestaIA('{"etapa":"asistió","origen":"redes","resumen":"Fue y luego').etapa, "asistio");
   ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
 });
