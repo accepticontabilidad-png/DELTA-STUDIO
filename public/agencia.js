@@ -1923,7 +1923,10 @@ export function iniciarAgencia(h) {
   async function abrirConfigCrm() {
     if (!clienteCrm) return avisar("Elige primero un cliente");
     try { cfgCrm = await api(`/crm/config?cliente=${encodeURIComponent(clienteCrm)}`); } catch (err) { return avisar(err.message); }
-    $("#crm-cfg-titulo").textContent = `${cfgCrm.cliente}: formulario y WhatsApp`;
+    $("#crm-cfg-titulo").textContent = `${cfgCrm.cliente}: conexiones`;
+    pintarTipoExt();
+    $("#crm-ext-msg").hidden = true;
+    cargarFuentes();
     pintarLinkCrm();
     $("#crm-cfg-bienvenida").value = cfgCrm.bienvenida || "";
     $("#crm-cfg-numero").value = cfgCrm.wa_numero || "";
@@ -1934,6 +1937,67 @@ export function iniciarAgencia(h) {
     $("#crm-cfg-msg").hidden = true;
     $("#dlg-crm-config").showModal();
   }
+  // ----- Kommo, GoHighLevel y Pancake -----
+  let tipoExt = "kommo";
+  const PASOS_EXT = {
+    kommo: { cuenta: "Subdominio de Kommo", ph: "Ej. miclinica", pasos: [
+      "Entra a Kommo con una cuenta de administrador.",
+      "Ve a Configuración → Integraciones → Crear integración → Integración privada (no hace falta dirección de regreso).",
+      "En la pestaña \"Llaves y alcances\" toca \"Generar token de larga duración\", elige que dure 1 año o más y cópialo.",
+      "Pega aquí el subdominio y el token." ] },
+    ghl: { cuenta: "Id de la sub-cuenta (Location ID)", ph: "Ej. ve3EPYOqQBu1uhG8jXQ2", pasos: [
+      "Entra a la sub-cuenta del cliente en GoHighLevel.",
+      "Ve a Settings → Private Integrations → Create New Integration.",
+      "Marca solo permisos de lectura: Opportunities (ver) y Contacts (ver). Genera el token y cópialo (solo se muestra una vez).",
+      "El Location ID está en Settings → Business Profile. Pega los dos aquí." ] },
+    pancake: { cuenta: "Id de la página en Pancake", ph: "Ej. 104528379912345", pasos: [
+      "Entra a Pancake (pages.fm) y abre la página del cliente.",
+      "Ve a Configuración → Herramientas y genera el \"token de la página\" (page access token). Cópialo.",
+      "El id de la página es el número que sale en la dirección al abrirla (pages.fm/<b>número</b>).",
+      "Pega los dos aquí. Se traen las conversaciones del último mes con nombre y teléfono." ] },
+  };
+  function pintarTipoExt() {
+    const x = PASOS_EXT[tipoExt];
+    $("#crm-ext-tipo").querySelectorAll("[data-ext]").forEach((b) => b.classList.toggle("activa", b.dataset.ext === tipoExt));
+    $("#crm-ext-pasos").innerHTML = x.pasos.map((p) => `<li>${p}</li>`).join("");
+    $("#crm-ext-cuenta-l").textContent = x.cuenta;
+    $("#crm-ext-cuenta").placeholder = x.ph;
+  }
+  $("#crm-ext-tipo").addEventListener("click", (e) => { const b = e.target.closest("[data-ext]"); if (b) { tipoExt = b.dataset.ext; pintarTipoExt(); } });
+  async function cargarFuentes() {
+    const r = await api(`/crm/fuentes?cliente=${encodeURIComponent(clienteCrm)}`).catch(() => ({ fuentes: [] }));
+    $("#crm-ext-lista").innerHTML = r.fuentes.map((f) => `<li class="crm-fuente-fila">
+        <span><b>${esc(f.nombre)}</b> <small class="tenue">${esc(f.cuenta)} · llave ${esc(f.token_final || "")}</small><br>
+        <small class="${f.error ? "t-rojo" : "tenue"}">${f.error ? esc(f.error) : f.ultimo ? `Última vez ${haceRato(f.ultimo)}${f.resultado ? ` · ${f.resultado.nuevos} nuevo${f.resultado.nuevos === 1 ? "" : "s"}` : ""}` : "Conectado"}</small></span>
+        <span class="crm-link-botones"><button type="button" data-ext-sinc="${f.id}">Traer ahora</button><button type="button" class="peligro" data-ext-quitar="${f.id}">Quitar</button></span>
+      </li>`).join("") || `<li class="tenue chico">Ninguno conectado todavía.</li>`;
+  }
+  $("#crm-ext-lista").addEventListener("click", async (e) => {
+    const s = e.target.closest("[data-ext-sinc]"), q = e.target.closest("[data-ext-quitar]");
+    if (!s && !q) return;
+    const b = s || q;
+    if (q && !q.classList.contains("seguro")) { q.classList.add("seguro"); q.textContent = "¿Seguro?"; return; }
+    b.disabled = true;
+    try {
+      if (s) { const r = await api(`/crm/fuentes/${s.dataset.extSinc}/sincronizar`, { method: "POST" }); avisar(`${r.nombre}: ${r.nuevos} nuevo${r.nuevos === 1 ? "" : "s"}, ${r.movidos} cambiaron de etapa.`); }
+      else await api(`/crm/fuentes/${q.dataset.extQuitar}`, { method: "DELETE" });
+      await cargarFuentes(); cargarCrm().catch(() => {});
+    } catch (err) { $("#crm-ext-msg").textContent = err.message; $("#crm-ext-msg").hidden = false; await cargarFuentes(); }
+  });
+  $("#crm-ext-conectar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    $("#crm-ext-msg").hidden = true;
+    b.disabled = true; b.textContent = "Conectando…";
+    try {
+      const r = await api("/crm/fuentes", { method: "POST", body: { cliente: clienteCrm, tipo: tipoExt, cuenta: $("#crm-ext-cuenta").value, token: $("#crm-ext-token").value } });
+      $("#crm-ext-token").value = ""; $("#crm-ext-cuenta").value = "";
+      sonar("accion");
+      avisar(`${r.nombre} conectado: traje ${r.nuevos} prospecto${r.nuevos === 1 ? "" : "s"}.`);
+      await cargarFuentes(); cargarCrm().catch(() => {});
+    } catch (err) { $("#crm-ext-msg").textContent = err.message; $("#crm-ext-msg").hidden = false; }
+    finally { b.disabled = false; b.textContent = "Conectar y traer"; }
+  });
+
   function pintarLinkCrm() {
     const url = cfgCrm.formulario ? `${location.origin}${cfgCrm.formulario}` : null;
     $("#crm-cfg-link").innerHTML = url
