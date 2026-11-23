@@ -1,0 +1,93 @@
+/* =========================================================
+   DELTA en el celular: todo centrado, nada se sale de la
+   pantalla y cada cosa en su lugar. Se carga al final para
+   pulir sin tocar los estilos de computadora.
+   ========================================================= */
+
+/* El fondo cubre toda la página (antes se cortaba a la altura de la pantalla
+   y dejaba una franja oscura justo detrás de la barra de escribir). */
+html { background: var(--fondo); }
+html, body { overflow-x: clip; }
+body { height: auto; min-height: 100%; min-height: 100dvh; }
+
+@media (max-width: 900px) {
+  /* Nada más ancho que la pantalla: así el celular no "se corre" a la izquierda */
+  .app, .cuerpo-app, .secciones, .seccion { max-width: 100%; min-width: 0; }
+  .seccion.inicio, .orbe-escena { overflow-x: clip; }
+  .cuerpo-app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  /* Barra de pestañas siempre encima del contenido */
+  .pestanas { z-index: 15; }
+  .mini-orbe { z-index: 14; bottom: calc(80px + env(safe-area-inset-bottom)); width: 46px; height: 46px; }
+  .mini-orbe img { width: 24px; height: 24px; }
+
+  /* Barra superior: logo a la izquierda, hora y botones a la derecha, alineados */
+  .barra { gap: 10px; }
+  .barra .barra-datos { margin-left: auto; }
+  .barra .icono { flex: none; }
+
+  /* ---------- Modo DELTA: cabe en una sola pantalla ---------- */
+  .seccion.inicio.modo-delta.visible {
+    height: calc(100dvh - 64px - env(safe-area-inset-top) - 74px - env(safe-area-inset-bottom));
+    min-height: 460px;
+    justify-content: center;
+  }
+  body[data-seccion="delta"] .cuerpo-app { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .modo-delta .centro { height: 100%; max-height: none; align-items: center; }
+  .seccion.inicio.modo-delta .orbe { width: min(320px, 78vw, 40dvh); margin: 0 auto; }
+  .modo-delta .estado-orbe { font-size: 9.5px; letter-spacing: .5em; margin-right: -.5em; }
+  .modo-delta .delta-nombre { font-size: 28px; margin: 2px -.6em 10px 0; text-align: center; }
+  .modo-delta .conversacion { flex: 1 1 0; min-height: 60px; width: 100%; }
+  .seccion.inicio .form-chat { flex: none; padding: 8px 0 4px; gap: 8px; align-items: center; }
+  .seccion.inicio .form-chat #texto { min-width: 0; height: 46px; padding: 0 16px; font-size: 16px; }
+  .seccion.inicio .form-chat .icono { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 50%; padding: 0; }
+  .seccion.inicio .form-chat .enviar { width: 46px; height: 46px; flex: none; }
+
+  /* Botones "Oye DELTA" y "Ver tablero" centrados y del mismo tamaño */
+  .voz-controles { justify-content: center; flex-wrap: wrap; gap: 10px; }
+
+  /* ---------- Inicio (tablero) ---------- */
+  .seccion.inicio:not(.modo-delta) .orbe { width: min(270px, 70vw); }
+  .seccion.inicio:not(.modo-delta) .centro { position: relative; z-index: 1; }
+  .chips { margin: 0 -16px 6px; padding: 2px 16px 6px; width: calc(100% + 32px); scroll-padding: 16px; }
+  .seccion.inicio .conversacion { min-height: 120px; }
+
+  /* ---------- Títulos de tarjetas: no se parten feo ---------- */
+  .panel h2, .hud-card h2 { letter-spacing: .26em; line-height: 1.5; }
+  .ag-cabeza { flex-wrap: wrap; gap: 8px 10px; }
+  .ag-cabeza h2 { flex: 1 1 auto; min-width: 0; }
+  .ag-cabeza > :not(h2) { flex: none; }
+  .ag-agregar, .ag-botones .ag-agregar, a.ag-agregar { white-space: nowrap; }
+  .ag-botones { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+
+  /* Botones y chips que se salían del borde */
+  .estudio-estado .chip { max-width: 100%; white-space: normal; text-align: left; }
+  .chip { max-width: calc(100vw - 32px); }
+  select { text-overflow: ellipsis; }
+
+  /* Mensajes sueltos dentro de rejillas: a todo lo ancho */
+  .tb-kpis > p, .kpis > p { grid-column: 1 / -1; }
+
+  /* Historial del equipo: el mensaje vacío usa todo el ancho */
+  .eq-historial li.vacio { display: block; }
+
+  /* Ajustes y ventanas: a lo ancho y con los botones parejos */
+  .dialogo { width: calc(100% - 20px); max-width: none; max-height: calc(100dvh - 24px); padding: 18px 16px; }
+  .dialogo .botones .boton, .dialogo .botones > button { flex: 1 1 100%; text-align: center; justify-content: center; }
+  .dialogo input[type=file] { width: 100%; font-size: 13px; color: var(--tenue); }
+  .dialogo input[type=file]::file-selector-button { margin-right: 10px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--borde); background: var(--cian-suave); color: var(--texto); font: inherit; font-weight: 600; }
+
+  /* Navegación del mes y fechas: botones cómodos para el dedo */
+  .navegar button { min-width: 38px; height: 36px; }
+  .segmento button { padding: 7px 12px; }
+}
+
+@media (max-width: 420px) {
+  .barra { padding-left: 14px; padding-right: 14px; }
+  .barra .reloj { font-size: 15px; }
+  .cuerpo-app { padding-left: 14px; padding-right: 14px; }
+  .chips { margin: 0 -14px 6px; padding: 2px 14px 6px; width: calc(100% + 28px); }
+}
+
+/* De día, el fondo de la página también es claro hasta abajo */
+html[data-mood="dia"] { background: #ebe4ff; }
