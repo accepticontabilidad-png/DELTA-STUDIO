@@ -140,7 +140,7 @@ test("Pancake: etiquetas dan la etapa y DELTA lee los chats para acomodar ventas
     return { success: true, total: 4, conversations: [
       conv("waba_1_11111", "Jorge Antonio", { tags: [3] }),
       conv("waba_1_22222", "Miguel Ángel"),
-      conv("waba_1_33333", "Mafer"),
+      conv("waba_1_33333", "Mafer", { tags: [null, { id: 1 }] }),
       conv("waba_1_44444", "Gerardo", { tags: [1, 2], message_count: 2 }),
     ] };
   });

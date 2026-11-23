@@ -136,7 +136,7 @@ async function leerPancake(f, { desde }) {
   const etiquetas = new Map();
   try {
     const t = await pedir(`${base}/tags?page_access_token=${encodeURIComponent(f.token)}`);
-    for (const x of t.tags || []) etiquetas.set(String(x.id), x.text || x.name || "");
+    for (const x of t.tags || []) if (x) etiquetas.set(String(x.id), x.text || x.name || "");
   } catch { /* sin etiquetas no pasa nada */ }
   const lista = [];
   for (let page = 1; page <= 30; page++) {
@@ -156,7 +156,7 @@ async function leerPancake(f, { desde }) {
     let tel = (c.recent_phone_numbers || []).map((x) => x.phone_number || x).find((x) => typeof x === "string" && x) || null;
     // En WhatsApp el "id" de la persona es su número
     if (!tel && red(c) === "whatsapp") tel = [cu.fb_id, c.from?.phone, c.from?.id, c.page_customer?.phone_number].map((x) => String(x || "").replace(/\D/g, "")).find((x) => x.length >= 10 && x.length <= 15) || null;
-    const nombresTags = (c.tags || []).map((t) => (typeof t === "object" ? t.text || t.name : etiquetas.get(String(t)))).filter(Boolean);
+    const nombresTags = (c.tags || []).filter((t) => t !== null && t !== undefined).map((t) => (typeof t === "object" ? t.text || t.name || etiquetas.get(String(t.id)) : etiquetas.get(String(t)))).filter(Boolean);
     // Si lo último lo mandó la clínica, ya le contestaron
     let etapa = c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo";
     for (const t of nombresTags) etapa = masAvanzada(etapa, etapaPorNombre(t));
