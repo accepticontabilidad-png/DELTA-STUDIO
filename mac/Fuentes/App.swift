@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.3"
+let VERSION = "1.4"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
@@ -207,7 +207,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSSound(named: "Tink")?.play()
         conexion.despertar()
         Acciones.abrirDelta()
-        Acciones.darToqueADelta()
+        Acciones.darToqueADelta(agrandar: true)
     }
 
     // MARK: Acciones del menú
