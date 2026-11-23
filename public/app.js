@@ -2290,9 +2290,15 @@ $("#aj-mac-control").addEventListener("change", async (e) => {
 
 // Dos chasquidos en la Mac: DELTA se pone a escuchar (si la pantalla está abierta, o al abrirse por eso).
 let ultimoChasquido = 0;
+// Con la pantalla ya abierta: la bienvenida completa (animación y sonido) y luego DELTA escucha.
 function despertarPorChasquido() {
   if (Date.now() - ultimoChasquido < 3000) return;
   ultimoChasquido = Date.now();
+  if (ocupado || !$("#arranque").hidden) return;
+  if (escuchando) reconocedor?.stop();
+  arranque(true, true).then(() => setTimeout(escucharTrasChasquido, 300));
+}
+function escucharTrasChasquido() {
   if (ocupado) return;
   sinPalabraClave = true; // tras el chasquido no hace falta decir "Delta…"
   orbe.pulso();
@@ -2420,10 +2426,10 @@ function datosArranque() {
   return { saludo: "Bienvenido, señor", linea: `${momentoDelDia()} · ${fecha} · ${hora}`, sistemas };
 }
 
-function arranque(conToque) {
+function arranque(conToque, siempre = false) {
   return new Promise((listo) => {
     let visto = false;
-    try { visto = sessionStorage.getItem("delta_arranque") === "1"; } catch {}
+    try { visto = !siempre && sessionStorage.getItem("delta_arranque") === "1"; } catch {}
     if (visto) return listo();
     try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
     const el = $("#arranque");
@@ -2500,7 +2506,8 @@ async function iniciar(conToque = false) {
   if (porChasquido) {
     // Con el chasquido: la bienvenida con su sonido (la app de la Mac da el "toque" que el navegador pide)
     // y en cuanto termina, DELTA ya está escuchando. Sin saludo largo del día.
-    arranque(conToque).then(() => setTimeout(despertarPorChasquido, 300));
+    ultimoChasquido = Date.now();
+    arranque(conToque, true).then(() => setTimeout(escucharTrasChasquido, 300));
   } else {
     arranque(conToque).then(() => {
       // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
