@@ -3,8 +3,10 @@
 // Cada conexión es de un cliente; la llave se guarda en la base de DELTA y nunca regresa a la pantalla.
 import { db } from "./db.js";
 import { clienteRequerido } from "./agencia.js";
-import { crearProspecto, actualizarProspecto, normalizarTelefono, obtenerProspecto } from "./crm.js";
+import { crearProspecto, actualizarProspecto, normalizarTelefono, obtenerProspecto, notaProspecto } from "./crm.js";
 import { avisarPantalla } from "./avisos.js";
+import Anthropic from "@anthropic-ai/sdk";
+import * as meta from "./meta.js";
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS crm_fuentes (
@@ -19,7 +21,7 @@ CREATE TABLE IF NOT EXISTS crm_fuentes (
   error TEXT
 );
 `);
-for (const col of ["externo_id TEXT", "externo_etapa TEXT"]) {
+for (const col of ["externo_id TEXT", "externo_etapa TEXT", "externo_actualizado TEXT", "externo_mensajes INTEGER", "ia_revisado TEXT"]) {
   try { db.exec(`ALTER TABLE prospectos ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_externo ON prospectos(externo_id)");
@@ -53,8 +55,8 @@ export function etapaPorNombre(nombre) {
   if (/(ganad|vend|venta|cerrad|pag[oa]|compr|won|paciente activ|tratamiento)/.test(t)) return "venta";
   if (/(perdid|descart|no interes|no le interes|no contest|lost|basura|spam|cancel)/.test(t)) return "perdido";
   if (/(asisti|vino|atendid|consulta realiz|valorad|showed)/.test(t)) return "asistio";
-  if (/(cita|agend|appoint|book|confirm)/.test(t)) return "cita";
-  if (/(contact|seguim|respond|calific|negoci|cotiz|interesad|propuesta|follow)/.test(t)) return "contactado";
+  if (/(cita|agend|appoint|book|confirm|aprobad)/.test(t)) return "cita";
+  if (/(contact|seguim|respond|calific|negoci|cotiz|interesad|propuesta|follow|perfil|papeles|document)/.test(t)) return "contactado";
   return "nuevo";
 }
 
@@ -121,11 +123,21 @@ async function leerGhl(f, { desde }) {
 }
 
 // ---------- Pancake ----------
+const RANGO = { nuevo: 0, contactado: 1, cita: 2, asistio: 3, venta: 4 };
+const masAvanzada = (a, b) => ((RANGO[b] ?? -1) > (RANGO[a] ?? -1) ? b : a);
+const basePancake = (f) => `https://pages.fm/api/public_api/v1/pages/${encodeURIComponent(f.cuenta)}`;
+
 async function leerPancake(f, { desde }) {
-  const base = `https://pages.fm/api/public_api/v1/pages/${encodeURIComponent(f.cuenta)}`;
+  const base = basePancake(f);
   const fin = Math.floor(Date.now() / 1000);
   // Pancake deja pedir de un mes a la vez
   const ini = Math.max(Math.floor(Date.parse(desde) / 1000), fin - 30 * 86400);
+  // Etiquetas de la página (LEAD, PERFILAMIENTO, APROBADO, VENTA…): si las usan, dicen la etapa
+  const etiquetas = new Map();
+  try {
+    const t = await pedir(`${base}/tags?page_access_token=${encodeURIComponent(f.token)}`);
+    for (const x of t.tags || []) etiquetas.set(String(x.id), x.text || x.name || "");
+  } catch { /* sin etiquetas no pasa nada */ }
   const lista = [];
   for (let page = 1; page <= 30; page++) {
     const d = await pedir(`${base}/conversations?page_access_token=${encodeURIComponent(f.token)}&page_id=${encodeURIComponent(f.cuenta)}&since=${ini}&until=${fin}&page_number=${page}&order_by=updated_at`);
@@ -138,21 +150,46 @@ async function leerPancake(f, { desde }) {
     if (!c.length || (d.total && lista.length >= d.total)) break;
   }
   const red = (c) => { const t = String(c.id || c.customer_id || ""); return /^wa(ba)?_|whatsapp/i.test(t) ? "whatsapp" : /^ig(o)?_|^ig|instagram/i.test(t) || c.platform === "instagram" ? "instagram" : "facebook"; };
-  const fecha = (t) => (t ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t + "Z").toISOString() : null);
-  return lista.filter((c) => (c.type || "INBOX") === "INBOX").map((c) => {
+  const salida = [];
+  for (const c of lista.filter((c) => (c.type || "INBOX") === "INBOX")) {
     const cu = c.customers?.[0] || {};
     let tel = (c.recent_phone_numbers || []).map((x) => x.phone_number || x).find((x) => typeof x === "string" && x) || null;
     // En WhatsApp el "id" de la persona es su número
     if (!tel && red(c) === "whatsapp") tel = [cu.fb_id, c.from?.phone, c.from?.id, c.page_customer?.phone_number].map((x) => String(x || "").replace(/\D/g, "")).find((x) => x.length >= 10 && x.length <= 15) || null;
-    return {
-      id: `pancake:${f.cuenta}:${c.id}`, nombre: cu.name || c.from?.name || null, telefono: tel, correo: null,
-      // Si lo último lo mandó la clínica, ya le contestaron
-      etapa: c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo",
-      etapa_original: null, valor: null, creado: fecha(c.inserted_at),
-      fuente: red(c), campana: c.ad_ids?.length ? "Anuncio (clic a WhatsApp)" : null,
-      solo_nuevos: true, // en Pancake no hay etapas: no se pisa lo que tú muevas
-    };
-  });
+    const nombresTags = (c.tags || []).map((t) => (typeof t === "object" ? t.text || t.name : etiquetas.get(String(t)))).filter(Boolean);
+    // Si lo último lo mandó la clínica, ya le contestaron
+    let etapa = c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo";
+    for (const t of nombresTags) etapa = masAvanzada(etapa, etapaPorNombre(t));
+    const adId = (c.ad_ids || [])[0] || null;
+    salida.push({
+      id: `pancake:${f.cuenta}:${c.id}`, conversacion: c.id, nombre: cu.name || c.from?.name || null, telefono: tel, correo: null,
+      etapa, etapa_original: nombresTags.join(", ") || null, valor: null, creado: fechaPancake(c.inserted_at),
+      actualizado: fechaPancake(c.updated_at), mensajes: Number(c.message_count) || 0,
+      fuente: red(c), campana: adId ? (await meta.nombreAnuncio(adId)) || `Anuncio ${adId}` : null,
+      solo_nuevos: true, // en Pancake no hay etapas fijas: solo se avanza, nunca se regresa lo que tú muevas
+    });
+  }
+  return salida;
+}
+const fechaPancake = (t) => (t ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t + "Z").toISOString() : null);
+
+/** Los últimos mensajes de una conversación de Pancake, como texto (Cliente / Negocio). */
+async function chatPancake(f, conversacion, mensajes = 60) {
+  const base = basePancake(f);
+  let todos = [];
+  for (let n = 0; n < mensajes; n += 30) {
+    const d = await pedir(`${base}/conversations/${encodeURIComponent(conversacion)}/messages?page_access_token=${encodeURIComponent(f.token)}${n ? `&current_count=${n}` : ""}`);
+    const m = d.messages || [];
+    todos = [...m, ...todos];
+    if (m.length < 30) break;
+  }
+  const limpio = (h) => String(h || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+  const idPagina = f.cuenta;
+  return todos.map((m) => {
+    const quien = String(m.from?.id) === idPagina || String(m.from?.id) === String(m.page_id) ? "Negocio" : "Cliente";
+    const texto = limpio(m.message) || (m.attachments?.length ? `[${m.attachments.map((a) => a.type || "archivo").join(", ")}]` : "");
+    return texto ? `${String(m.inserted_at || "").slice(0, 16).replace("T", " ")} ${quien}: ${texto}` : null;
+  }).filter(Boolean).join("\n");
 }
 
 const LECTORES = { kommo: leerKommo, ghl: leerGhl, pancake: leerPancake };
@@ -162,8 +199,9 @@ function guardar(f, x) {
   if (!x.nombre && !x.telefono) return "vacio";
   let tel = null;
   try { tel = normalizarTelefono(x.telefono); } catch { /* raro: se omite */ }
-  const ya = db.prepare("SELECT id, etapa, externo_etapa FROM prospectos WHERE externo_id = ?").get(x.id);
+  const ya = db.prepare("SELECT id, etapa, externo_etapa, campana FROM prospectos WHERE externo_id = ?").get(x.id);
   if (ya) {
+    if (x.campana && !ya.campana) db.prepare("UPDATE prospectos SET campana = ? WHERE id = ?").run(x.campana.slice(0, 160), ya.id);
     // Solo se mueve si cambió allá (así no se pisa lo que tú cambies en DELTA)
     if (!x.solo_nuevos && x.etapa !== ya.externo_etapa) {
       const cambios = { etapa: x.etapa };
@@ -172,9 +210,10 @@ function guardar(f, x) {
       db.prepare("UPDATE prospectos SET externo_etapa = ? WHERE id = ?").run(x.etapa, ya.id);
       return "movido";
     }
-    // Pancake: si allá ya le contestaron y aquí sigue como nuevo, pasa a contactado
-    if (x.solo_nuevos && x.etapa === "contactado" && ya.etapa === "nuevo") {
-      actualizarProspecto(ya.id, { etapa: "contactado" });
+    if (x.actualizado) db.prepare("UPDATE prospectos SET externo_actualizado = ?, externo_mensajes = ? WHERE id = ?").run(x.actualizado, x.mensajes ?? null, ya.id);
+    // Pancake: solo avanza (si allá ya le contestaron o lo etiquetaron más adelante), nunca regresa
+    if (x.solo_nuevos && ya.etapa !== "perdido" && masAvanzada(ya.etapa, x.etapa) !== ya.etapa) {
+      actualizarProspecto(ya.id, { etapa: x.etapa });
       db.prepare("UPDATE prospectos SET externo_etapa = ? WHERE id = ?").run(x.etapa, ya.id);
       return "movido";
     }
@@ -189,8 +228,8 @@ function guardar(f, x) {
     if (!obtenerProspecto(p.id).externo_id) db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ? WHERE id = ?").run(x.id, x.etapa, p.id);
     return "igual";
   }
-  db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ?, creado = COALESCE(?, creado), etapa_desde = COALESCE(?, etapa_desde) WHERE id = ?")
-    .run(x.id, x.etapa, x.creado, x.creado, p.id);
+  db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ?, creado = COALESCE(?, creado), etapa_desde = COALESCE(?, etapa_desde), externo_actualizado = ?, externo_mensajes = ? WHERE id = ?")
+    .run(x.id, x.etapa, x.creado, x.creado, x.actualizado || null, x.mensajes ?? null, p.id);
   return "nuevo";
 }
 
@@ -204,7 +243,9 @@ export function listarFuentes(cliente) {
 export async function sincronizarFuente(id) {
   const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(id));
   if (!f) throw new Error("Esa conexión ya no existe");
-  const desde = f.ultimo ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
+  // Pancake: si hay conversaciones de antes sin su número de mensajes (versión vieja), se repasa el mes completo
+  const repasar = f.tipo === "pancake" && db.prepare("SELECT 1 FROM prospectos WHERE externo_id LIKE ? AND externo_mensajes IS NULL LIMIT 1").get(`pancake:${f.cuenta}:%`);
+  const desde = f.ultimo && !repasar ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
   const inicio = new Date().toISOString();
   try {
     const lista = await LECTORES[f.tipo](f, { desde });
@@ -214,6 +255,9 @@ export async function sincronizarFuente(id) {
       if (q === "nuevo") r.nuevos++;
       if (q === "movido") r.movidos++;
     }
+    if (repasar) db.prepare("UPDATE prospectos SET externo_mensajes = 0 WHERE externo_id LIKE ? AND externo_mensajes IS NULL").run(`pancake:${f.cuenta}:%`);
+    const previo = f.resultado ? JSON.parse(f.resultado) : {};
+    if (previo.chats) r.chats = previo.chats;
     db.prepare("UPDATE crm_fuentes SET ultimo = ?, resultado = ?, error = NULL WHERE id = ?").run(inicio, JSON.stringify(r), f.id);
     if (r.nuevos || r.movidos) avisarPantalla({ tipo: "crm" });
     return { ...vestir({ ...f, ultimo: inicio, resultado: JSON.stringify(r), error: null }), ...r };
@@ -253,8 +297,11 @@ export async function conectarFuente({ cliente, tipo, cuenta, token } = {}) {
   const ya = db.prepare("SELECT id FROM crm_fuentes WHERE cliente_id = ? AND tipo = ? AND cuenta = ?").get(c.id, tipo, cu);
   const id = ya ? (db.prepare("UPDATE crm_fuentes SET token = ?, error = NULL WHERE id = ?").run(tk, ya.id), ya.id)
     : db.prepare("INSERT INTO crm_fuentes (cliente_id, tipo, cuenta, token) VALUES (?,?,?,?)").run(c.id, tipo, cu, tk).lastInsertRowid;
-  try { return await sincronizarFuente(id); }
-  catch (e) {
+  try {
+    const r = await sincronizarFuente(id);
+    if (tipo === "pancake" && process.env.ANTHROPIC_API_KEY) leerChatsEnFondo(id, { max: 80 });
+    return r;
+  } catch (e) {
     if (!ya) db.prepare("DELETE FROM crm_fuentes WHERE id = ?").run(id); // si la llave no sirve, no se queda guardada
     throw e;
   }
@@ -269,7 +316,85 @@ export function quitarFuente(id) {
 export async function sincronizarTodas() {
   let nuevos = 0;
   for (const f of db.prepare("SELECT f.id FROM crm_fuentes f JOIN clientes c ON c.id = f.cliente_id WHERE c.estado != 'terminado'").all()) {
-    try { nuevos += (await sincronizarFuente(f.id)).nuevos; } catch (e) { console.error("[crm externos]", e.message); }
+    try { nuevos += (await sincronizarFuente(f.id)).nuevos; } catch (e) { console.error("[crm externos]", e.message); continue; }
+    const tipo = db.prepare("SELECT tipo FROM crm_fuentes WHERE id = ?").get(f.id)?.tipo;
+    if (tipo === "pancake" && process.env.ANTHROPIC_API_KEY) await leerChats(f.id, { max: 30 }).catch((e) => console.error("[crm chats]", e.message));
   }
   return { nuevos };
+}
+
+// ---------- DELTA lee los chats y acomoda el embudo ----------
+let claude = null;
+let chatsDePrueba = null, iaDePrueba = null;
+export const _chatsDePrueba = (fn) => { chatsDePrueba = fn; };
+export const _iaDePrueba = (fn) => { iaDePrueba = fn; };
+const leyendo = new Map(); // fuente -> promesa
+
+/** Lo que Claude entiende de un chat: etapa, qué quiere, valor y un resumen. */
+async function entenderChat(cliente, prospecto, chat) {
+  if (iaDePrueba) return iaDePrueba(prospecto, chat);
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("Falta ANTHROPIC_API_KEY");
+  claude ||= new Anthropic();
+  const r = await claude.messages.create({
+    model: process.env.DELTA_MODELO_CRM || "claude-haiku-5-5",
+    max_tokens: 400,
+    system: `Lees chats de WhatsApp/Messenger entre un negocio y un cliente para acomodarlo en el embudo de ventas del negocio "${cliente.nombre}"${cliente.industria ? ` (${cliente.industria})` : ""}.
+Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (compró, pagó, firmó, se le entregó; "ya es cliente"), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
+Responde SOLO un JSON: {"etapa":"…","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase de lo que pasó y qué sigue"}`,
+    messages: [{ role: "user", content: `Cliente: ${prospecto.nombre}\n\nChat:\n${chat.slice(-9000)}` }],
+  });
+  const t = r.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  const m = t.match(/\{[\s\S]*\}/);
+  return m ? JSON.parse(m[0]) : null;
+}
+
+/** Lee con DELTA los chats de Pancake que cambiaron desde la última vez y mueve a cada quien a su etapa. */
+export async function leerChats(fuenteId, { max = 40 } = {}) {
+  const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(fuenteId));
+  if (!f) throw new Error("Esa conexión ya no existe");
+  if (f.tipo !== "pancake") throw new Error("Por ahora DELTA lee los chats de Pancake");
+  const cliente = db.prepare("SELECT * FROM clientes WHERE id = ?").get(f.cliente_id);
+  const pendientes = db.prepare(`SELECT id, nombre, etapa, externo_id, valor, interes FROM prospectos
+      WHERE externo_id LIKE ? AND etapa NOT IN ('venta') AND COALESCE(externo_mensajes, 0) >= 4
+        AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado)
+      ORDER BY externo_actualizado DESC LIMIT ?`).all(`pancake:${f.cuenta}:%`, Number(max));
+  const r = { leidos: 0, movidos: 0, ventas: 0, perdidos: 0, errores: 0 };
+  for (const p of pendientes) {
+    try {
+      const conversacion = p.externo_id.split(":").slice(2).join(":");
+      const chat = chatsDePrueba ? await chatsDePrueba(conversacion) : await chatPancake(f, conversacion);
+      const ahora = new Date().toISOString();
+      if (!chat) { db.prepare("UPDATE prospectos SET ia_revisado = ? WHERE id = ?").run(ahora, p.id); continue; }
+      const x = await entenderChat(cliente, p, chat);
+      r.leidos++;
+      db.prepare("UPDATE prospectos SET ia_revisado = ? WHERE id = ?").run(ahora, p.id);
+      if (!x || !["nuevo", "contactado", "cita", "asistio", "venta", "perdido"].includes(x.etapa)) continue;
+      const cambios = {};
+      if (x.interes && !p.interes) cambios.interes = String(x.interes);
+      if (x.etapa === "venta" && Number(x.valor) > 0 && !p.valor) cambios.valor = Number(x.valor);
+      // Solo avanza; "perdido" solo si no había llegado a venta
+      if (x.etapa === "perdido" && p.etapa !== "perdido") { cambios.etapa = "perdido"; if (x.motivo) cambios.motivo_perdido = String(x.motivo); }
+      else if (x.etapa !== "perdido" && masAvanzada(p.etapa === "perdido" ? "nuevo" : p.etapa, x.etapa) === x.etapa && x.etapa !== p.etapa) cambios.etapa = x.etapa;
+      if (Object.keys(cambios).length) {
+        actualizarProspecto(p.id, cambios);
+        if (cambios.etapa) { r.movidos++; if (cambios.etapa === "venta") r.ventas++; if (cambios.etapa === "perdido") r.perdidos++; }
+      }
+      if (x.resumen) notaProspecto(p.id, `DELTA leyó el chat: ${String(x.resumen).slice(0, 400)}`);
+    } catch (e) {
+      r.errores++;
+      console.error("[crm chats]", p.id, e.message);
+      if (/ANTHROPIC_API_KEY|credit|billing|429|rate/i.test(e.message)) break;
+    }
+  }
+  r.pendientes = Math.max(0, db.prepare(`SELECT COUNT(*) n FROM prospectos WHERE externo_id LIKE ? AND etapa NOT IN ('venta') AND COALESCE(externo_mensajes, 0) >= 4 AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado)`).get(`pancake:${f.cuenta}:%`).n);
+  db.prepare("UPDATE crm_fuentes SET resultado = json_set(COALESCE(resultado, '{}'), '$.chats', json(?)) WHERE id = ?").run(JSON.stringify({ ...r, fecha: new Date().toISOString() }), f.id);
+  if (r.movidos) avisarPantalla({ tipo: "crm" });
+  return r;
+}
+
+/** Igual, pero en segundo plano (para el botón): regresa de inmediato. */
+export function leerChatsEnFondo(fuenteId, opciones) {
+  const k = Number(fuenteId);
+  if (!leyendo.has(k)) leyendo.set(k, leerChats(k, opciones).catch((e) => console.error("[crm chats]", e.message)).finally(() => leyendo.delete(k)));
+  return { leyendo: true };
 }

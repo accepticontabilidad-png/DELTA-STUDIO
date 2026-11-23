@@ -505,6 +505,21 @@ export async function conversacionesDeCliente(clienteId, { desde } = {}) {
   return { paginas: paginas.length, conversaciones, sin_permiso: [...faltan] };
 }
 
+/** Nombre de un anuncio y su campaña ("Campaña · Anuncio"), guardado para no volver a preguntar. */
+export async function nombreAnuncio(adId) {
+  const id = String(adId || "").replace(/\D/g, "");
+  if (!id) return null;
+  const guardado = getAjuste(`anuncio_${id}`);
+  if (guardado) return guardado;
+  if (!metaConectado() || leadsDePrueba) return null;
+  try {
+    const d = await pedir(`/${id}`, { fields: "name,campaign{name}" });
+    const nombre = [d.campaign?.name, d.name].filter(Boolean).join(" · ").slice(0, 150) || null;
+    if (nombre) setAjuste(`anuncio_${id}`, nombre);
+    return nombre;
+  } catch { return null; }
+}
+
 /** Convierte las respuestas del formulario en nombre, teléfono, correo y lo demás. */
 export function leerLead(l, formulario = null) {
   const campos = Object.fromEntries((l.field_data || []).map((x) => [String(x.name || "").toLowerCase(), (x.values || []).join(", ")]));
