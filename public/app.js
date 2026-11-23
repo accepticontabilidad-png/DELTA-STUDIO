@@ -2,7 +2,7 @@
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
-import { iniciarInicioVivo, datosVivos } from "/inicio-vivo.js";
+import { iniciarInicioVivo, datosVivos, orbeVivo } from "/inicio-vivo.js";
 import { crearArranque } from "/arranque.js";
 import { pintarFabrica, tableroDe } from "/fabrica.js";
 const $ = (s) => document.querySelector(s);
@@ -1798,6 +1798,7 @@ const orbe = (() => {
     energia += (objetivo - energia) * (nivel != null ? 0.25 : 0.06);
     color = color.map((c, i) => c + (colores[estado][i] - c) * 0.06);
     const [r, g, b] = color.map(Math.round);
+    orbeVivo.energia = energia; orbeVivo.estado = estado; // el polvo de estrellas reacciona a la voz
     const dia = document.documentElement.dataset.mood === "dia";
     const rgba = (a) => `rgba(${r},${g},${b},${a})`;
     // De día los trazos (anillos, marcas, cometa) van en un violeta más profundo y firme para que se lean sobre el fondo claro
