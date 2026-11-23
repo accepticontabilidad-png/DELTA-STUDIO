@@ -27,6 +27,7 @@ import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
 import * as crm from "./crm.js";
+import * as crmExternos from "./crmexternos.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -356,6 +357,10 @@ api.post("/crm/meta", envolver(async (req) => {
   try { return await crm.importarDeMeta(String(req.body?.cliente || "")); }
   catch (e) { if (e.permiso === false) return { sin_permiso: true }; throw e; }
 }));
+api.get("/crm/fuentes", envolver((req) => ({ fuentes: crmExternos.listarFuentes(String(req.query.cliente || "")), tipos: crmExternos.TIPOS })));
+api.post("/crm/fuentes", envolver((req) => crmExternos.conectarFuente(req.body || {})));
+api.post("/crm/fuentes/:id/sincronizar", envolver((req) => crmExternos.sincronizarFuente(Number(req.params.id))));
+api.delete("/crm/fuentes/:id", envolver((req) => crmExternos.quitarFuente(Number(req.params.id))));
 api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
 api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
 api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
@@ -511,4 +516,7 @@ app.listen(PUERTO, () => {
   tendencias.iniciarTendencias();
   seo.iniciarSeo();
   crm.iniciarCrm();
+  // Kommo, GoHighLevel y Pancake de los clientes: cada hora (solo lectura)
+  setTimeout(() => crmExternos.sincronizarTodas().catch(() => {}), 120e3);
+  setInterval(() => crmExternos.sincronizarTodas().catch(() => {}), 3600e3);
 });
