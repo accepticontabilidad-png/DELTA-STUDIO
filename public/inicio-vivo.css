@@ -26,15 +26,15 @@
 /* ---------- Tarjetas en 3D con borde de luz que sigue al cursor ---------- */
 .seccion.inicio { --vidrio-card: linear-gradient(165deg, rgba(34,25,86,.40), rgba(10,8,28,.52)); --luz-borde: rgba(220,206,255,.95); --luz-rosa: rgba(255,158,232,.9); }
 html[data-mood="dia"] .seccion.inicio { --vidrio-card: var(--vidrio-dia); --luz-borde: rgba(106,76,240,.95); --luz-rosa: rgba(210,80,170,.85); }
-.hud-card, .hud-tile, .hud-hero, .satelite { transform-style: preserve-3d; transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .2s, box-shadow .3s; }
-.hud-card.vivo-inclinada, .hud-tile.vivo-inclinada, .hud-hero.vivo-inclinada, .satelite.vivo-inclinada {
+.hud-card, .hud-tile, .hud-hero { transform-style: preserve-3d; transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .2s, box-shadow .3s; }
+.hud-card.vivo-inclinada, .hud-tile.vivo-inclinada, .hud-hero.vivo-inclinada {
   transform: perspective(900px) rotateX(var(--rx, 0)) rotateY(var(--ry, 0)) translateY(-3px);
   transition: transform .08s linear, box-shadow .3s;
   box-shadow: inset 0 1px 0 rgba(233,230,255,.08), 0 26px 70px rgba(60,30,160,.38), 0 0 0 1px rgba(183,166,255,.06);
 }
-html[data-mood="dia"] .hud-card.vivo-inclinada, html[data-mood="dia"] .hud-tile.vivo-inclinada, html[data-mood="dia"] .hud-hero.vivo-inclinada, html[data-mood="dia"] .satelite.vivo-inclinada { box-shadow: inset 0 1px 0 #fff, 0 24px 60px rgba(80,50,200,.24); }
+html[data-mood="dia"] .hud-card.vivo-inclinada, html[data-mood="dia"] .hud-tile.vivo-inclinada, html[data-mood="dia"] .hud-hero.vivo-inclinada { box-shadow: inset 0 1px 0 #fff, 0 24px 60px rgba(80,50,200,.24); }
 /* Borde de luz: un anillo de 1 px que se enciende del lado donde está el cursor */
-.hud-card::after, .hud-tile::after, .hud-hero::after, .satelite::after {
+.hud-card::after, .hud-tile::after, .hud-hero::after {
   content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 2.5px; pointer-events: none; opacity: 0; transition: opacity .25s;
   background: conic-gradient(from calc(var(--giro, 0deg) - 70deg), transparent 0deg, var(--luz-borde) 45deg, var(--luz-rosa) 70deg, var(--luz-borde) 95deg, transparent 140deg);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
@@ -42,10 +42,10 @@ html[data-mood="dia"] .hud-card.vivo-inclinada, html[data-mood="dia"] .hud-tile.
 }
 .vivo-inclinada::after { opacity: 1; }
 /* Brillo interior que sigue al mouse */
-.hud-card.vivo-inclinada, .hud-tile.vivo-inclinada, .satelite.vivo-inclinada {
+.hud-card.vivo-inclinada, .hud-tile.vivo-inclinada {
   background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 0), rgba(160,135,255,.2), transparent 60%) padding-box, var(--vidrio-card) padding-box, var(--linea-luz) border-box;
 }
-html[data-mood="dia"] .hud-card.vivo-inclinada, html[data-mood="dia"] .hud-tile.vivo-inclinada, html[data-mood="dia"] .satelite.vivo-inclinada {
+html[data-mood="dia"] .hud-card.vivo-inclinada, html[data-mood="dia"] .hud-tile.vivo-inclinada {
   background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 0), rgba(106,76,240,.12), transparent 60%) padding-box, var(--vidrio-card) padding-box, var(--linea-luz) border-box;
 }
 
@@ -109,36 +109,15 @@ html[data-mood="dia"] .anillo-texto text { fill: var(--cian); opacity: .7; }
 @keyframes vivo-onda { from { scale: 1; opacity: 1; } to { scale: 26; opacity: 0; } }
 html[data-mood="dia"] .orbe-onda { border-color: rgba(106,76,240,.8); box-shadow: 0 0 20px rgba(106,76,240,.5); }
 
-.satelites, .orbe-lazos { display: none; }
-.modo-delta .satelites { display: block; position: absolute; inset: 0; pointer-events: none; }
-.modo-delta .orbe-lazos { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.orbe-lazos path { fill: none; stroke: var(--cian); stroke-width: 1; opacity: .5; stroke-dasharray: 3 5; animation: vivo-flujo 1.6s linear infinite, vivo-aparece .6s calc(.6s + var(--i) * .12s) both; }
-.orbe-lazos circle { fill: #fff; filter: drop-shadow(0 0 4px var(--cian)) drop-shadow(0 0 8px #ff9ee8); animation: vivo-aparece .6s calc(.6s + var(--i) * .12s) both; }
-html[data-mood="dia"] .orbe-lazos circle { fill: var(--cian); }
-@keyframes vivo-flujo { to { stroke-dashoffset: -16; } }
-@keyframes vivo-aparece { from { opacity: 0; } }
-.satelite { position: absolute; width: 214px; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 16px; text-decoration: none; color: var(--texto); pointer-events: auto;
-  border: 1px solid transparent; background: var(--vidrio-card) padding-box, var(--linea-luz) border-box; box-shadow: inset 0 1px 0 rgba(233,230,255,.06), 0 18px 50px rgba(2,1,12,.45);
-  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
-  animation: vivo-sat .8s cubic-bezier(.2,.8,.2,1) calc(.5s + var(--i) * .12s) both, vivo-flotar 7s ease-in-out calc(var(--i) * -1.7s) infinite; }
-html[data-mood="dia"] .satelite { box-shadow: inset 0 1px 0 #fff, 0 14px 40px rgba(80,50,200,.14); }
-@keyframes vivo-sat { from { opacity: 0; scale: .85; filter: blur(8px); } to { opacity: 1; scale: 1; filter: none; } }
-@keyframes vivo-flotar { 0%, 100% { translate: 0 0; } 50% { translate: 0 -7px; } }
-.sat-icono { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(201,191,255,.35), rgba(123,92,255,.15)); border: 1px solid rgba(183,166,255,.3); box-shadow: 0 0 16px rgba(139,115,255,.35); }
-.sat-icono svg { width: 18px; height: 18px; fill: none; stroke: var(--lila); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(139,115,255,.8)); }
-html[data-mood="dia"] .sat-icono { background: radial-gradient(circle at 35% 30%, #fff, rgba(106,76,240,.12)); border-color: rgba(106,76,240,.25); box-shadow: 0 0 14px rgba(106,76,240,.18); }
-.sat-txt { display: grid; min-width: 0; line-height: 1.2; }
-.sat-txt small { font-size: 9.5px; font-weight: 700; letter-spacing: .26em; text-transform: uppercase; color: var(--cian); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sat-txt b { font-size: 17px; font-weight: 300; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0 1px; }
-.sat-txt em { font-style: normal; font-size: 11.5px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.satelite.alerta .sat-txt em { color: var(--rojo); font-weight: 600; }
-.satelite.alerta .sat-icono { box-shadow: 0 0 0 1px rgba(255,90,122,.4), 0 0 18px rgba(255,90,122,.35); animation: vivo-alerta-ic 2.2s ease-in-out infinite; }
-@keyframes vivo-alerta-ic { 50% { box-shadow: 0 0 0 4px rgba(255,90,122,.15), 0 0 24px rgba(255,90,122,.5); } }
-.satelite.sube .sat-txt b { color: var(--verde); } .satelite.baja .sat-txt b { color: var(--rojo); }
-.satelite:hover .sat-icono { box-shadow: 0 0 22px rgba(160,135,255,.7); }
-
-/* Si no caben a los lados (pantallas angostas y celular) se esconden: ahí manda el orbe */
-.modo-delta .satelites.fila { display: none; }
+/* Polvo de estrellas alrededor del orbe (solo en Modo DELTA) */
+.orbe-polvo { display: none; position: absolute; pointer-events: none; z-index: 2; }
+.modo-delta .orbe-polvo { display: block; }
+/* Logo de DELTA más vivo en Modo DELTA: se mece en 3D y su brillo respira */
+.modo-delta .orbe .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite, vivo-logo-brillo 4s ease-in-out infinite; }
+@keyframes vivo-logo-mece { 0%, 100% { rotate: y -10deg; } 50% { rotate: y 10deg; } }
+@keyframes vivo-logo-brillo { 0%, 100% { filter: drop-shadow(0 0 6px rgba(201,191,255,.9)) drop-shadow(0 0 22px rgba(123,92,255,.8)); } 50% { filter: drop-shadow(0 0 12px rgba(240,236,255,1)) drop-shadow(0 0 44px rgba(139,115,255,1)) drop-shadow(0 0 80px rgba(255,158,232,.35)); } }
+.modo-delta .orbe[data-estado="hablando"] .logo-orbe, .modo-delta .orbe[data-estado="escuchando"] .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite, vivo-logo-brillo 1.2s ease-in-out infinite; }
+html[data-mood="dia"] .modo-delta .orbe .logo-orbe { animation: flotar 6s ease-in-out infinite, vivo-logo-mece 9s ease-in-out infinite; }
 
 @media (max-width: 900px) {
   .hud-hero { flex-wrap: wrap; }
@@ -150,6 +129,6 @@ html[data-mood="dia"] .sat-icono { background: radial-gradient(circle at 35% 30%
 
 /* Menos movimiento si la persona lo pidió en su equipo */
 @media (prefers-reduced-motion: reduce) {
-  .hud-tile::before, .hud-ahora::after, .satelite, .orbe-lazos path, .seccion.inicio .orbe-escena,
+  .hud-tile::before, .hud-ahora::after, .seccion.inicio .orbe-escena,
   .hud-izq > *, .hud-der > *, .hud-tile:has(em), .mk-barra::after { animation: none !important; }
 }

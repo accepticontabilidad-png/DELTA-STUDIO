@@ -1,7 +1,7 @@
 // DELTA — Inicio "vivo": efectos de centro de mando (HUD) sobre el Inicio y el Modo DELTA.
 // - Tarjetas que se inclinan en 3D y un borde de luz que sigue al cursor (solo con mouse).
 // - Rayos de datos que salen del orbe hacia cada tarjeta (solo PC con tres columnas).
-// - Satélites alrededor del orbe en Modo DELTA con lo más importante del día.
+// - Polvo de estrellas vivo alrededor del orbe en Modo DELTA.
 // - Anillo de texto que gira alrededor del orbe, onda al tocarlo y orbe que sigue un poco al cursor.
 // Todo se apaga con "reducir movimiento" y cuando la pestaña no está a la vista.
 
@@ -16,7 +16,7 @@ const enModoDelta = () => seccion()?.classList.contains("modo-delta");
 const esDia = () => document.documentElement.dataset.mood === "dia";
 
 // ---------- Tarjetas con inclinación 3D y borde de luz ----------
-const INCLINABLES = ".hud-card, .hud-tile, .hud-hero, .satelite";
+const INCLINABLES = ".hud-card, .hud-tile, .hud-hero";
 function iniciarInclinacion() {
   if (!conMouse || reducir) return;
   let activa = null;
@@ -123,51 +123,126 @@ function iniciarRayos() {
   requestAnimationFrame(cuadro);
 }
 
-// ---------- Satélites alrededor del orbe (Modo DELTA) ----------
-const ICON = {
-  cita: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
-  tarea: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>',
-  correo: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
-  bolsa: '<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
-};
-let satDatos = [];
-function pintarSatelites() {
-  const caja = $("#satelites");
-  if (!caja) return;
-  caja.innerHTML = satDatos.map((s, i) => `<a class="satelite${s.alerta ? " alerta" : ""}" href="#/${s.ir}" style="--i:${i}"><span class="sat-icono">${s.icono}</span><span class="sat-txt"><small>${esc(s.etiqueta)}</small><b>${esc(s.valor)}</b>${s.sub ? `<em>${esc(s.sub)}</em>` : ""}</span></a>`).join("");
-  colocarSatelites();
-}
-
-// Los satélites van a los lados del orbe con una línea fina que los une a él.
-// Si no caben (pantallas angostas o celular), se acomodan en una fila debajo.
-function colocarSatelites() {
-  const caja = $("#satelites"), lazos = $("#orbe-lazos"), escena = $("#orbe-escena"), orbe = $("#orbe");
-  if (!caja || !escena || !orbe) return;
-  const sats = [...caja.children];
+// ---------- Polvo de estrellas alrededor del orbe (Modo DELTA) ----------
+// Cientos de partículas en órbitas inclinadas (como una galaxia), con profundidad:
+// las que pasan "detrás" de la esfera se ven tenues. Siguen al cursor, se dispersan
+// al tocar y se aceleran y brillan cuando DELTA escucha o habla.
+export const orbeVivo = { energia: 0.2, estado: "reposo" };
+const polvo = { parts: [], puntero: null, golpe: 0, lado: 0, R: 0, dpr: 1, inclina: [0, 0] };
+function colocarPolvo() {
+  const lienzo = $("#orbe-polvo"), escena = $("#orbe-escena"), orbe = $("#orbe");
+  if (!lienzo || !escena || !orbe) return;
   const E = escena.getBoundingClientRect(), O = orbe.getBoundingClientRect();
-  if (!O.width || !sats.length) { lazos.innerHTML = ""; return; }
-  const ancho = 214, R = O.width / 2;
-  const cx = O.left - E.left + R, cy = O.top - E.top + R;
-  const cabe = O.left - 40 - ancho > 10 && O.right + 40 + ancho < innerWidth - 10 && innerWidth > 900;
-  caja.classList.toggle("fila", !cabe);
-  if (!cabe) { lazos.innerHTML = ""; sats.forEach((s) => { s.style.left = s.style.top = ""; }); return; }
-  // Posiciones: dos a la izquierda y dos a la derecha, en ángulos que abrazan el orbe
-  const angulos = [-152, 152, -28, 28];
-  let lineas = "";
-  sats.forEach((s, i) => {
-    const a = (angulos[i] ?? 0) * Math.PI / 180;
-    const izq = Math.cos(a) < 0;
-    const ex = cx + Math.cos(a) * R * 0.93, ey = cy + Math.sin(a) * R * 0.93;
-    const sx = izq ? cx - R - 40 - ancho : cx + R + 40;
-    const sy = cy + Math.sin(a) * R * 0.78 - 32;
-    s.style.left = `${sx}px`;
-    s.style.top = `${sy}px`;
-    const fx = izq ? sx + ancho : sx, fy = sy + 32;
-    const mx = (ex + fx) / 2;
-    lineas += `<path d="M${ex.toFixed(1)},${ey.toFixed(1)} C${mx.toFixed(1)},${ey.toFixed(1)} ${mx.toFixed(1)},${fy.toFixed(1)} ${fx.toFixed(1)},${fy.toFixed(1)}" style="--i:${i}"/><circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="2.4" style="--i:${i}"/>`;
+  if (!O.width) return;
+  const lado = Math.round(O.width * 1.9);
+  polvo.R = O.width / 2;
+  lienzo.style.width = lienzo.style.height = `${lado}px`;
+  lienzo.style.left = `${O.left - E.left + O.width / 2 - lado / 2}px`;
+  lienzo.style.top = `${O.top - E.top + O.height / 2 - lado / 2}px`;
+  polvo.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (Math.abs(polvo.lado - lado) > 2) { polvo.lado = lado; lienzo.width = lienzo.height = Math.round(lado * polvo.dpr); }
+  if (!polvo.parts.length) {
+    const n = innerWidth < 700 ? 480 : 950;
+    // Tres "planos" de órbita con distinta inclinación y giro, más una nube interior
+    const planos = [[-0.35, 0.32], [0.55, 0.42], [1.35, 0.28], [0, 1]];
+    polvo.parts = Array.from({ length: n }, (_, i) => {
+      const pl = planos[i % 4];
+      const interior = pl[1] === 1;
+      // La mayoría forma un anillo denso pegado a la esfera (como en la bienvenida); unas pocas se alejan
+      const q = Math.random();
+      const r = interior ? 0.12 + Math.random() * 0.48 : q < 0.78 ? 0.6 + Math.pow(Math.random(), 0.8) * 0.36 : 0.96 + Math.random() * 0.55;
+      return {
+        r, a: Math.random() * Math.PI * 2,
+        w: (interior ? 0.5 : 0.18 + Math.random() * 0.25) * (0.7 + 0.6 * Math.random()) / Math.max(0.4, r),
+        giro: pl[0] + (Math.random() - 0.5) * 0.25, incl: interior ? 0.6 + Math.random() * 0.4 : pl[1] + (Math.random() - 0.5) * 0.12,
+        tam: Math.random() < 0.08 ? 1.6 + Math.random() * 1.2 : 0.5 + Math.random() * 1.0,
+        fase: Math.random() * 6, rosa: Math.random() < 0.2, ox: 0, oy: 0, vx: 0, vy: 0,
+      };
+    });
+  }
+}
+function iniciarPolvo() {
+  const lienzo = $("#orbe-polvo"), escena = $("#orbe-escena");
+  if (!lienzo || reducir) return;
+  const ctx = lienzo.getContext("2d");
+  let ultimo = 0, antes = performance.now();
+  escena.addEventListener("pointermove", (e) => {
+    const r = lienzo.getBoundingClientRect();
+    polvo.puntero = [(e.clientX - r.left), (e.clientY - r.top)];
+    polvo.inclina = [((e.clientX - r.left) / r.width - 0.5), ((e.clientY - r.top) / r.height - 0.5)];
+  }, { passive: true });
+  escena.addEventListener("pointerleave", () => { polvo.puntero = null; polvo.inclina = [0, 0]; });
+  escena.addEventListener("pointerdown", (e) => {
+    const r = lienzo.getBoundingClientRect();
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    polvo.golpe = 1;
+    for (const p of polvo.parts) {
+      const dx = p.sx - px, dy = p.sy - py, d = Math.hypot(dx, dy) || 1;
+      const f = Math.max(0, 1 - d / (polvo.R * 1.6)) * 14;
+      p.vx += dx / d * f; p.vy += dy / d * f;
+    }
   });
-  lazos.setAttribute("viewBox", `0 0 ${E.width} ${E.height}`);
-  lazos.innerHTML = lineas;
+  const tiltX = { v: 0 }, tiltY = { v: 0 };
+  function cuadro(t) {
+    requestAnimationFrame(cuadro);
+    if (t - ultimo < 30) return;
+    const dt = Math.min(64, t - antes); antes = t; ultimo = t;
+    if (!visible() || !enModoDelta()) { if (lienzo.dataset.limpio !== "1") { ctx.clearRect(0, 0, lienzo.width, lienzo.height); lienzo.dataset.limpio = "1"; } return; }
+    lienzo.dataset.limpio = "0";
+    if (!polvo.lado) colocarPolvo();
+    const { dpr, lado, R } = polvo;
+    const C = lado / 2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, lado, lado);
+    const dia = esDia();
+    ctx.globalCompositeOperation = dia ? "source-over" : "lighter";
+    const e = orbeVivo.energia, activo = orbeVivo.estado !== "reposo";
+    polvo.golpe *= 0.95;
+    const vel = (1 + e * 2.4 + polvo.golpe * 2) * dt / 1000;
+    // Todo el enjambre se inclina un poco hacia el cursor (sensación 3D)
+    tiltX.v += (polvo.inclina[0] * 0.5 - tiltX.v) * 0.05;
+    tiltY.v += (polvo.inclina[1] * 0.5 - tiltY.v) * 0.05;
+    const latido = 1 + 0.06 * e + 0.05 * polvo.golpe;
+    const esfera = R * 0.62;
+    for (const p of polvo.parts) {
+      p.a += p.w * vel;
+      // Órbita elíptica inclinada y luego girada en su plano
+      const x0 = Math.cos(p.a) * p.r, y0 = Math.sin(p.a) * p.r * p.incl;
+      const z = Math.sin(p.a) * p.r * Math.sqrt(Math.max(0, 1 - p.incl * p.incl)) * (p.incl === 1 ? 0 : 1);
+      const cg = Math.cos(p.giro), sg = Math.sin(p.giro);
+      let x = (x0 * cg - y0 * sg) * R * latido, y = (x0 * sg + y0 * cg) * R * latido;
+      x += z * R * tiltX.v * 0.6; y += z * R * tiltY.v * 0.6;
+      // Ondas de voz: el radio vibra cuando habla o escucha
+      if (activo) { const v = 1 + Math.sin(p.a * 6 + t / 120) * 0.035 * e; x *= v; y *= v; }
+      // Empuje del toque con resorte de regreso
+      p.vx += -p.ox * 0.06; p.vy += -p.oy * 0.06; p.vx *= 0.86; p.vy *= 0.86;
+      p.ox += p.vx; p.oy += p.vy;
+      let sx = C + x + p.ox, sy = C + y + p.oy;
+      // El cursor atrae y hace remolino
+      if (polvo.puntero) {
+        const dx = polvo.puntero[0] - sx, dy = polvo.puntero[1] - sy, d = Math.hypot(dx, dy);
+        if (d < 140) { const f = (1 - d / 140); sx += dx * f * 0.35 - dy * f * 0.2; sy += dy * f * 0.35 + dx * f * 0.2; }
+      }
+      p.sx = sx; p.sy = sy;
+      const detras = z < 0 && Math.hypot(sx - C, sy - C) < esfera;
+      const prof = 0.65 + 0.35 * (z / Math.max(0.01, p.r)); // más cerca, más grande
+      const brillo = (0.45 + 0.55 * Math.abs(Math.sin(t / 900 + p.fase))) * (detras ? 0.22 : 1) * (0.85 + e * 0.7 + polvo.golpe * 0.4);
+      const tam = p.tam * (0.7 + prof * 0.5) * (1 + e * 0.5);
+      if (dia) ctx.fillStyle = p.rosa ? `rgba(200,70,160,${Math.min(1, brillo * 0.9)})` : `rgba(90,60,220,${Math.min(1, brillo * 0.85)})`;
+      else ctx.fillStyle = p.rosa ? `rgba(255,158,232,${Math.min(1, brillo)})` : `rgba(225,218,255,${Math.min(1, brillo)})`;
+      ctx.beginPath(); ctx.arc(sx, sy, tam, 0, Math.PI * 2); ctx.fill();
+      // Las más grandes llevan un halito
+      if (p.tam > 1.6 && !detras && !dia) {
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, tam * 5);
+        g.addColorStop(0, dia ? `rgba(106,76,240,${brillo * 0.35})` : `rgba(180,160,255,${brillo * 0.45})`);
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(sx, sy, tam * 5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+  requestAnimationFrame(cuadro);
 }
 
 // ---------- Orbe que sigue un poco al cursor y onda al tocarlo ----------
@@ -208,27 +283,6 @@ function iniciarOrbe() {
 
 // ---------- Datos que llegan de la app ----------
 export function datosVivos({ panel, sinLeer, mercados, clima, fecha, siguiente }) {
-  const sats = [];
-  if (panel) {
-    sats.push(siguiente
-      ? { ir: "agenda", icono: ICON.cita, etiqueta: "Siguiente cita", valor: siguiente.cuando, sub: siguiente.titulo }
-      : { ir: "agenda", icono: ICON.cita, etiqueta: "Agenda", valor: "Libre", sub: "Sin citas por delante" });
-    const v = panel.hoy?.vencidas || 0;
-    sats.push({ ir: "tareas", icono: ICON.tarea, etiqueta: "Pendientes", valor: String(panel.hoy?.pendientes ?? 0), sub: v ? `${v} atrasado${v === 1 ? "" : "s"}` : "Todo al día", alerta: v > 0 });
-  }
-  if (sinLeer != null) sats.push({ ir: "correo", icono: ICON.correo, etiqueta: "Correo", valor: sinLeer ? `${sinLeer} sin leer` : "Al día", sub: sinLeer ? "Gmail y Hotmail" : "Bandeja tranquila" });
-  const m = (mercados || [])[0];
-  if (m) {
-    const c = m.cambio_dia_pct;
-    sats.push({ ir: "mercados", icono: ICON.bolsa, etiqueta: m.nombre, valor: `${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%`, sub: `${m.precio?.toLocaleString("es-MX") ?? ""} ${m.moneda || ""}`, sube: c > 0, baja: c < 0 });
-  }
-  const clave = JSON.stringify(sats);
-  if (clave !== JSON.stringify(satDatos)) { satDatos = sats; pintarSatelites(); }
-  // Marcar sube/baja en el satélite de bolsa
-  const ult = $("#satelites")?.lastElementChild;
-  const sb = sats[sats.length - 1];
-  if (ult && sb?.ir === "mercados") ult.classList.toggle("sube", !!sb.sube), ult.classList.toggle("baja", !!sb.baja);
-
   // Anillo de texto alrededor del orbe
   const partes = ["DELTA", "EN LÍNEA"];
   if (fecha) partes.push(fecha.toUpperCase());
@@ -267,9 +321,10 @@ export function iniciarInicioVivo() {
   iniciarInclinacion();
   iniciarRayos();
   iniciarOrbe();
+  iniciarPolvo();
   const escena = $("#orbe-escena");
-  if (escena && "ResizeObserver" in window) new ResizeObserver(() => colocarSatelites()).observe(escena);
-  addEventListener("resize", colocarSatelites);
-  addEventListener("hashchange", () => setTimeout(colocarSatelites, 60));
-  return { colocar: colocarSatelites };
+  if (escena && "ResizeObserver" in window) new ResizeObserver(() => colocarPolvo()).observe(escena);
+  addEventListener("resize", colocarPolvo);
+  addEventListener("hashchange", () => setTimeout(colocarPolvo, 60));
+  return { colocar: colocarPolvo };
 }
