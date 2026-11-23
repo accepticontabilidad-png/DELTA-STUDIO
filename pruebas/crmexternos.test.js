@@ -94,15 +94,28 @@ test("GoHighLevel: oportunidades con su contacto, ganadas y perdidas", async () 
 
 test("Pancake: conversaciones del mes como prospectos; una llave mala no se guarda", async () => {
   ext._fetchDePrueba(async (url) => {
-    assert.match(url, /pages\.fm\/api\/public_api\/v1\/pages\/12345\/conversations\?page_access_token=tok-pancake-xyz/);
-    return { success: true, total: 3, conversations: [
-      { id: "wa_1", type: "INBOX", inserted_at: hace(1).toISOString(), customers: [{ name: "Rosa Méndez" }], recent_phone_numbers: [{ phone_number: "5511112222" }] },
+    assert.match(url, /pages\.fm\/api\/public_api\/v1\/pages\/12345\/conversations\?page_access_token=/);
+    return { success: true, total: 4, conversations: [
+      { id: "wa_1", type: "INBOX", inserted_at: hace(1).toISOString(), customers: [{ name: "Rosa Méndez" }], recent_phone_numbers: [{ phone_number: "5511112222" }], from: { id: "wa_1" }, last_sent_by: { id: "pagina" } },
+      { id: "waba_9_5215533334444", type: "INBOX", inserted_at: "2026-11-20T06:06:18.340190", customers: [{ name: "Lalo", fb_id: "wa_5215533334444" }], recent_phone_numbers: [], from: { id: "wa_5215533334444" }, last_sent_by: { id: "wa_5215533334444" }, ad_ids: ["1"] },
       { id: "c2", type: "INBOX", inserted_at: hace(2).toISOString(), customers: [{ name: "Carlos" }], recent_phone_numbers: [] },
       { id: "c3", type: "COMMENT", customers: [{ name: "Comentario" }] },
     ] };
   });
   const r = await ext.conectarFuente({ cliente: "Dr. Escutia", tipo: "pancake", cuenta: "12345", token: "tok-pancake-xyz" });
-  assert.equal(r.nuevos, 2);
+  assert.equal(r.nuevos, 3);
+  const lalo = crm.buscarProspecto({ nombre: "Lalo" });
+  assert.equal(lalo.fuente, "whatsapp");
+  assert.equal(lalo.telefono, "525533334444");
+  assert.equal(lalo.etapa, "nuevo");
+  assert.equal(lalo.creado, "2026-11-20T06:06:18.340Z");
+  // llave e id al revés: se acomodan solos y el link de Pancake se limpia
+  const llave = "eyJhbGciOiJIUzI1NiJ9." + Buffer.from(JSON.stringify({ id: "12345", timestamp: 1 })).toString("base64url") + ".firma";
+  assert.equal(ext.idDeLlavePancake(llave), "12345");
+  const r2 = await ext.conectarFuente({ cliente: "Dr. Escutia", tipo: "pancake", cuenta: "", token: llave });
+  assert.equal(r2.id, r.id, "solo con la llave encuentra la misma página");
+  const r3 = await ext.conectarFuente({ cliente: "Dr. Escutia", tipo: "pancake", cuenta: llave, token: "" });
+  assert.equal(r3.id, r.id, "aunque la pegue en el lugar equivocado");
   const rosa = crm.buscarProspecto({ nombre: "Rosa" });
   assert.equal(rosa.fuente, "whatsapp");
   assert.equal(rosa.etapa, "contactado");

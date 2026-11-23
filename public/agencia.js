@@ -1955,11 +1955,10 @@ export function iniciarAgencia(h) {
       "Ve a Settings → Private Integrations → Create New Integration.",
       "Marca solo permisos de lectura: Opportunities (ver) y Contacts (ver). Genera el token y cópialo (solo se muestra una vez).",
       "El Location ID está en Settings → Business Profile. Pega los dos aquí." ] },
-    pancake: { cuenta: "Id de la página en Pancake", ph: "Ej. 104528379912345", pasos: [
-      "Entra a Pancake (pages.fm) y abre la página del cliente.",
-      "Ve a Configuración → Herramientas y genera el \"token de la página\" (page access token). Cópialo.",
-      "El id de la página es el número que sale en la dirección al abrirla (pages.fm/<b>número</b>).",
-      "Pega los dos aquí. Se traen las conversaciones del último mes con nombre y teléfono." ] },
+    pancake: { cuenta: "", ph: "", sinCuenta: true, pasos: [
+      "En Pancake abre la página del cliente → Configuración → Herramientas → <b>Public API access token</b>: toca <b>Crear Token</b> (si no hay) y luego <b>Copiar</b>.",
+      "Pégala abajo en <b>Llave</b> y toca <b>Conectar y traer</b>. Listo: DELTA sola sabe de qué página es.",
+      "Cada página (WhatsApp, Facebook, Instagram) tiene su propia llave; conecta las que quieras." ] },
   };
   function pintarTipoExt() {
     const x = PASOS_EXT[tipoExt];
@@ -1967,6 +1966,7 @@ export function iniciarAgencia(h) {
     $("#crm-ext-pasos").innerHTML = x.pasos.map((p) => `<li>${p}</li>`).join("");
     $("#crm-ext-cuenta-l").textContent = x.cuenta;
     $("#crm-ext-cuenta").placeholder = x.ph;
+    $("#crm-ext-cuenta").closest("label").hidden = Boolean(x.sinCuenta);
   }
   $("#crm-ext-tipo").addEventListener("click", (e) => { const b = e.target.closest("[data-ext]"); if (b) { tipoExt = b.dataset.ext; pintarTipoExt(); } });
   async function cargarFuentes() {
