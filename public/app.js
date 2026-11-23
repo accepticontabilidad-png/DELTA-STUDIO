@@ -2298,7 +2298,6 @@ function despertarPorChasquido() {
   orbe.pulso();
   if (!escuchando) escuchar();
 }
-api("/mac/despertar").then((d) => { if (d?.despertar) setTimeout(despertarPorChasquido, 1200); }).catch(() => {});
 
 // ---------------- Ajustes: voz de DELTA ----------------
 let borrarVozPendiente = false;
@@ -2493,10 +2492,17 @@ async function iniciar(conToque = false) {
     setInterval(() => { cargarPanel().catch(() => {}); refrescar(seccionActual); }, 60_000);
     return;
   }
-  arranque(conToque).then(() => {
-    // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
-    setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);
-  });
+  // ¿Se abrió por los dos chasquidos en la Mac? Entonces nada de pantalla de arranque: a escuchar de una vez.
+  const porChasquido = await api("/mac/despertar").then((d) => Boolean(d?.despertar)).catch(() => false);
+  if (porChasquido) {
+    try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
+    setTimeout(despertarPorChasquido, 700);
+  } else {
+    arranque(conToque).then(() => {
+      // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
+      setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);
+    });
+  }
   pintarManos();
   // La primera vez, DELTA adopta la zona horaria de este equipo.
   if (!guardado.get("delta_zona_enviada")) {
