@@ -2111,3 +2111,25 @@ html[data-mood="dia"] .crm-ut-form .crm-ut-guardar { background: linear-gradient
 html[data-mood="dia"] .crm-ut-lista button { background: rgba(255,255,255,.7); }
 html[data-mood="dia"] .crm-ut-lista summary { color: var(--cian); }
 .crm-ut-lista li.crm-ut-otra button { opacity: .6; }
+
+/* Menú: grupos que se pliegan y renglones más compactos */
+.menu-grupo[data-grupo] { display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-radius: 8px; user-select: none; }
+.menu-grupo[data-grupo]::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); margin-right: 4px; transition: transform .2s; opacity: .7; }
+.menu-grupo[data-grupo].cerrado::after { transform: rotate(-45deg); }
+.menu-grupo[data-grupo]:hover { color: var(--texto); }
+.menu-grupo[data-grupo].con-aviso { color: var(--dorado); }
+.menu-item.plegado { display: none; }
+@media (min-width: 901px) {
+  .menu-item { padding: 7px 10px; font-size: 13.5px; }
+  .menu-grupo { padding: 10px 12px 4px; }
+}
+
+/* Columnas del CRM: altura fija con su propio scroll y "Ver más" */
+@media (min-width: 901px) {
+  .crm-board .ct-col-piezas { max-height: 640px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+}
+.crm-ver-mas { padding: 9px; border-radius: 12px; border: 1px dashed var(--borde); background: none; color: var(--lila); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.crm-ver-mas:hover { background: var(--cian-suave); }
+.crm-ver-mas small { color: var(--tenue); font-weight: 400; }
+.crm-tabla td.malo { color: var(--rojo); font-weight: 600; }
+html[data-mood="dia"] .crm-ver-mas { color: var(--cian); }

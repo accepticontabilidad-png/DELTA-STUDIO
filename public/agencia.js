@@ -2017,17 +2017,19 @@ export function iniciarAgencia(h) {
     const sinLigar = (D.pros || []).filter((p) => !p[`${nivel}_id`]).length;
     $("#crm-tabla-nota").textContent = `${lista.length} ${NIVELES[nivel].toLowerCase()}${lista.length === 1 ? "" : "s"}`;
     const fila = (g, total = false) => {
-      const res = resultadosDe(g);
+      const res = g.conversaciones + g.prospectos; // mensajes y formularios (las compras van aparte)
+      const roas = g.gasto && g.valor_compras ? g.valor_compras / g.gasto : null;
       return `<tr ${total ? `class="total"` : `data-crm-fila="${nivel}:${esc(g.id)}" tabindex="0" title="Ver solo este ${NIVELES[nivel].toLowerCase()}"`}>
         <th scope="row"><span class="crm-t-nombre">${esc(g.nombre)}</span>${g.padre ? `<small class="tenue">${esc(g.padre)}</small>` : ""}</th>
         <td>${dinero2(g.gasto)}</td><td>${enteroCrm(g.impresiones)}</td><td>${enteroCrm(g.clics_enlace)}</td>
         <td>${g.impresiones ? `${(g.clics_enlace / g.impresiones * 100).toLocaleString("es-MX", { maximumFractionDigits: 2 })} %` : "–"}</td>
         <td>${dinero2(div(g.gasto, g.clics_enlace))}</td>
         <td>${enteroCrm(res)}</td><td>${dinero2(div(g.gasto, res))}</td>
+        <td>${g.compras ? enteroCrm(g.compras) : "–"}</td><td>${g.valor_compras ? dinero2(g.valor_compras) : "–"}</td><td class="${roas === null ? "" : roas >= 2 ? "real" : roas < 1 ? "malo" : ""}">${roas === null ? "–" : `${roas.toLocaleString("es-MX", { maximumFractionDigits: 2 })}x`}</td>
         <td>${total ? D.crm.citas : g.citas || "–"}</td><td class="real">${dinero2(div(g.gasto, total ? D.crm.citas : g.citas))}</td>
       </tr>`;
     };
-    $("#crm-tabla").innerHTML = `<thead><tr><th scope="col">${NIVELES[nivel]}</th><th scope="col">Inversión</th><th scope="col">Impresiones</th><th scope="col">Clics</th><th scope="col">CTR</th><th scope="col">CPC</th><th scope="col">Mensajes y registros</th><th scope="col">CPL</th><th scope="col">Citas CRM</th><th scope="col">CPA real</th></tr></thead>
+    $("#crm-tabla").innerHTML = `<thead><tr><th scope="col">${NIVELES[nivel]}</th><th scope="col">Inversión</th><th scope="col">Impresiones</th><th scope="col">Clics</th><th scope="col">CTR</th><th scope="col">CPC</th><th scope="col">Mensajes y registros</th><th scope="col">CPL</th><th scope="col">Compras</th><th scope="col">Valor de compras</th><th scope="col" title="Valor de compras entre inversión">ROAS</th><th scope="col">Citas CRM</th><th scope="col">CPA real</th></tr></thead>
       <tbody>${lista.slice(0, 60).map((g) => fila(g)).join("")}</tbody>
       <tfoot>${fila({ ...D.tot, nombre: "Total", padre: sinLigar && D.crm.citas ? `${sinLigar} prospecto${sinLigar === 1 ? "" : "s"} sin anuncio identificado` : "" }, true)}</tfoot>`;
   }
@@ -2179,6 +2181,9 @@ export function iniciarAgencia(h) {
       : "";
   }
 
+  // Columnas largas (cientos de chats): se muestran de 20 en 20.
+  const POR_COLUMNA = 20;
+  const verCrm = {};
   function tarjetaProspecto(p, i, ultima) {
     const n = p.sin_responder || p.cita_pasada ? (p.sin_responder ? "rojo" : "amarillo") : p.cita_hoy ? "verde" : "";
     const linea = p.etapa === "nuevo" && p.horas_esperando !== null ? esperaTxt(p.horas_esperando)
@@ -2227,7 +2232,7 @@ export function iniciarAgencia(h) {
     $("#crm-tabs").innerHTML = t.etapas.map((x) => `<button type="button" data-crm-tab="${x.clave}" class="${x.clave === etapaCrmCel ? "activa" : ""}">${esc(x.nombre)} <small>${x.prospectos.length}</small></button>`).join("");
     $("#crm-board").innerHTML = t.etapas.map((x, i) => `<section class="ct-col crm-col ${x.clave === etapaCrmCel ? "sel" : ""}" data-crm-etapa="${x.clave}">
         <header class="ct-col-cabeza"><span>${esc(x.nombre)}</span><small>${x.prospectos.length}</small>${x.clave === "nuevo" ? `<button type="button" class="ct-mas" data-crm-nuevo aria-label="Nuevo prospecto">+</button>` : ""}</header>
-        <div class="ct-col-piezas">${x.prospectos.length ? x.prospectos.map((p) => tarjetaProspecto(p, i, i === t.etapas.length - 1)).join("") : `<p class="ct-vacia">${x.clave === "nuevo" ? "Aquí caen los del formulario y WhatsApp" : x.clave === "venta" || x.clave === "perdido" ? "Últimos 30 días" : "Nadie aquí"}</p>`}</div>
+        <div class="ct-col-piezas">${x.prospectos.length ? x.prospectos.slice(0, verCrm[x.clave] || POR_COLUMNA).map((p) => tarjetaProspecto(p, i, i === t.etapas.length - 1)).join("") + (x.prospectos.length > (verCrm[x.clave] || POR_COLUMNA) ? `<button type="button" class="crm-ver-mas" data-crm-ver="${x.clave}">Ver ${Math.min(POR_COLUMNA, x.prospectos.length - (verCrm[x.clave] || POR_COLUMNA))} más <small>(quedan ${x.prospectos.length - (verCrm[x.clave] || POR_COLUMNA)})</small></button>` : "") : `<p class="ct-vacia">${x.clave === "nuevo" ? "Aquí caen los del formulario y WhatsApp" : x.clave === "venta" || x.clave === "perdido" ? "Últimos 30 días" : "Nadie aquí"}</p>`}</div>
       </section>`).join("");
     pintarReporte();
   }
@@ -2590,6 +2595,8 @@ export function iniciarAgencia(h) {
       seccionCrm.querySelector(`[data-crm-tab="${ir.dataset.crmIr}"]`)?.click();
       return void seccionCrm.querySelector(`.crm-col[data-crm-etapa="${ir.dataset.crmIr}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     }
+    const verMas = e.target.closest("[data-crm-ver]");
+    if (verMas) { const k = verMas.dataset.crmVer; verCrm[k] = (verCrm[k] || POR_COLUMNA) + POR_COLUMNA; return void pintarCrm(ultimaCrm); }
     if (e.target.closest("[data-crm-nuevo]")) return abrirProspecto();
     const mover = e.target.closest("[data-crm-mover]");
     const tarjeta = e.target.closest("[data-prospecto]");
