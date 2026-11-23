@@ -54,3 +54,20 @@ test("tablero y reporte por fechas: anuncios de Meta y prospectos del CRM", asyn
   const vacio = await reporteCrm({ cliente: c.id, desde: "2020-01-01", hasta: "2020-01-31" });
   assert.equal(vacio.prospectos.length, 0);
 });
+
+test("utilidad: valor promedio y margen del cliente", async () => {
+  const c = agencia.crearCliente({ nombre: "Sonrisa" });
+  assert.deepEqual(crm.utilidadConfig(c.id), { cliente: "Sonrisa", cliente_id: c.id, ticket: null, margen: null });
+  const k = crm.guardarUtilidad({ cliente: c.id, ticket: "$4,500", margen: "60 %" });
+  assert.equal(k.ticket, 4500);
+  assert.equal(k.margen, 60);
+  assert.throws(() => crm.guardarUtilidad({ cliente: c.id, margen: 150 }), /margen/);
+  assert.equal(crm.guardarUtilidad({ cliente: c.id, margen: "" }).margen, null);
+  const p = crm.crearProspecto({ cliente: c.id, nombre: "Beto", fuente: "whatsapp" });
+  crm.actualizarProspecto(p.id, { etapa: "venta" });
+  const hoy = ahoraLocalISO().slice(0, 10);
+  const r = await reporteCrm({ cliente: c.id, desde: hoy, hasta: hoy });
+  assert.deepEqual(r.utilidad, { ticket: 4500, margen: null });
+  assert.equal(r.prospectos[0].ticket, 4500);
+  assert.equal(r.prospectos[0].valor, 0);
+});

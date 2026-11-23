@@ -1789,6 +1789,18 @@ export function iniciarAgencia(h) {
     });
   }
 
+  // Total de venta: el monto anotado en cada venta o, si no lo tiene, el valor promedio del cliente.
+  function sumarVentas(ventas) {
+    let valor = 0, real = 0, estimadas = 0, sinMonto = 0, ganancia = 0, conMargen = 0;
+    for (const p of ventas) {
+      const v = p.valor || p.ticket || 0;
+      if (p.valor) real++; else if (p.ticket) estimadas++; else sinMonto++;
+      valor += v;
+      if (v && p.margen !== null && p.margen !== undefined) { ganancia += v * (p.margen / 100); conMargen++; }
+    }
+    return { valor, ventas_reales: real, estimadas, sin_monto: sinMonto, ganancia, con_margen: conMargen };
+  }
+
   function datosReporte() {
     const t = ultimaCrm, r = reporteCrm;
     const [desde, hasta] = rangoCrm();
@@ -1803,7 +1815,7 @@ export function iniciarAgencia(h) {
     const pros = prosTodos ? (filtrando ? prosTodos.filter(pasa) : prosTodos) : null;
     const tot = filas.reduce(sumarEn, vacios());
     const crm = pros
-      ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, ventas: pros.filter((p) => p.alcanzo >= 4).length, contactados: pros.filter((p) => p.alcanzo >= 1).length, valor: pros.filter((p) => p.alcanzo >= 4).reduce((s, p) => s + (p.valor || 0), 0) }
+      ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, ventas: pros.filter((p) => p.alcanzo >= 4).length, contactados: pros.filter((p) => p.alcanzo >= 1).length, ...sumarVentas(pros.filter((p) => p.alcanzo >= 4)) }
       : { prospectos: t.embudo.prospectos, citas: t.embudo.citas, asistieron: t.embudo.pasos[3].n, ventas: t.embudo.ventas, contactados: t.embudo.pasos[1].n, valor: t.embudo.valor_ventas || 0 };
     // Series por día (o semana/mes)
     const hoy = hoyLocal();
@@ -1838,7 +1850,7 @@ export function iniciarAgencia(h) {
         <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
         ${k.serie ? spark(k.serie) : ""}
       </div>`;
-    const ventasK = { nombre: "Ventas", valor: crm.valor ? dinero(crm.valor) : String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}${hayAds && tot.gasto && crm.valor ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}`, ir: "venta" };
+    const ventasK = { nombre: "Total de venta", valor: crm.valor ? dinero(crm.valor) : String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}${hayAds && tot.gasto && crm.valor ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}`, ir: "venta" };
     const sinResp = { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null };
     let tarjetas;
     if (hayAds) {
@@ -1892,6 +1904,7 @@ export function iniciarAgencia(h) {
     pintarTabla(D);
     // Costos y origen
     pintarCostos(D);
+    pintarUtilidad(D);
 
     // Aviso si Meta tiene la cuenta pero no respondió
     const errs = r?.anuncios?.errores || [];
@@ -2050,6 +2063,76 @@ export function iniciarAgencia(h) {
     pintarReporte();
   });
   $("#crm-tabla").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("[data-crm-fila]")) e.target.click(); });
+
+  // ---------- Utilidad del cliente: total de venta menos la inversión en anuncios ----------
+  let editandoUtilidad = false;
+  function pintarUtilidad(D) {
+    const caja = $("#crm-utilidad");
+    const r = reporteCrm;
+    if (!r?.prospectos) { caja.hidden = true; return; }
+    caja.hidden = false;
+    const c = D.crm;
+    const inv = D.hayAds ? D.tot.gasto : (ultimaCrm.embudo.inversion || 0);
+    const cfg = r.utilidad; // solo con un cliente elegido
+    const margenTodas = c.ventas && c.con_margen === c.ventas - c.sin_monto && c.con_margen > 0;
+    const bruta = margenTodas ? c.ganancia : c.valor;
+    const util = bruta - inv;
+    const roas = inv ? c.valor / inv : null;
+    const notaVentas = [
+      c.ventas_reales ? `${c.ventas_reales} con monto` : "",
+      c.estimadas ? `${c.estimadas} con el valor promedio${cfg?.ticket ? ` (${dinero(cfg.ticket)})` : ""}` : "",
+      c.sin_monto ? `${c.sin_monto} sin monto` : "",
+    ].filter(Boolean).join(" · ");
+    const puedeEditar = Boolean(cfg) && !h.esEquipo();
+    const falta = c.sin_monto && c.ventas;
+    const formulario = puedeEditar && (editandoUtilidad || falta) ? `
+      <form class="crm-ut-form" id="crm-ut-form">
+        ${falta && !editandoUtilidad ? `<p class="crm-ut-falta"><b>${c.sin_monto} venta${c.sin_monto === 1 ? "" : "s"} sin monto.</b> Pon cuánto deja una venta en promedio y DELTA calcula el total.</p>` : ""}
+        <label>Valor promedio de una venta<input type="text" inputmode="decimal" id="crm-ut-ticket" placeholder="ej. 4500" value="${cfg.ticket ?? ""}"></label>
+        <label>Margen del cliente en % (opcional)<input type="text" inputmode="decimal" id="crm-ut-margen" placeholder="ej. 60" value="${cfg.margen ?? ""}"></label>
+        <button type="submit" class="crm-ut-guardar">Guardar</button>
+        ${editandoUtilidad ? `<button type="button" class="tb-link" id="crm-ut-cancelar">Cancelar</button>` : ""}
+      </form>` : "";
+    const nivel = !c.valor ? "" : util >= 0 ? "pos" : "neg";
+    caja.innerHTML = `
+      <div class="ag-cabeza"><h2>Utilidad del cliente</h2>
+        <span class="crm-ut-cabeza">${puedeEditar && !editandoUtilidad && !falta ? `<button type="button" class="tb-link" id="crm-ut-ajustar">Ajustar valor y margen</button>` : ""}<span class="tb-hora">${esc(textoPeriodo([D.desde, D.hasta]))}</span></span>
+      </div>
+      <div class="crm-ut-cuerpo">
+        <div class="crm-ut-total">
+          <span class="tb-kpi-nombre">Total de venta</span>
+          <b>${c.valor ? dinero(c.valor) : "–"}</b>
+          <small class="tenue">${c.ventas} venta${c.ventas === 1 ? "" : "s"}${notaVentas ? ` · ${esc(notaVentas)}` : ""}</small>
+        </div>
+        <span class="crm-ut-signo" aria-hidden="true">−</span>
+        <div class="crm-ut-dato"><span class="tb-kpi-nombre">Inversión en anuncios</span><b>${inv ? dinero(inv) : "–"}</b><small class="tenue">${D.hayAds ? "según Meta" : inv ? "anotada en Paid media" : "sin inversión anotada"}</small></div>
+        ${margenTodas ? `<div class="crm-ut-dato"><span class="tb-kpi-nombre">Le queda de lo vendido</span><b>${dinero(c.ganancia)}</b><small class="tenue">con su margen de ${cfg?.margen ?? "su"} %</small></div>` : ""}
+        <span class="crm-ut-signo" aria-hidden="true">=</span>
+        <div class="crm-ut-final ${nivel}">
+          <span class="tb-kpi-nombre">${margenTodas ? "Utilidad" : "Utilidad sobre anuncios"}</span>
+          <b>${c.valor ? `${util < 0 ? "−" : ""}${dinero(Math.abs(util)) === "–" ? "$0" : dinero(Math.abs(util))}` : "–"}</b>
+          <small class="tenue">${roas ? `ROAS ${roas.toLocaleString("es-MX", { maximumFractionDigits: 1 })}x · por cada $1 en anuncios vendió ${dinero2(roas)}` : c.valor ? "sin inversión en estas fechas" : "aún no hay ventas con monto"}</small>
+        </div>
+      </div>
+      ${!margenTodas && c.valor && puedeEditar && !editandoUtilidad && !falta ? `<p class="tenue chico crm-ut-nota">Es lo vendido menos los anuncios. Si pones el margen del cliente en <b>Ajustar</b>, DELTA descuenta también lo que le cuesta dar el servicio.</p>` : ""}
+      ${!cfg && c.sin_monto ? `<p class="tenue chico crm-ut-nota">${c.sin_monto} venta${c.sin_monto === 1 ? "" : "s"} sin monto. Elige un cliente para poner cuánto vale una venta en promedio.</p>` : ""}
+      ${formulario}`;
+  }
+  $("#crm-utilidad").addEventListener("click", (e) => {
+    if (e.target.closest("#crm-ut-ajustar")) { editandoUtilidad = true; pintarReporte(); setTimeout(() => $("#crm-ut-ticket")?.focus(), 30); }
+    if (e.target.closest("#crm-ut-cancelar")) { editandoUtilidad = false; pintarReporte(); }
+  });
+  $("#crm-utilidad").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const k = await api("/crm/utilidad", { method: "PUT", body: { cliente: clienteCrm, ticket: $("#crm-ut-ticket").value.trim(), margen: $("#crm-ut-margen").value.trim() } });
+      sonar("accion");
+      editandoUtilidad = false;
+      for (const p of reporteCrm?.prospectos || []) { p.ticket = k.ticket; p.margen = k.margen; }
+      if (reporteCrm) reporteCrm.utilidad = { ticket: k.ticket, margen: k.margen };
+      pintarReporte();
+    } catch (err) { avisar(err.message); }
+  });
 
   function pintarCostos(D) {
     const e = ultimaCrm.embudo;

@@ -405,6 +405,7 @@ api.post("/crm/fuentes/:id/leer", envolver((req) => crmExternos.leerChatsEnFondo
 api.delete("/crm/fuentes/:id", envolver((req) => crmExternos.quitarFuente(Number(req.params.id))));
 api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
 api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
+api.put("/crm/utilidad", envolver((req) => crm.guardarUtilidad(req.body || {})));
 api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
 api.put("/seo/config", envolver((req) => seo.configurarSeo(req.body || {})));
 api.post("/seo/revisar", envolver((req) => seo.revisarSitio(req.body?.cliente)));
