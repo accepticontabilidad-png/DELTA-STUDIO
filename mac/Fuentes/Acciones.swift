@@ -200,24 +200,29 @@ enum Acciones {
         if let u = URL(string: Pref.url) { NSWorkspace.shared.open(u) }
     }
 
-    /// Los navegadores no dejan que una página hable ni suene hasta que la persona toca una tecla.
-    /// Cuando DELTA ya está al frente, se "toca" la tecla Mayúsculas (no escribe nada) para que pueda
-    /// contestar en voz alta. Solo si hay permiso de Accesibilidad y DELTA es la app de enfrente.
-    static func darToqueADelta() {
+    /// Los navegadores no dejan que una página suene ni hable hasta que la persona toca una tecla.
+    /// Cuando DELTA queda al frente, se presiona F13 (una tecla que no escribe nada) para que suene la
+    /// bienvenida y DELTA pueda contestar en voz alta. Solo con permiso de Accesibilidad.
+    static func esDelta(_ app: NSRunningApplication?) -> Bool {
+        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return false }
+        return (app.localizedName ?? "").lowercased().hasPrefix("delta")
+    }
+
+    static func darToqueADelta(esperarQueAparezca: Bool = true) {
         guard Permisos.accesibilidad(preguntar: false) else { return }
         Task { @MainActor in
-            let yo = ProcessInfo.processInfo.processIdentifier
-            for _ in 0..<30 {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard let f = NSWorkspace.shared.frontmostApplication, f.processIdentifier != yo else { continue }
-                guard (f.localizedName ?? "").lowercased().hasPrefix("delta") || f.bundleIdentifier?.hasPrefix("com.google.Chrome") == true else { continue }
-                try? await Task.sleep(nanoseconds: 900_000_000) // que la página termine de cargar
-                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == f.processIdentifier else { return }
-                let fuente = CGEventSource(stateID: .combinedSessionState)
-                for bajando in [true, false] {
-                    CGEvent(keyboardEventSource: fuente, virtualKey: CGKeyCode(kVK_Shift), keyDown: bajando)?.post(tap: .cghidEventTap)
+            for _ in 0..<(esperarQueAparezca ? 30 : 1) {
+                if esDelta(NSWorkspace.shared.frontmostApplication) {
+                    let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // que la página termine de cargar
+                    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+                    let fuente = CGEventSource(stateID: .combinedSessionState)
+                    for bajando in [true, false] {
+                        CGEvent(keyboardEventSource: fuente, virtualKey: CGKeyCode(kVK_F13), keyDown: bajando)?.post(tap: .cghidEventTap)
+                    }
+                    return
                 }
-                return
+                try? await Task.sleep(nanoseconds: 200_000_000)
             }
         }
     }
