@@ -171,11 +171,21 @@ test("formularios de anuncios de Meta: entran una sola vez, con su fecha y respu
     field_data: [{ name: "full_name", values: ["Rosa Méndez"] }, { name: "phone_number", values: ["+52 55 1111 2222"] }, { name: "¿qué_te_interesa?", values: ["Valoración"] }, ...extra] });
   let llamadas = 0;
   meta._leadsDePrueba(async () => { llamadas++; return { paginas: 1, formularios: 1, leads: [meta.leerLead(lead("L1"), "Form consulta"), meta.leerLead({ id: "L2", created_time: "2026-11-06T10:00:00+0000", field_data: [{ name: "first_name", values: ["Juan"] }, { name: "last_name", values: ["Paz"] }, { name: "email", values: ["juan@x.mx"] }] })] }; });
+  let conv = [{ id: "messenger:t_1", plataforma: "messenger", fecha: "2026-11-07T18:00:00.000Z", nombre: "Lupita Ríos", ultimo: "¿Cuánto cuesta la consulta?", de_ellos: true },
+    { id: "instagram:t_2", plataforma: "instagram", fecha: "2026-11-08T18:00:00.000Z", nombre: null, ultimo: "Hola", de_ellos: true }];
+  meta._mensajesDePrueba(async () => ({ paginas: 1, conversaciones: conv, sin_permiso: [] }));
   const r1 = await crm.importarDeMeta(c.id);
-  assert.equal(r1.nuevos, 2);
+  assert.equal(r1.nuevos, 4);
+  assert.equal(r1.mensajes, 2);
+  const lupita = crm.buscarProspecto({ nombre: "Lupita" });
+  assert.equal(lupita.fuente, "facebook");
+  assert.equal(lupita.creado, "2026-11-07T18:00:00.000Z");
+  assert.match(lupita.notas, /Cuánto cuesta/);
+  assert.match(crm.fichaProspecto(lupita.id).historial[0].texto, /Messenger/);
+  assert.equal(crm.buscarProspecto({ nombre: "Alguien por Instagram" }).fuente, "instagram");
   const r2 = await crm.importarDeMeta(c.id);
   assert.equal(r2.nuevos, 0);
-  assert.equal(r2.repetidos, 2);
+  assert.equal(r2.repetidos, 4);
   const rosa = crm.buscarProspecto({ nombre: "Rosa" });
   assert.equal(rosa.fuente, "anuncios");
   assert.equal(rosa.campana, "Consulta noviembre");
@@ -186,7 +196,10 @@ test("formularios de anuncios de Meta: entran una sola vez, con su fecha y respu
   assert.equal(crm.buscarProspecto({ nombre: "Juan Paz" }).correo, "juan@x.mx");
   // Sin permiso: lo dice, no truena
   meta._leadsDePrueba(async () => { const e = new Error("x"); e.permiso = false; throw e; });
-  await assert.rejects(crm.importarDeMeta(c.id), (e) => e.permiso === false);
+  conv = [];
+  const r3 = await crm.importarDeMeta(c.id);
+  assert.equal(r3.sin_permiso, true);
+  assert.equal(r3.nuevos, 0);
   // Lo que dice Meta del mes aparece en el embudo
   const m = "2026-11";
   db.prepare("INSERT INTO meta_fotos (cliente_id, fecha, datos) VALUES (?,?,?)").run(c.id, `${m}-20`, JSON.stringify({ anuncios: { conversaciones: 40, prospectos: 2, gasto_mes: 1877 } }));
@@ -194,5 +207,6 @@ test("formularios de anuncios de Meta: entran una sola vez, con su fecha y respu
   assert.equal(e.meta.conversaciones, 40);
   assert.equal(e.meta.costo_conversacion, 46.93);
   meta._leadsDePrueba(null);
+  meta._mensajesDePrueba(null);
   setAjuste("x", "y");
 });
