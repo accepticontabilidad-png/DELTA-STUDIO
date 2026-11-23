@@ -27,7 +27,7 @@ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_externo ON prospectos(
 export const TIPOS = {
   kommo: { nombre: "Kommo", cuenta: "Subdominio de Kommo", ejemplo: "miclinica (de miclinica.kommo.com)" },
   ghl: { nombre: "GoHighLevel", cuenta: "Id de la sub-cuenta (Location ID)", ejemplo: "Ajustes → Perfil del negocio" },
-  pancake: { nombre: "Pancake", cuenta: "Id de la página en Pancake", ejemplo: "el número de la página en pages.fm" },
+  pancake: { nombre: "Pancake", cuenta: "Id de la página en Pancake (opcional)", ejemplo: "DELTA lo saca de la llave" },
 };
 const DIA = 864e5;
 
@@ -35,8 +35,12 @@ let fetchDePrueba = null;
 export const _fetchDePrueba = (fn) => { fetchDePrueba = fn; };
 async function pedir(url, opciones = {}) {
   if (fetchDePrueba) return fetchDePrueba(url, opciones);
-  const r = await fetch(url, { ...opciones, signal: AbortSignal.timeout(25000) });
-  const d = r.status === 204 ? {} : await r.json().catch(() => ({}));
+  const r = await fetch(url, { ...opciones, headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (DELTA CRM)", ...(opciones.headers || {}) }, signal: AbortSignal.timeout(25000) });
+  const texto = r.status === 204 ? "" : await r.text();
+  let d = {};
+  try { d = texto ? JSON.parse(texto) : {}; } catch {
+    if (!r.ok || /<html/i.test(texto)) throw new Error(`El servicio no dejó entrar a DELTA (respondió ${r.status} sin datos). Intenta de nuevo en unos minutos.`);
+  }
   if (r.status === 401 || r.status === 403) throw new Error("La llave no es válida o no tiene permiso de lectura");
   if (!r.ok) throw new Error(d.message || d.error || d.title || `error ${r.status}`);
   return d;
@@ -125,18 +129,28 @@ async function leerPancake(f, { desde }) {
   const lista = [];
   for (let page = 1; page <= 30; page++) {
     const d = await pedir(`${base}/conversations?page_access_token=${encodeURIComponent(f.token)}&page_id=${encodeURIComponent(f.cuenta)}&since=${ini}&until=${fin}&page_number=${page}&order_by=updated_at`);
-    if (d.success === false) throw new Error(d.message || "Pancake no respondió");
+    if (d.success === false) {
+      if (/access_token|token/i.test(d.message || "")) throw new Error(`Pancake dice que esa llave no es de la página "${f.cuenta}". Revisa el id: en WhatsApp empieza con waba_ y no es el número de teléfono.`);
+      throw new Error("Pancake: " + (d.message || "no respondió"));
+    }
     const c = d.conversations || [];
     lista.push(...c);
     if (!c.length || (d.total && lista.length >= d.total)) break;
   }
-  const red = (c) => { const t = String(c.id || c.customer_id || ""); return /^wa_|whatsapp/i.test(t) ? "whatsapp" : /^ig|instagram/i.test(t) || c.platform === "instagram" ? "instagram" : "facebook"; };
+  const red = (c) => { const t = String(c.id || c.customer_id || ""); return /^wa(ba)?_|whatsapp/i.test(t) ? "whatsapp" : /^ig(o)?_|^ig|instagram/i.test(t) || c.platform === "instagram" ? "instagram" : "facebook"; };
+  const fecha = (t) => (t ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : t + "Z").toISOString() : null);
   return lista.filter((c) => (c.type || "INBOX") === "INBOX").map((c) => {
-    const tel = (c.recent_phone_numbers || []).map((x) => x.phone_number || x).find(Boolean) || null;
+    const cu = c.customers?.[0] || {};
+    let tel = (c.recent_phone_numbers || []).map((x) => x.phone_number || x).find((x) => typeof x === "string" && x) || null;
+    // En WhatsApp el "id" de la persona es su número
+    if (!tel && red(c) === "whatsapp") tel = [cu.fb_id, c.from?.phone, c.from?.id, c.page_customer?.phone_number].map((x) => String(x || "").replace(/\D/g, "")).find((x) => x.length >= 10 && x.length <= 15) || null;
     return {
-      id: `pancake:${f.cuenta}:${c.id}`, nombre: c.customers?.[0]?.name || null, telefono: tel, correo: null,
-      etapa: tel ? "contactado" : "nuevo", etapa_original: null, valor: null, creado: c.inserted_at ? new Date(c.inserted_at).toISOString() : null,
-      fuente: red(c), solo_nuevos: true, // en Pancake no hay etapas: no se pisa lo que tú muevas
+      id: `pancake:${f.cuenta}:${c.id}`, nombre: cu.name || c.from?.name || null, telefono: tel, correo: null,
+      // Si lo último lo mandó la clínica, ya le contestaron
+      etapa: c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo",
+      etapa_original: null, valor: null, creado: fecha(c.inserted_at),
+      fuente: red(c), campana: c.ad_ids?.length ? "Anuncio (clic a WhatsApp)" : null,
+      solo_nuevos: true, // en Pancake no hay etapas: no se pisa lo que tú muevas
     };
   });
 }
@@ -155,6 +169,12 @@ function guardar(f, x) {
       const cambios = { etapa: x.etapa };
       if (x.etapa === "venta" && x.valor) cambios.valor = x.valor;
       actualizarProspecto(ya.id, cambios);
+      db.prepare("UPDATE prospectos SET externo_etapa = ? WHERE id = ?").run(x.etapa, ya.id);
+      return "movido";
+    }
+    // Pancake: si allá ya le contestaron y aquí sigue como nuevo, pasa a contactado
+    if (x.solo_nuevos && x.etapa === "contactado" && ya.etapa === "nuevo") {
+      actualizarProspecto(ya.id, { etapa: "contactado" });
       db.prepare("UPDATE prospectos SET externo_etapa = ? WHERE id = ?").run(x.etapa, ya.id);
       return "movido";
     }
@@ -203,14 +223,32 @@ export async function sincronizarFuente(id) {
   }
 }
 
+/** La llave de Pancake es un JWT cuyo contenido trae el id de la página ({ id, timestamp }). */
+export function idDeLlavePancake(llave) {
+  try {
+    const parte = String(llave || "").split(".")[1];
+    const d = JSON.parse(Buffer.from(parte.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    return typeof d.id === "string" && /^[\w.-]{2,80}$/.test(d.id) ? d.id : null;
+  } catch { return null; }
+}
+
 /** Conecta (o cambia la llave de) un CRM externo para un cliente y trae sus prospectos. */
 export async function conectarFuente({ cliente, tipo, cuenta, token } = {}) {
   const c = clienteRequerido(cliente);
   if (!TIPOS[tipo]) throw new Error("Elige Kommo, GoHighLevel o Pancake");
   let cu = String(cuenta || "").trim();
+  let tk = String(token || "").trim();
+  // Si se pegaron al revés (la llave en el id), se acomodan solos
+  if (/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(cu) && tk.length < 60 && !/^eyJ/.test(tk)) [cu, tk] = [tk, cu];
+  if (tipo === "pancake") {
+    // Si pegaron la llave en cualquiera de los dos lados, se usa esa
+    if (!/^eyJ/.test(tk) && /^eyJ/.test(cu)) tk = cu;
+    // La llave de Pancake ya trae dentro el id de su página: no hace falta escribirlo
+    const id = idDeLlavePancake(tk);
+    cu = id || cu.replace(/^https?:\/\/[^/]+\//, "").replace(/[/?#].*$/, "");
+  }
   if (tipo === "kommo") cu = cu.replace(/^https?:\/\//, "").replace(/\.kommo\.com.*$/i, "").replace(/\/.*$/, "").toLowerCase();
   if (!cu || !/^[\w.-]{2,80}$/.test(cu)) throw new Error(`Falta el dato: ${TIPOS[tipo].cuenta}`);
-  const tk = String(token || "").trim();
   if (tk.length < 10) throw new Error("Pega la llave completa");
   const ya = db.prepare("SELECT id FROM crm_fuentes WHERE cliente_id = ? AND tipo = ? AND cuenta = ?").get(c.id, tipo, cu);
   const id = ya ? (db.prepare("UPDATE crm_fuentes SET token = ?, error = NULL WHERE id = ?").run(tk, ya.id), ya.id)
