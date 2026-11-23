@@ -15,6 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/estilos.css" />
   <link rel="stylesheet" href="/reporte.css" />
+  <link rel="stylesheet" href="/inicio-vivo.css" />
   <script>
     // Mood de día o de noche antes de pintar (sin parpadeo). "auto" cambia según la hora.
     (function () {
@@ -96,15 +97,21 @@
       <div class="secciones">
       <!-- Inicio: centro de mando (HUD) con DELTA y el resumen del día -->
       <section class="seccion inicio" data-seccion="inicio">
+        <canvas id="hud-rayos" class="hud-rayos" aria-hidden="true"></canvas>
         <div class="hud-ticker" id="hud-ticker-caja" hidden aria-label="Mercados"><div class="hud-ticker-pista" id="hud-ticker"></div></div>
 
         <section class="centro">
           <div id="hoy-mini" class="hud-tiles hoy-mini"></div>
-          <button id="orbe" class="orbe" aria-label="Tocar para hablar">
-            <canvas id="lienzo" width="600" height="600"></canvas>
-            <img class="logo-orbe" src="/icons/logo.svg" alt="" />
-            <span id="estado-orbe" class="estado-orbe">Toca para hablar</span>
-          </button>
+          <div class="orbe-escena" id="orbe-escena">
+            <svg class="orbe-lazos" id="orbe-lazos" aria-hidden="true"></svg>
+            <button id="orbe" class="orbe" aria-label="Tocar para hablar">
+              <canvas id="lienzo" width="600" height="600"></canvas>
+              <svg class="anillo-texto" viewBox="0 0 200 200" aria-hidden="true"><defs><path id="anillo-ruta" d="M9.79,67.17 A96,96 0 0,1 190.21,67.17"/></defs><text><textPath href="#anillo-ruta" id="anillo-txt">DELTA · SISTEMAS EN LÍNEA ·</textPath></text></svg>
+              <img class="logo-orbe" src="/icons/logo.svg" alt="" />
+              <span id="estado-orbe" class="estado-orbe">Toca para hablar</span>
+            </button>
+            <div class="satelites" id="satelites" aria-label="Tu día de un vistazo"></div>
+          </div>
           <div class="delta-nombre" aria-hidden="true">DELTA</div>
           <div class="voz-controles">
             <button type="button" id="btn-manos" class="pastilla" aria-pressed="false" title="Escucho siempre; empieza tu frase con «Delta» u «Oye Delta»"><span class="led"></span>Oye DELTA</button>
@@ -141,7 +148,7 @@
               <div id="hud-clima" class="hud-clima" hidden></div>
               <div class="hud-reloj" aria-label="Hora"><span id="hud-hora">--:--</span><small id="hud-seg">00</small><em id="hud-ampm"></em></div>
             </div>
-            <div class="hud-progreso" aria-hidden="true"><span id="hud-progreso"></span></div>
+            <div class="hud-linea" id="hud-linea" aria-label="Tu día en una línea"><div class="hud-linea-pista"><span id="hud-progreso"></span><i class="hud-ahora" id="hud-ahora"></i><div id="hud-linea-citas"></div></div><div class="hud-linea-horas"><span>6</span><span>9</span><span>12</span><span>15</span><span>18</span><span>21</span></div></div>
           </header>
           <div id="resumen-hoy" class="hud-tiles"></div>
           <article class="hud-card hud-agenda">
