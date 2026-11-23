@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.0"
+let VERSION = "1.1"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
@@ -28,6 +28,10 @@ enum Pref {
         get { d.object(forKey: "preguntarTodo") as? Bool ?? false }
         set { d.set(newValue, forKey: "preguntarTodo") }
     }
+    static var unChasquido: Bool {
+        get { d.object(forKey: "unChasquido") as? Bool ?? false }
+        set { d.set(newValue, forKey: "unChasquido") }
+    }
     /// 0 baja, 1 media, 2 alta
     static var sensibilidad: Int {
         get { d.object(forKey: "sensibilidad") as? Int ?? 1 }
@@ -47,6 +51,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let chasquidos = Chasquidos()
     let conexion = Conexion()
     var avisoMicro = false
+    lazy var ventana = VentanaEstado(app: self)
 
     func applicationDidFinishLaunching(_ n: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -60,12 +65,21 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         conexion.alCambiar = { [weak self] e in self?.estado = e }
         conexion.empezar()
 
-        if !Llave.hay() {
+        Registro.anotar("DELTA Mac \(VERSION) abierta")
+        // Si la abrió usted (no al prender la Mac), se muestra la ventanita de estado.
+        if ProcessInfo.processInfo.systemUptime > 180 || !Llave.hay() {
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                self?.vincular()
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                self?.ventana.mostrar()
+                if !Llave.hay() { self?.vincular() }
             }
         }
+    }
+
+    /// Al abrirla otra vez desde Aplicaciones o el Dock, aparece la ventanita.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        ventana.mostrar()
+        return false
     }
 
     // MARK: Icono y menú
@@ -119,6 +133,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         m.addItem(.separator())
         m.addItem(opcion("Abrir DELTA", #selector(abrirDelta)))
+        m.addItem(opcion("Ver estado y probar el chasquido…", #selector(verEstado)))
         m.addItem(.separator())
 
         let ch = opcion("Encender con dos chasquidos", #selector(alternarChasquido))
@@ -169,7 +184,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             avisoMicro = false
-            do { try chasquidos.iniciar() } catch { NSLog("DELTA Mac: no pude usar el micrófono: \(error)") }
+            do { try chasquidos.iniciar() } catch { Registro.anotar("No pude usar el micrófono: \(error)") }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { _ in
                 Task { @MainActor in delegado.prepararMicro() }
@@ -190,6 +205,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Acciones del menú
 
     @objc func abrirDelta() { Acciones.abrirDelta() }
+    @objc func verEstado() { ventana.mostrar() }
     @objc func alternarChasquido() { Pref.chasquido.toggle(); prepararMicro() }
     @objc func cambiarSensibilidad(_ o: NSMenuItem) { Pref.sensibilidad = o.tag; chasquidos.sensibilidad = o.tag }
     @objc func alternarControl() { Pref.control.toggle() }
