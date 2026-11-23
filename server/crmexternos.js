@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS crm_fuentes (
   error TEXT
 );
 `);
-for (const col of ["externo_id TEXT", "externo_etapa TEXT", "externo_actualizado TEXT", "externo_mensajes INTEGER", "ia_revisado TEXT"]) {
+for (const col of ["externo_id TEXT", "externo_etapa TEXT", "externo_actualizado TEXT", "externo_mensajes INTEGER", "ia_revisado TEXT", "externo_etiquetas TEXT"]) {
   try { db.exec(`ALTER TABLE prospectos ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_externo ON prospectos(externo_id)");
@@ -160,7 +160,9 @@ async function leerPancake(f, { desde }) {
     const nombresTags = (c.tags || []).filter((t) => t !== null && t !== undefined).map((t) => (typeof t === "object" ? t.text || t.name || etiquetas.get(String(t.id)) : etiquetas.get(String(t)))).filter(Boolean);
     // Si lo último lo mandó la clínica, ya le contestaron
     let etapa = c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo";
-    for (const t of nombresTags) etapa = masAvanzada(etapa, etapaPorNombre(t));
+    // La etiqueta de venta en Pancake se pone a cualquiera que ya es cliente (clientes de antes, recomendados, postventa),
+    // así que sola NO hace venta: DELTA lee el chat y decide si compró, cuándo y si vino de redes.
+    for (const t of nombresTags) { const e = etapaPorNombre(t); etapa = masAvanzada(etapa, e === "venta" ? "contactado" : e); }
     const adId = (c.ad_ids || [])[0] || null;
     salida.push({
       id: `pancake:${f.cuenta}:${c.id}`, conversacion: c.id, nombre: cu.name || c.from?.name || null, telefono: tel, correo: null,
@@ -212,6 +214,7 @@ function guardar(f, x) {
       return "movido";
     }
     if (x.actualizado) db.prepare("UPDATE prospectos SET externo_actualizado = ?, externo_mensajes = ? WHERE id = ?").run(x.actualizado, x.mensajes ?? null, ya.id);
+    if (x.solo_nuevos) db.prepare("UPDATE prospectos SET externo_etiquetas = ? WHERE id = ?").run(x.etapa_original || null, ya.id);
     // Pancake: solo avanza (si allá ya le contestaron o lo etiquetaron más adelante), nunca regresa
     if (x.solo_nuevos && ya.etapa !== "perdido" && masAvanzada(ya.etapa, x.etapa) !== ya.etapa) {
       actualizarProspecto(ya.id, { etapa: x.etapa });
@@ -229,8 +232,8 @@ function guardar(f, x) {
     if (!obtenerProspecto(p.id).externo_id) db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ? WHERE id = ?").run(x.id, x.etapa, p.id);
     return "igual";
   }
-  db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ?, creado = COALESCE(?, creado), etapa_desde = COALESCE(?, etapa_desde), externo_actualizado = ?, externo_mensajes = ? WHERE id = ?")
-    .run(x.id, x.etapa, x.creado, x.creado, x.actualizado || null, x.mensajes ?? null, p.id);
+  db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ?, creado = COALESCE(?, creado), etapa_desde = COALESCE(?, etapa_desde), externo_actualizado = ?, externo_mensajes = ?, externo_etiquetas = ? WHERE id = ?")
+    .run(x.id, x.etapa, x.creado, x.creado, x.actualizado || null, x.mensajes ?? null, x.solo_nuevos ? x.etapa_original || null : null, p.id);
   return "nuevo";
 }
 
@@ -341,16 +344,21 @@ async function entenderChat(cliente, prospecto, chat) {
   claude ||= new Anthropic();
   const r = await claude.messages.create({
     model: process.env.DELTA_MODELO_CRM || "claude-haiku-5-5",
-    max_tokens: 400,
-    system: `Lees chats de WhatsApp/Messenger entre un negocio y un cliente para acomodarlo en el embudo de ventas del negocio "${cliente.nombre}"${cliente.industria ? ` (${cliente.industria})` : ""}.
-Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (SOLO si en el chat queda claro que ya compró, pagó, firmó o se le entregó; "ya es cliente". Preguntar precios, recibir cotización, decir "me interesa" o "lo pienso" NO es venta; si dudas, NO es venta), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
-Responde SOLO un JSON: {"etapa":"…","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase de lo que pasó y qué sigue"}`,
-    messages: [{ role: "user", content: `Cliente: ${prospecto.nombre}\n\nChat:\n${chat.slice(-9000)}` }],
+    max_tokens: 500,
+    system: `Lees chats de WhatsApp/Messenger entre un negocio y un cliente para acomodarlo en el embudo de ventas del negocio "${cliente.nombre}"${cliente.industria ? ` (${cliente.industria})` : ""}. Cada línea del chat empieza con su fecha.
+Etapas: nuevo (solo preguntó o no ha contestado), contactado (ya platican, se le está perfilando, mandó o está juntando papeles/documentos, cotizó), cita (ya tiene cita/visita agendada o su crédito/trámite fue APROBADO y falta cerrar), asistio (ya fue a la sucursal/consulta), venta (SOLO si en ESTE chat se ve que compró, pagó, firmó o se le entregó. Preguntar precios, recibir cotización, decir "me interesa" o "lo pienso" NO es venta; si dudas, NO es venta), perdido (dijo que no, no califica, rechazado por buró, desistió, compró en otro lado, no era comprador).
+Origen (de dónde salió esta persona): anuncio (llegó por un anuncio: menciona la publicidad o el primer mensaje es el automático de un anuncio), redes (llegó por Facebook, Instagram o WhatsApp sin decir que por recomendación), recomendado (dice que lo recomendó alguien o es familiar/amigo de un cliente), cliente (YA era cliente antes de este chat: escribe por servicio, seguimiento, garantía, pagos de algo que ya compró, o una segunda compra de alguien que ya compró), otro.
+Sé estricto: si ya era cliente y escribe por servicio o postventa, NO es una venta nueva (etapa según lo que pasa ahora, normalmente contactado) y origen "cliente".
+fecha_venta: el día (AAAA-MM-DD) en que se ve que compró o pagó, sacado de las fechas del chat; null si no es venta.
+Responde SOLO un JSON: {"etapa":"…","origen":"…","fecha_venta":"AAAA-MM-DD o null","interes":"qué busca en 2-6 palabras o null","valor":número en pesos de la venta si se menciona o null,"motivo":"por qué se perdió, corto, o null","resumen":"una frase de lo que pasó y qué sigue"}`,
+    messages: [{ role: "user", content: `Cliente: ${prospecto.nombre}${prospecto.externo_etiquetas ? `\nEtiquetas que le pusieron en Pancake (la de VENTA se pone a cualquiera que ya es cliente, no la tomes como prueba): ${prospecto.externo_etiquetas}` : ""}${prospecto.campana ? `\nLlegó por el anuncio: ${prospecto.campana}` : ""}\n\nChat:\n${chat.slice(-9000)}` }],
   });
   const t = r.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   const m = t.match(/\{[\s\S]*\}/);
   return m ? JSON.parse(m[0]) : null;
 }
+
+const PENDIENTE = `(etapa = 'venta' AND venta_revisada IS NULL) OR (etapa != 'venta' AND COALESCE(externo_mensajes, 0) >= 4 AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado))`;
 
 /** Lee con DELTA los chats de Pancake que cambiaron desde la última vez y mueve a cada quien a su etapa. */
 export async function leerChats(fuenteId, { max = 40 } = {}) {
@@ -358,29 +366,51 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
   if (!f) throw new Error("Esa conexión ya no existe");
   if (f.tipo !== "pancake") throw new Error("Por ahora DELTA lee los chats de Pancake");
   const cliente = db.prepare("SELECT * FROM clientes WHERE id = ?").get(f.cliente_id);
-  const pendientes = db.prepare(`SELECT id, nombre, etapa, externo_id, valor, interes FROM prospectos
-      WHERE externo_id LIKE ? AND etapa NOT IN ('venta') AND COALESCE(externo_mensajes, 0) >= 4
-        AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado)
-      ORDER BY externo_actualizado DESC LIMIT ?`).all(`pancake:${f.cuenta}:%`, Number(max));
+  // Primero las ventas que nadie ha confirmado (las que salieron de la etiqueta), luego los chats que cambiaron.
+  const pendientes = db.prepare(`SELECT id, nombre, etapa, externo_id, valor, interes, origen, campana, externo_etiquetas FROM prospectos
+      WHERE externo_id LIKE ? AND (${PENDIENTE})
+      ORDER BY (etapa = 'venta') DESC, externo_actualizado DESC LIMIT ?`).all(`pancake:${f.cuenta}:%`, Number(max));
   const r = { leidos: 0, movidos: 0, ventas: 0, perdidos: 0, errores: 0 };
   for (const p of pendientes) {
     try {
       const conversacion = p.externo_id.split(":").slice(2).join(":");
       const chat = chatsDePrueba ? await chatsDePrueba(conversacion) : await chatPancake(f, conversacion);
       const ahora = new Date().toISOString();
-      if (!chat) { db.prepare("UPDATE prospectos SET ia_revisado = ? WHERE id = ?").run(ahora, p.id); continue; }
+      if (!chat) { db.prepare("UPDATE prospectos SET ia_revisado = ?, venta_revisada = CASE WHEN etapa = 'venta' THEN 0 ELSE venta_revisada END WHERE id = ?").run(ahora, p.id); continue; }
       const x = await entenderChat(cliente, p, chat);
       r.leidos++;
       db.prepare("UPDATE prospectos SET ia_revisado = ? WHERE id = ?").run(ahora, p.id);
       if (!x || !["nuevo", "contactado", "cita", "asistio", "venta", "perdido"].includes(x.etapa)) continue;
       const cambios = {};
+      const origen = ["anuncio", "redes", "recomendado", "cliente", "otro"].includes(x.origen) ? x.origen : null;
+      const fechaVenta = /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha_venta || "")) ? x.fecha_venta : null;
+      if (origen && origen !== p.origen) cambios.origen = origen;
+      if (p.etapa === "venta") {
+        // Revisión de una venta sin confirmar: si el chat no muestra compra, deja de contar como venta.
+        if (x.etapa !== "venta") {
+          actualizarProspecto(p.id, { ...cambios, etapa: x.etapa, ...(x.etapa === "perdido" && x.motivo ? { motivo_perdido: String(x.motivo) } : {}) }, { automatico: true });
+          db.prepare("UPDATE prospectos SET venta_revisada = 1 WHERE id = ?").run(p.id);
+          notaProspecto(p.id, `DELTA quitó la venta: en el chat no se ve que haya comprado${origen === "cliente" ? " (ya era cliente y escribió por otra cosa)" : ""}. ${String(x.resumen || "").slice(0, 300)}`);
+          r.movidos++; r.quitadas = (r.quitadas || 0) + 1;
+          continue;
+        }
+        if (fechaVenta) cambios.venta_fecha = fechaVenta;
+        if (Number(x.valor) > 0 && !p.valor) cambios.valor = Number(x.valor);
+        actualizarProspecto(p.id, cambios, { automatico: true });
+        db.prepare("UPDATE prospectos SET venta_revisada = 1 WHERE id = ?").run(p.id);
+        if (x.resumen) notaProspecto(p.id, `DELTA confirmó la venta${fechaVenta ? ` (${fechaVenta})` : ""}: ${String(x.resumen).slice(0, 300)}`);
+        r.confirmadas = (r.confirmadas || 0) + 1;
+        continue;
+      }
+      if (x.etapa === "venta" && fechaVenta) cambios.venta_fecha = fechaVenta;
       if (x.interes && !p.interes) cambios.interes = String(x.interes);
       if (x.etapa === "venta" && Number(x.valor) > 0 && !p.valor) cambios.valor = Number(x.valor);
       // Solo avanza; "perdido" solo si no había llegado a venta
       if (x.etapa === "perdido" && p.etapa !== "perdido") { cambios.etapa = "perdido"; if (x.motivo) cambios.motivo_perdido = String(x.motivo); }
       else if (x.etapa !== "perdido" && masAvanzada(p.etapa === "perdido" ? "nuevo" : p.etapa, x.etapa) === x.etapa && x.etapa !== p.etapa) cambios.etapa = x.etapa;
       if (Object.keys(cambios).length) {
-        actualizarProspecto(p.id, cambios);
+        actualizarProspecto(p.id, cambios, { automatico: true });
+        if (cambios.etapa === "venta") db.prepare("UPDATE prospectos SET venta_revisada = 1 WHERE id = ?").run(p.id);
         if (cambios.etapa) { r.movidos++; if (cambios.etapa === "venta") r.ventas++; if (cambios.etapa === "perdido") r.perdidos++; }
       }
       if (x.resumen) notaProspecto(p.id, `DELTA leyó el chat: ${String(x.resumen).slice(0, 400)}`);
@@ -390,7 +420,7 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
       if (/ANTHROPIC_API_KEY|credit|billing|429|rate/i.test(e.message)) break;
     }
   }
-  r.pendientes = Math.max(0, db.prepare(`SELECT COUNT(*) n FROM prospectos WHERE externo_id LIKE ? AND etapa NOT IN ('venta') AND COALESCE(externo_mensajes, 0) >= 4 AND (ia_revisado IS NULL OR externo_actualizado > ia_revisado)`).get(`pancake:${f.cuenta}:%`).n);
+  r.pendientes = Math.max(0, db.prepare(`SELECT COUNT(*) n FROM prospectos WHERE externo_id LIKE ? AND (${PENDIENTE})`).get(`pancake:${f.cuenta}:%`).n);
   db.prepare("UPDATE crm_fuentes SET resultado = json_set(COALESCE(resultado, '{}'), '$.chats', json(?)) WHERE id = ?").run(JSON.stringify({ ...r, fecha: new Date().toISOString() }), f.id);
   if (r.movidos) avisarPantalla({ tipo: "crm" });
   return r;
