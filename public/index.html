@@ -41,12 +41,14 @@
     <div class="entrada-caja">
       <div class="marca"><img src="/icons/logo.svg" alt="" /><span class="palabras"><b>DELTA</b><small>MARKETING</small></span></div>
       <p class="lema">Boutique Medical Marketing</p>
-      <p>Hola de nuevo, señor. ¿Me das tu clave?</p>
+      <p id="entrada-saludo">Hola de nuevo, señor. ¿Me das tu clave?</p>
       <form id="form-entrada">
+        <input id="usuario-equipo" type="text" placeholder="Tu usuario" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30" hidden />
         <input id="clave" type="password" placeholder="Clave de acceso" autocomplete="current-password" required />
         <button type="submit">Entrar</button>
       </form>
       <p id="error-entrada" class="error" hidden></p>
+      <button type="button" id="btn-soy-equipo" class="enlace-equipo">¿Eres del equipo? Entra con tu usuario</button>
     </div>
   </section>
 
@@ -65,6 +67,7 @@
 
     <div class="cuerpo-app">
       <nav id="menu" class="menu" aria-label="Secciones">
+        <span class="menu-grupo solo-equipo" id="menu-hola"></span>
         <span class="menu-grupo">Personal</span>
         <a href="#/delta" class="menu-item" data-ir="delta"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M1.5 12h2M20.5 12h2"/></svg><span>DELTA</span></a>
         <a href="#/inicio" class="menu-item" data-ir="inicio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Inicio</span></a>
@@ -82,9 +85,11 @@
         <a href="#/paidmedia" class="menu-item" data-ir="paidmedia"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 0 0 1 1h2l5 4V5L6 9H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg><span>Paid media</span><small id="badge-paidmedia" class="badge" hidden></small></a>
         <a href="#/analitica" class="menu-item" data-ir="analitica"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 17v-3M12 17v-6M15 17v-2"/></svg><span>Analítica</span></a>
         <a href="#/cuentas" class="menu-item" data-ir="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M15.8 14.6a4.4 4.4 0 0 1 5 4.4"/></svg><span>Cuentas</span></a>
+        <a href="#/equipo" class="menu-item" data-ir="equipo"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="m16.5 4.5 1.5 1.5 3-3"/></svg><span>Equipo</span></a>
         <a href="#/departamentos" class="menu-item" data-ir="departamentos"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Departamentos</span></a>
         <a href="#/estudio" class="menu-item" data-ir="estudio"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span>Estudio de diseño</span></a>
         <a href="#/aprobaciones" class="menu-item" data-ir="aprobaciones"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Aprobaciones</span><small id="badge-aprob" class="badge" hidden></small></a>
+        <button type="button" class="menu-item solo-equipo" id="menu-salir"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8l-4 4 4 4M6 12h10"/></svg><span>Salir</span></button>
       </nav>
       <div id="menu-fondo" class="menu-fondo" hidden></div>
       <div class="secciones">
@@ -449,14 +454,44 @@
         </div>
       </section>
 
+      <!-- Equipo: quién más entra a DELTA, qué puede ver, sus tareas y el historial de cambios -->
+      <section class="seccion equipo" data-seccion="equipo">
+        <div class="tb-cabeza">
+          <h1 class="tb-titulo">Equipo</h1>
+          <div class="ag-botones">
+            <button type="button" class="ag-agregar" id="eq-nueva">+ Dar acceso</button>
+          </div>
+        </div>
+        <div class="tablero tablero-ct tablero-eq">
+          <div class="eq-personas" id="eq-personas"></div>
+          <div class="eq-medio">
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Tareas del equipo</h2><span class="tb-hora" id="eq-tareas-n"></span></div>
+              <form id="eq-form-tarea" class="eq-form-tarea">
+                <input id="eq-tarea" type="text" maxlength="200" placeholder="Ej. Subir el reel de Kardia" required />
+                <select id="eq-para" aria-label="Para quién"></select>
+                <input id="eq-fecha" type="date" aria-label="Para cuándo" />
+                <button type="submit" class="primario">Asignar</button>
+              </form>
+              <ul class="lista eq-tareas" id="eq-tareas"></ul>
+            </div>
+            <div class="panel">
+              <div class="ag-cabeza"><h2>Historial</h2><select id="eq-filtro" class="ct-filtro" aria-label="De quién"></select></div>
+              <ol class="eq-historial" id="eq-historial"></ol>
+            </div>
+          </div>
+          <p class="tenue chico tb-nota">Quien entra con su usuario solo ve las secciones y los clientes que le marques, y sus tareas. <b>Nunca</b> ve a DELTA, tu agenda, tu correo, la bolsa, Finanzas ni Ajustes. Todo lo que cambia queda en el historial. También puedes decirle a DELTA: "ponle a Sofi que suba el reel de Kardia el viernes".</p>
+        </div>
+      </section>
+
       <!-- CRM y embudo: prospectos de los clientes, de "nuevo" a "venta", y su WhatsApp -->
       <section class="seccion crm" data-seccion="crm">
         <div class="tb-cabeza">
           <h1 class="tb-titulo">CRM y embudo</h1>
           <select id="crm-cliente" class="ct-filtro" aria-label="Cliente"></select>
           <div class="ag-botones">
-            <button type="button" class="tb-link" id="crm-meta">Traer de Meta</button>
-            <button type="button" class="tb-link" id="crm-config">Formulario y WhatsApp</button>
+            <button type="button" class="tb-link solo-dueno" id="crm-meta">Traer de Meta</button>
+            <button type="button" class="tb-link solo-dueno" id="crm-config">Conexiones</button>
             <button type="button" class="tb-link" id="crm-nuevo">+ Prospecto</button>
             <button type="button" class="ag-agregar" data-pedir="¿Cómo va el CRM? Dime primero quién lleva más tiempo sin respuesta, las citas de hoy y las que ya pasaron sin marcar, y luego cómo va el embudo del mes contra el anterior y qué cliente convierte peor.">Resumen con DELTA</button>
           </div>
@@ -850,6 +885,41 @@
     </form>
   </dialog>
 
+  <dialog id="dlg-persona" class="dialogo">
+    <form id="form-persona" method="dialog">
+      <h2 id="eq-dlg-titulo">Dar acceso</h2>
+      <input type="hidden" id="eq-id" />
+      <div class="fila-2">
+        <label>Nombre <input id="eq-nombre" type="text" maxlength="80" placeholder="Ej. Sofía" required /></label>
+        <label>Usuario <input id="eq-usuario" type="text" maxlength="30" autocapitalize="none" spellcheck="false" placeholder="Ej. sofia" required /></label>
+      </div>
+      <label><span id="eq-clave-txt">Clave</span>
+        <span class="eq-clave-fila"><input id="eq-clave" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Mínimo 10 caracteres" /><button type="button" id="eq-generar">Inventar una</button></span>
+      </label>
+      <fieldset class="eq-grupo">
+        <legend>Qué puede ver</legend>
+        <div class="eq-opciones" id="eq-secciones"></div>
+        <p class="tenue chico">Siempre ve sus tareas. Lo tuyo (DELTA, agenda, correo, bolsa, Finanzas y Ajustes) nunca se comparte.</p>
+      </fieldset>
+      <fieldset class="eq-grupo">
+        <legend>De qué clientes</legend>
+        <div class="segmento chico eq-todos">
+          <button type="button" data-eq-todos="1">Todos</button>
+          <button type="button" data-eq-todos="0">Solo algunos</button>
+        </div>
+        <div class="eq-opciones" id="eq-clientes"></div>
+      </fieldset>
+      <div class="eq-listo" id="eq-listo" hidden></div>
+      <p id="eq-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="eq-borrar" class="peligro" hidden>Quitar acceso</button>
+        <button type="button" id="eq-pausar" hidden>Pausar</button>
+        <button type="button" id="eq-cancelar">Cerrar</button>
+        <button type="submit" class="primario" id="eq-guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlg-prospecto" class="dialogo ancho dlg-prospecto">
     <form id="form-prospecto" method="dialog">
       <h2 id="crm-dlg-titulo">Nuevo prospecto</h2>
@@ -909,7 +979,24 @@
 
   <dialog id="dlg-crm-config" class="dialogo">
     <form id="form-crm-config" method="dialog">
-      <h2 id="crm-cfg-titulo">Formulario y WhatsApp</h2>
+      <h2 id="crm-cfg-titulo">Conexiones</h2>
+      <h3 class="crm-sub">Traer de otro CRM</h3>
+      <p class="tenue chico">Si este cliente ya usa Kommo, GoHighLevel o Pancake, DELTA trae sus prospectos cada hora. Solo lee: nunca cambia ni manda nada allá.</p>
+      <ul class="crm-fuentes-lista" id="crm-ext-lista"></ul>
+      <div class="crm-fuente-nueva">
+        <div class="segmento chico" id="crm-ext-tipo" role="tablist" aria-label="Sistema">
+          <button type="button" data-ext="kommo" class="activa">Kommo</button>
+          <button type="button" data-ext="ghl">GoHighLevel</button>
+          <button type="button" data-ext="pancake">Pancake</button>
+        </div>
+        <ol class="crm-pasos tenue chico" id="crm-ext-pasos"></ol>
+        <div class="fila-2">
+          <label><span id="crm-ext-cuenta-l">Subdominio</span> <input id="crm-ext-cuenta" type="text" maxlength="120" autocomplete="off" spellcheck="false" /></label>
+          <label>Llave <input id="crm-ext-token" type="password" maxlength="4000" autocomplete="off" placeholder="Pégala aquí" /></label>
+        </div>
+        <button type="button" class="primario" id="crm-ext-conectar">Conectar y traer</button>
+        <p id="crm-ext-msg" class="error" hidden></p>
+      </div>
       <h3 class="crm-sub">Formulario para captar prospectos</h3>
       <p class="tenue chico">Una página sencilla con nombre, teléfono y qué le interesa. Ponla en la bio de Instagram, en el sitio o en los anuncios: cada persona que lo llene entra aquí como prospecto nuevo.</p>
       <div class="crm-link" id="crm-cfg-link"></div>

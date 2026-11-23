@@ -34,10 +34,12 @@ function mostrarEntrada() {
 $("#form-entrada").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    const r = await fetch("/api/entrar", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: $("#clave").value }) });
+    const usuario = $("#usuario-equipo").hidden ? "" : $("#usuario-equipo").value.trim();
+    const r = await fetch("/api/entrar", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: $("#clave").value, ...(usuario ? { usuario } : {}) }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
     $("#clave").value = "";
+    if (usuario) guardado.set("delta_usuario", usuario);
     $("#error-entrada").hidden = true;
     iniciar(true); // el toque de "Entrar" ya permite el sonido de arranque
   } catch (err) {
@@ -45,6 +47,31 @@ $("#form-entrada").addEventListener("submit", async (e) => {
     $("#error-entrada").hidden = false;
   }
 });
+
+// Alguien del equipo entra con su usuario (se recuerda en este equipo)
+function modoEquipoEntrada(on) {
+  $("#usuario-equipo").hidden = !on;
+  $("#usuario-equipo").required = on;
+  $("#entrada-saludo").textContent = on ? "Hola. Entra con tu usuario y tu clave." : "Hola de nuevo, señor. ¿Me das tu clave?";
+  $("#clave").placeholder = on ? "Tu clave" : "Clave de acceso";
+  $("#btn-soy-equipo").textContent = on ? "Soy el dueño" : "¿Eres del equipo? Entra con tu usuario";
+  if (on) { $("#usuario-equipo").value ||= guardado.get("delta_usuario") || ""; setTimeout(() => ($("#usuario-equipo").value ? $("#clave") : $("#usuario-equipo")).focus(), 30); }
+}
+$("#btn-soy-equipo").addEventListener("click", () => modoEquipoEntrada($("#usuario-equipo").hidden));
+if (guardado.get("delta_usuario")) modoEquipoEntrada(true);
+
+// Quién está dentro: el dueño ve todo; alguien del equipo solo sus secciones
+let yo = { rol: "dueno" };
+const esEquipo = () => yo.rol === "equipo";
+const SIEMPRE_EQUIPO = ["tareas"];
+const puedeAbrir = (n) => !esEquipo() || SIEMPRE_EQUIPO.includes(n) || yo.secciones.includes(n);
+function aplicarRol(p) {
+  if (p.rol !== "equipo") { yo = { rol: "dueno" }; guardado.del("delta_usuario"); document.documentElement.removeAttribute("data-rol"); return; }
+  yo = { rol: "equipo", ...p.usuario };
+  document.documentElement.dataset.rol = "equipo";
+  document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("permitido", puedeAbrir(x.dataset.ir)));
+  $("#menu-hola").textContent = `Hola, ${p.usuario.nombre}`;
+}
 
 // ---------------- Formato ----------------
 const fmtHora = (iso) => new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -64,6 +91,8 @@ async function cargarPanel() {
   const p = await api("/panel");
   zona = p.zona_horaria || zona;
   aplicarMood();
+  aplicarRol(p);
+  if (esEquipo()) return pintarPanelEquipo(p);
 
   hud.panel = p;
   pintarMosaicos();
@@ -124,6 +153,17 @@ async function cargarPanel() {
   if (p.voz) { vozNatural = p.voz; pintarVoz(); }
   $("#aj-zona").value = p.zona_horaria;
   $("#aj-resumen").value = p.hora_resumen || "";
+}
+
+// Lo que ve alguien del equipo: sus tareas y los avisos de sus secciones
+function pintarPanelEquipo(p) {
+  const ahora = new Date().toISOString();
+  $("#lista-tareas").innerHTML = p.tareas.length ? p.tareas.map((t) => {
+    const vencida = t.fecha_limite && t.fecha_limite < ahora;
+    const sub = [t.cliente, t.fecha_limite ? `${fmtDia(t.fecha_limite)} ${fmtHora(t.fecha_limite)}` : null, t.notas].filter(Boolean).map(esc).join(" · ");
+    return `<li class="${t.prioridad === "alta" ? "alta" : ""} ${vencida ? "vencida" : ""}"><input type="checkbox" data-hecha="${t.id}" aria-label="Marcar como hecha" /><div class="cuerpo">${esc(t.titulo)}${sub ? `<span class="sub">${sub}</span>` : ""}</div></li>`;
+  }).join("") : `<li class="vacio">No tienes tareas pendientes. ¡Bien hecho!</li>`;
+  for (const [id, n] of [["#badge-crm", p.crm_sin_responder], ["#badge-contenido", p.contenido_atrasado]]) { $(id).hidden = !n; $(id).textContent = n || ""; }
 }
 
 let correoConectado = { gmail: false, outlook: false };
@@ -674,6 +714,7 @@ let agenciaUI = null;
 const agenciaTableros = () => (agenciaUI ||= iniciarAgencia({
   api, esc, guardado, fmtDia, fmtHora, dinero, ESTADO_PROY, filaTrabajo, sonar,
   zona: () => zona,
+  restringido: () => esEquipo() && !yo.todos_los_clientes, // ve solo algunos clientes: uno a la vez
   nombreDepto,
   avisar: (texto) => burbuja("aviso", texto),
   editarCliente: (c) => abrirFormCliente(c),
@@ -929,6 +970,7 @@ const SECCIONES = {
   tendencias: { cargar: () => agenciaTableros().cargarTendencias(), cada: 120e3 },
   seo: { cargar: () => agenciaTableros().cargarSeo(), cada: 120e3 },
   crm: { cargar: () => agenciaTableros().cargarCrm(), cada: 30e3 },
+  equipo: { cargar: () => agenciaTableros().cargarEquipo(), cada: 60e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
@@ -949,12 +991,13 @@ function refrescar(nombre, forzar = false) {
 
 function mostrarSeccion(nombre) {
   if (!SECCIONES[nombre]) nombre = "delta";
+  if (!puedeAbrir(nombre)) { nombre = "tareas"; history.replaceState(null, "", "#/tareas"); }
   seccionActual = nombre;
   const vista = nombre === "delta" ? "inicio" : nombre;
   document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === vista));
   document.querySelector('.seccion[data-seccion="inicio"]').classList.toggle("modo-delta", nombre === "delta");
   document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("activa", x.dataset.ir === nombre));
-  $("#mini-orbe").hidden = conDelta(nombre);
+  $("#mini-orbe").hidden = conDelta(nombre) || esEquipo();
   document.body.dataset.seccion = nombre;
   cerrarMenu();
   refrescar(nombre);
@@ -1952,6 +1995,10 @@ $("#btn-nueva-conv").addEventListener("click", async () => {
   $("#ajustes").close();
   cargarHistorial();
 });
+$("#menu-salir").addEventListener("click", async () => {
+  await fetch("/api/salir", { method: "POST", credentials: "same-origin" });
+  location.reload();
+});
 $("#btn-salir").addEventListener("click", async () => {
   await fetch("/api/salir", { method: "POST", credentials: "same-origin" });
   location.reload();
@@ -2144,6 +2191,14 @@ async function iniciar(conToque = false) {
   }
   $("#entrada").hidden = true;
   $("#app").hidden = false;
+  if (esEquipo()) {
+    // Alguien del equipo: sin DELTA, sin saludo, sin lo personal del dueño
+    reloj();
+    cargadaEn.tareas = Date.now();
+    mostrarSeccion(seccionDeLaDireccion());
+    setInterval(() => { cargarPanel().catch(() => {}); refrescar(seccionActual); }, 60_000);
+    return;
+  }
   arranque(conToque).then(() => {
     // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
     setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);

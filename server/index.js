@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db, getAjuste, setAjuste } from "./db.js";
+import { puedeVerCliente } from "./alcance.js";
 import * as agenda from "./agenda.js";
 import { hablarConDelta, inicioConversacion, nuevaConversacion } from "./cerebro.js";
 import { iniciarVigilante, suscribirPantalla, avisar } from "./avisos.js";
@@ -27,6 +28,8 @@ import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
 import * as crm from "./crm.js";
+import * as crmExternos from "./crmexternos.js";
+import * as equipo from "./equipo.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -56,15 +59,18 @@ app.post("/api/entrar", async (req, res) => {
   const espera = seg.bloqueado(ip);
   if (espera) return res.status(429).json({ error: `Demasiados intentos. Intente de nuevo en ${espera} min.` });
 
-  if (!seg.claveCorrecta(String(req.body?.clave || ""))) {
+  // Alguien del equipo entra con su usuario y su clave; el dueño solo con su clave.
+  const usuario = String(req.body?.usuario || "").trim();
+  const persona = usuario ? equipo.verificarUsuario(usuario, String(req.body?.clave || "")) : null;
+  if (usuario ? !persona : !seg.claveCorrecta(String(req.body?.clave || ""))) {
     const activoBloqueo = seg.registrarFallo(ip);
     await new Promise((r) => setTimeout(r, 600)); // frena a quien intenta adivinar
     if (activoBloqueo) {
       avisar(`⚠️ Alguien intentó entrar a DELTA con clave incorrecta varias veces (IP ${ip}). Lo bloqueé un rato.`, "Alerta de seguridad").catch(() => {});
     }
-    return res.status(401).json({ error: "Clave incorrecta" });
+    return res.status(401).json({ error: usuario ? "Usuario o clave incorrectos" : "Clave incorrecta" });
   }
-  const { id, expira } = seg.crearSesion(req.get("user-agent"));
+  const { id, expira } = seg.crearSesion(req.get("user-agent"), persona?.id ?? null);
   seg.ponerCookie(req, res, id, expira);
   res.json({ ok: true });
 });
@@ -148,6 +154,7 @@ app.get("/r/:token", (req, res) => {
 // ---------- API del panel ----------
 const api = express.Router();
 api.use(seg.protegido);
+api.use(equipo.autorizar); // alguien del equipo solo llega a sus secciones y sus clientes
 
 // La dirección pública de la app (para armar links completos cuando DELTA los da por WhatsApp o por voz).
 function guardarUrlBase(req) {
@@ -199,13 +206,33 @@ api.post("/conversacion/nueva", envolver(() => { nuevaConversacion(); return { o
 
 api.get("/agenda", envolver((req) => agenda.agendaRango(String(req.query.desde || ""), String(req.query.hasta || ""))));
 
+// Lo que ve alguien del equipo al entrar: sus tareas y los avisos de sus secciones. Nada personal del dueño.
+function panelEquipo(u) {
+  const tiene = (s) => u.secciones.includes(s);
+  const tareas = agenda.listarTareas({ estado: "pendiente", asignada_a: u.id });
+  const ahora = new Date().toISOString();
+  return {
+    rol: "equipo",
+    usuario: { id: u.id, nombre: u.nombre, secciones: u.secciones, todos_los_clientes: u.clientes === null },
+    zona_horaria: zonaHoraria(),
+    tareas, eventos: [], recordatorios: [], memorias: [], avisos: [],
+    hoy: { eventos: 0, vencidas: tareas.filter((t) => t.fecha_limite && t.fecha_limite < ahora).length, pendientes: tareas.length },
+    conexiones: {},
+    crm_sin_responder: tiene("crm") ? (() => { try { return crm.avisosCrm().sin_responder.filter((p) => puedeVerCliente(p.cliente_id)).length; } catch { return 0; } })() : 0,
+    contenido_atrasado: tiene("contenido") ? (() => { try { return contenido.listarContenido().filter((p) => p.atrasada && puedeVerCliente(p.cliente_id)).length; } catch { return 0; } })() : 0,
+  };
+}
+
 api.get("/panel", envolver((req) => {
+  if (req.usuario) return panelEquipo(req.usuario);
   guardarUrlBase(req);
   const hoy = agenda.resumenDelDia();
   return {
+    rol: "dueno",
+    equipo: db.prepare("SELECT COUNT(*) n FROM usuarios WHERE activo = 1").get().n,
     zona_horaria: zonaHoraria(),
     hora_resumen: getAjuste("hora_resumen", process.env.HORA_RESUMEN || "08:00"),
-    tareas: agenda.listarTareas({ estado: "pendiente" }),
+    tareas: agenda.listarTareas({ estado: "pendiente", asignada_a: "dueno" }),
     eventos: agenda.listarEventos({}),
     recordatorios: agenda.listarRecordatorios(),
     memorias: agenda.listarMemorias(),
@@ -311,7 +338,17 @@ api.get("/agencia", envolver(() => agencia.tablero()));
 api.post("/clientes", envolver((req) => agencia.crearCliente(req.body || {})));
 api.get("/clientes/:id", envolver((req) => agencia.fichaCliente(req.params.id)));
 api.patch("/clientes/:id", envolver((req) => agencia.actualizarCliente(req.params.id, req.body || {})));
-api.get("/cuentas", envolver(() => agencia.cuentas()));
+api.get("/cuentas", envolver((req) => (req.usuario
+  // Al equipo solo le llega el nombre de sus clientes (sin pagos ni presupuestos)
+  ? agencia.listarClientes().filter((c) => c.estado !== "terminado").map((c) => ({ id: c.id, nombre: c.nombre, estado: c.estado }))
+  : agencia.cuentas())));
+
+// ---------- Equipo (solo el dueño: el equipo no tiene permiso para estas rutas) ----------
+api.get("/equipo", envolver(() => equipo.tableroEquipo()));
+api.post("/equipo/personas", envolver((req) => equipo.crearUsuario(req.body || {})));
+api.patch("/equipo/personas/:id", envolver((req) => equipo.actualizarUsuario(Number(req.params.id), req.body || {})));
+api.delete("/equipo/personas/:id", envolver((req) => equipo.borrarUsuario(Number(req.params.id))));
+api.get("/equipo/historial", envolver((req) => equipo.historial({ usuario: req.query.usuario ? String(req.query.usuario) : undefined, limite: req.query.limite })));
 api.post("/clientes/:id/gasto", envolver((req) => agencia.registrarGasto({
   cliente: agencia.clienteRequerido(req.params.id).id, plataforma: req.body?.plataforma, monto: req.body?.monto, mes: req.body?.mes || undefined,
 })));
@@ -356,6 +393,10 @@ api.post("/crm/meta", envolver(async (req) => {
   try { return await crm.importarDeMeta(String(req.body?.cliente || "")); }
   catch (e) { if (e.permiso === false) return { sin_permiso: true }; throw e; }
 }));
+api.get("/crm/fuentes", envolver((req) => ({ fuentes: crmExternos.listarFuentes(String(req.query.cliente || "")), tipos: crmExternos.TIPOS })));
+api.post("/crm/fuentes", envolver((req) => crmExternos.conectarFuente(req.body || {})));
+api.post("/crm/fuentes/:id/sincronizar", envolver((req) => crmExternos.sincronizarFuente(Number(req.params.id))));
+api.delete("/crm/fuentes/:id", envolver((req) => crmExternos.quitarFuente(Number(req.params.id))));
 api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
 api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
 api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
@@ -511,4 +552,7 @@ app.listen(PUERTO, () => {
   tendencias.iniciarTendencias();
   seo.iniciarSeo();
   crm.iniciarCrm();
+  // Kommo, GoHighLevel y Pancake de los clientes: cada hora (solo lectura)
+  setTimeout(() => crmExternos.sincronizarTodas().catch(() => {}), 120e3);
+  setInterval(() => crmExternos.sincronizarTodas().catch(() => {}), 3600e3);
 });

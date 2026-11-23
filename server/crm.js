@@ -193,7 +193,7 @@ export function crearProspecto({ cliente, nombre, telefono, correo, fuente, camp
     interes ? String(interes).slice(0, 160) : null, e, RANGO[e] ?? 0, numeroValido(valor), cita ? citaValida(cita) : null,
     notas ? String(notas).slice(0, 2000) : null, e !== "nuevo" ? ahoraISO() : null, responsable ? String(responsable).trim().slice(0, 80) : null);
   const id = r.lastInsertRowid;
-  evento(id, "etapa", origen === "formulario" ? "Llegó por el formulario" : origen === "meta" ? "Llenó un formulario de anuncio en Meta" : origen === "whatsapp" ? "Escribió por WhatsApp" : "Prospecto nuevo");
+  evento(id, "etapa", origen === "formulario" ? "Llegó por el formulario" : origen === "meta" ? "Llenó un formulario de anuncio en Meta" : origen === "kommo" ? "Llegó desde Kommo" : origen === "ghl" ? "Llegó desde GoHighLevel" : origen === "pancake" ? "Llegó desde Pancake" : origen === "whatsapp" ? "Escribió por WhatsApp" : "Prospecto nuevo");
   avisarPantalla({ tipo: "crm" });
   return obtenerProspecto(id);
 }
