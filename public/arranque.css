@@ -1,0 +1,90 @@
+/* ============ DELTA — Arranque cinematográfico ============
+   Siempre oscuro (de día también), como la portada de una película.
+   --k acorta todos los tiempos cuando la intro va sin sonido. */
+
+.arranque { --k: 1; --px: 0px; --py: 0px; overflow: hidden; background: radial-gradient(circle at 50% 42%, #150d3e 0%, #07051a 45%, #020109 80%); perspective: 1200px; }
+.arranque.saliendo { opacity: 0; pointer-events: none; transition: opacity .75s ease; }
+.arranque.saliendo .arr-escena, .arranque.saliendo .arr-lienzo { transform: scale(1.35); filter: blur(6px); transition: transform .8s cubic-bezier(.5,0,.2,1), filter .8s; }
+.arranque.saliendo .arr-hud { opacity: 0; transition: opacity .3s; }
+
+.arr-lienzo { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.arr-halo { z-index: 0; }
+
+/* La escena sigue un poquito al cursor */
+.arr-escena { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 22px; translate: var(--px) var(--py); transition: translate .5s cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+.arr-logo { width: min(34vmin, 250px); }
+.arr-nombre { font-size: min(14vmin, 110px); font-variant-numeric: tabular-nums; }
+
+/* ---- Espera: logo que respira y botón con anillo ---- */
+.arranque.esperando { cursor: pointer; }
+.arranque.esperando .arr-logo { opacity: .55; transform: scale(.82); animation: arr-respira 3.2s ease-in-out infinite; transition: none; }
+@keyframes arr-respira { 0%, 100% { opacity: .4; filter: drop-shadow(0 0 6px rgba(183,166,255,.6)) drop-shadow(0 0 22px rgba(123,92,255,.5)); } 50% { opacity: .75; filter: drop-shadow(0 0 12px rgba(220,212,255,.9)) drop-shadow(0 0 44px rgba(123,92,255,.9)); } }
+.arr-tocar { z-index: 2; display: inline-flex; align-items: center; gap: 14px; padding: 13px 26px 13px 16px; border: 1px solid transparent; border-radius: 999px; color: #e9e6ff; font-family: inherit; font-size: 11px; letter-spacing: .38em; cursor: pointer; animation: none;
+  background: linear-gradient(rgba(14,10,40,.72), rgba(14,10,40,.72)) padding-box, linear-gradient(120deg, rgba(220,212,255,.6), rgba(139,115,255,.25) 45%, rgba(255,158,232,.6)) border-box;
+  box-shadow: 0 0 30px rgba(123,92,255,.35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: box-shadow .3s, transform .3s; }
+.arr-tocar:hover { box-shadow: 0 0 46px rgba(160,135,255,.6); transform: translateX(-50%) scale(1.04); }
+.arr-tocar-anillo { position: relative; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 12px #ff9ee8, 0 0 24px #8b73ff; }
+.arr-tocar-anillo::before, .arr-tocar-anillo::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 1px solid rgba(255,158,232,.8); animation: arr-radar 2s ease-out infinite; }
+.arr-tocar-anillo::after { animation-delay: 1s; }
+@keyframes arr-radar { from { scale: .5; opacity: 1; } to { scale: 2.6; opacity: 0; } }
+.arranque.esperando .arr-hud, .arranque.esperando .arr-saludo, .arranque.esperando .arr-nombre { opacity: 0; }
+
+/* Onda al tocar */
+.arr-onda { position: absolute; z-index: 3; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 1.5px solid rgba(233,230,255,.9); box-shadow: 0 0 26px rgba(160,135,255,.9), inset 0 0 14px rgba(255,158,232,.6); pointer-events: none; animation: arr-onda 1.1s cubic-bezier(.15,.7,.3,1) forwards; }
+@keyframes arr-onda { to { scale: 22; opacity: 0; } }
+
+/* ---- Animación (tiempos en una intro de 4.3 s, multiplicados por --k) ---- */
+.arranque.animando .arr-halo { animation: arr-halo calc(2.6s * var(--k)) cubic-bezier(.2,.7,.2,1) calc(.6s * var(--k)) both; }
+.arranque.animando .arr-logo { animation: arr-logo2 calc(1.1s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(.95s * var(--k)) both; }
+@keyframes arr-logo2 {
+  0% { opacity: 0; transform: scale(.4) rotate(-25deg); filter: blur(10px) brightness(3); }
+  35% { opacity: 1; transform: scale(1.12) rotate(4deg); filter: blur(0) brightness(2.2) drop-shadow(0 0 18px #fff) drop-shadow(0 0 70px rgba(139,115,255,1)); }
+  100% { opacity: 1; transform: scale(1) rotate(0); filter: drop-shadow(0 0 10px rgba(183,166,255,.9)) drop-shadow(0 0 40px rgba(123,92,255,.9)); }
+}
+.arranque.animando .arr-nombre { animation: arr-nombre calc(1.2s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(1.1s * var(--k)) both; }
+.arranque.animando .arr-linea { animation: arr-linea calc(1s * var(--k)) ease-out calc(1.4s * var(--k)) forwards; box-shadow: 0 0 12px rgba(183,166,255,.8); }
+
+/* Bienvenida debajo del nombre */
+.arr-saludo { display: grid; justify-items: center; gap: 8px; min-height: 52px; text-align: center; }
+.arr-saludo b { font-weight: 300; font-size: clamp(18px, 2.2vw, 28px); letter-spacing: .12em; color: #f1efff; text-shadow: 0 0 22px rgba(160,135,255,.7); opacity: 0; }
+.arr-saludo span { font-size: 11px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; color: #a99cf0; opacity: 0; }
+.arranque.animando .arr-saludo b { animation: arr-saludo calc(1s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(1.85s * var(--k)) both; }
+.arranque.animando .arr-saludo span { animation: arr-saludo calc(.9s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(2.25s * var(--k)) both; }
+@keyframes arr-saludo { from { opacity: 0; letter-spacing: .6em; filter: blur(8px); translate: 0 8px; } to { opacity: 1; filter: none; translate: none; } }
+
+/* Paneles laterales tipo HUD */
+.arr-hud { position: absolute; z-index: 1; bottom: 12vh; display: grid; gap: 10px; min-width: 230px; padding: 14px 16px; border-radius: 14px; color: #d8d2ff; font-size: 12px;
+  background: linear-gradient(165deg, rgba(34,25,86,.42), rgba(10,8,28,.55)); border: 1px solid rgba(183,166,255,.18); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; translate: var(--px) var(--py); }
+.arr-hud small { font-size: 9.5px; font-weight: 700; letter-spacing: .32em; text-transform: uppercase; color: #8b73ff; }
+.arr-hud-izq { left: 5vw; }
+.arr-hud-der { right: 5vw; justify-items: end; min-width: 200px; }
+.arranque.animando .arr-hud-izq { animation: arr-hud-izq calc(.7s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(.3s * var(--k)) both; }
+.arranque.animando .arr-hud-der { animation: arr-hud-der calc(.7s * var(--k)) cubic-bezier(.2,.8,.2,1) calc(.3s * var(--k)) both; }
+@keyframes arr-hud-izq { from { opacity: 0; transform: translateX(-30px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes arr-hud-der { from { opacity: 0; transform: translateX(30px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+.arr-sistemas { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.arr-sistemas li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; white-space: nowrap; opacity: 0; }
+.arr-sistemas li i { width: 6px; height: 6px; border-radius: 50%; background: #4fe3b0; box-shadow: 0 0 8px #4fe3b0; }
+.arr-sistemas li b { font-size: 9.5px; letter-spacing: .2em; color: #4fe3b0; }
+.arranque.animando .arr-sistemas li { animation: arr-sis calc(.4s * var(--k)) ease-out calc((.55s + var(--i) * .27s) * var(--k)) both; }
+@keyframes arr-sis { from { opacity: 0; translate: -10px 0; } to { opacity: 1; translate: none; } }
+.arr-cifra { font-size: 38px; font-weight: 200; line-height: 1; color: #fff; text-shadow: 0 0 20px rgba(139,115,255,.8); font-variant-numeric: tabular-nums; }
+.arr-barra { width: 100%; height: 3px; border-radius: 3px; background: rgba(139,115,255,.15); overflow: hidden; }
+.arr-barra i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8b73ff, #ff9ee8); box-shadow: 0 0 10px #ff9ee8; }
+.arranque.animando .arr-barra i { animation: arr-barra calc(1.7s * var(--k)) cubic-bezier(.3,.6,.3,1) calc(.3s * var(--k)) forwards; }
+@keyframes arr-barra { to { width: 100%; } }
+
+.arr-saltar { z-index: 4; display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(183,166,255,.25); background: rgba(14,10,40,.55); color: #c9bfff; font-family: inherit; font-size: 11px; letter-spacing: .28em; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: background .2s, border-color .2s; }
+.arr-saltar:hover { background: rgba(60,40,150,.5); border-color: rgba(220,212,255,.6); color: #fff; }
+
+@media (max-width: 760px) {
+  .arr-hud-izq { display: none; }
+  .arr-hud-der { left: 50%; right: auto; bottom: 7vh; translate: -50% 0; justify-items: center; min-width: 180px; padding: 10px 14px; background: none; border: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .arr-cifra { font-size: 26px; }
+  .arr-saludo span { font-size: 9.5px; letter-spacing: .16em; padding: 0 22px; line-height: 1.6; }
+  .arr-tocar { font-size: 10px; letter-spacing: .26em; padding: 12px 20px 12px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arranque.animando * { animation-duration: .01s !important; animation-delay: 0s !important; }
+  .arranque.esperando .arr-logo, .arr-tocar-anillo::before, .arr-tocar-anillo::after { animation: none; }
+}

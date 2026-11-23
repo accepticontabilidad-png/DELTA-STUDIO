@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/estilos.css" />
   <link rel="stylesheet" href="/reporte.css" />
   <link rel="stylesheet" href="/inicio-vivo.css" />
+  <link rel="stylesheet" href="/arranque.css" />
   <script>
     // Mood de día o de noche antes de pintar (sin parpadeo). "auto" cambia según la hora.
     (function () {
@@ -30,12 +31,18 @@
   <canvas id="estrellas" aria-hidden="true"></canvas>
   <!-- Arranque: DELTA en grande, sonido y bienvenida -->
   <div id="arranque" class="arranque" hidden>
+    <canvas id="arr-lienzo" class="arr-lienzo" aria-hidden="true"></canvas>
     <div class="arr-halo"></div>
-    <img class="arr-logo" src="/icons/logo.svg" alt="" />
-    <div class="arr-nombre">DELTA</div>
-    <div class="arr-linea"></div>
-    <button type="button" id="arr-tocar" class="arr-tocar">Toque para iniciar</button>
-    <button type="button" id="arr-saltar" class="arr-saltar">Saltar</button>
+    <div class="arr-escena">
+      <img class="arr-logo" src="/icons/logo.svg" alt="" />
+      <div class="arr-nombre">DELTA</div>
+      <div class="arr-linea"></div>
+      <div class="arr-saludo" aria-live="polite"><b></b><span></span></div>
+    </div>
+    <div class="arr-hud arr-hud-izq" aria-hidden="true"><small>Sistemas</small><ul class="arr-sistemas"></ul></div>
+    <div class="arr-hud arr-hud-der" aria-hidden="true"><small>Sincronizando</small><span class="arr-cifra">0%</span><div class="arr-barra"><i></i></div></div>
+    <button type="button" id="arr-tocar" class="arr-tocar"><span class="arr-tocar-anillo"></span>Toque para despertar a DELTA</button>
+    <button type="button" id="arr-saltar" class="arr-saltar">Saltar <span aria-hidden="true">›</span></button>
   </div>
   <!-- Pantalla de entrada -->
   <section id="entrada" class="entrada" hidden>
