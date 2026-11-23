@@ -2028,10 +2028,10 @@ const orbe = (() => {
     ctx.clearRect(0, 0, W, H);
     cursor.vx += (cursor.x - cursor.vx) * 0.04; cursor.vy += (cursor.y - cursor.vy) * 0.04;
     for (const e of estrellas) {
-      // Deriva lenta hacia arriba a la izquierda con un vaivén propio
+      // Deriva solas (sin tocar nada) hacia arriba a la izquierda, con un vaivén propio
       e.ang += dt * 0.2;
-      e.x += (-9 + Math.cos(e.ang + e.f) * 3) * e.z * dt;
-      e.y += (-4.5 + Math.sin(e.ang + e.f) * 3) * e.z * dt;
+      e.x += (-24 + Math.cos(e.ang + e.f) * 6) * e.z * dt;
+      e.y += (-11 + Math.sin(e.ang + e.f) * 6) * e.z * dt;
       if (e.x < -30) e.x += W + 60; else if (e.x > W + 30) e.x -= W + 60;
       if (e.y < -30) e.y += H + 60; else if (e.y > H + 30) e.y -= H + 60;
       const px = e.x - cursor.vx * 28 * e.z, py = e.y - cursor.vy * 28 * e.z;

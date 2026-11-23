@@ -142,15 +142,16 @@ function colocarPolvo() {
   polvo.dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (Math.abs(polvo.lado - lado) > 2) { polvo.lado = lado; lienzo.width = lienzo.height = Math.round(lado * polvo.dpr); }
   if (!polvo.parts.length) {
-    const n = innerWidth < 700 ? 260 : 520; // punto medio: vivo pero sin saturar
+    const n = innerWidth < 700 ? 230 : 460; // punto medio: vivo pero sin saturar
     // Tres "planos" de órbita con distinta inclinación y giro, más una nube interior
     const planos = [[-0.35, 0.32], [0.55, 0.42], [1.35, 0.28], [0, 1]];
     polvo.parts = Array.from({ length: n }, (_, i) => {
-      const pl = planos[i % 4];
+      // Pocas en la nube interior (1 de cada 12) para que el centro y el logo respiren
+      const pl = i % 12 === 0 ? planos[3] : planos[i % 3];
       const interior = pl[1] === 1;
       // La mayoría forma un anillo denso pegado a la esfera (como en la bienvenida); unas pocas se alejan
       const q = Math.random();
-      const r = interior ? 0.12 + Math.random() * 0.48 : q < 0.78 ? 0.6 + Math.pow(Math.random(), 0.8) * 0.36 : 0.96 + Math.random() * 0.55;
+      const r = interior ? 0.3 + Math.random() * 0.3 : q < 0.78 ? 0.6 + Math.pow(Math.random(), 0.8) * 0.36 : 0.96 + Math.random() * 0.55;
       return {
         r, a: Math.random() * Math.PI * 2,
         w: (interior ? 0.5 : 0.18 + Math.random() * 0.25) * (0.7 + 0.6 * Math.random()) / Math.max(0.4, r),
