@@ -2427,7 +2427,7 @@ function arranque(conToque) {
     if (visto) return listo();
     try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
     const el = $("#arranque");
-    const conSonido = sonidosActivos();
+    let conSonido = sonidosActivos();
     const cine = crearArranque(el);
     const reloj = [];
     let terminado = false;
@@ -2466,6 +2466,8 @@ function arranque(conToque) {
     if (conSonido && !conToque) {
       el.classList.add("esperando");
       el.onclick = () => { if (el.classList.contains("esperando")) empezar(); };
+      // Si nadie toca nada, la bienvenida pasa sola en silencio (el navegador no deja sonar sin un toque).
+      reloj.push(setTimeout(() => { if (el.classList.contains("esperando")) { conSonido = false; empezar(); } }, 2500));
     } else {
       el.onclick = null;
       empezar();
