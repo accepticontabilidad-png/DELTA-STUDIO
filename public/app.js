@@ -2,6 +2,7 @@
 import { sonar, sonidosActivos, activarSonidos } from "/sonidos.js";
 import { iniciarTableros } from "/tableros.js";
 import { iniciarAgencia } from "/agencia.js";
+import { iniciarInicioVivo, datosVivos } from "/inicio-vivo.js";
 const $ = (s) => document.querySelector(s);
 const guardado = {
   get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -179,7 +180,8 @@ let ultimoCorreo = null;
 const filaMercado = (d) => {
         const c = d.cambio_dia_pct;
         const clase = c > 0 ? "sube" : c < 0 ? "baja" : "";
-        return `<li><div class="cuerpo">${esc(d.nombre)}<span class="sub">${esc(d.precio?.toLocaleString("es-MX") ?? "")} ${esc(d.moneda)}</span></div><b class="${clase}">${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%</b></li>`;
+        const fuerza = Math.min(100, Math.abs(c || 0) / 2.5 * 100); // 2.5 % o más llena la barrita
+        return `<li><div class="cuerpo">${esc(d.nombre)}<span class="sub">${esc(d.precio?.toLocaleString("es-MX") ?? "")} ${esc(d.moneda)}</span></div><b class="${clase}">${c > 0 ? "▲" : c < 0 ? "▼" : ""} ${c ?? "–"}%</b><i class="mk-barra ${clase}" style="--v:${fuerza.toFixed(0)}%" aria-hidden="true"></i></li>`;
 };
 const sinBolsa = `<li class="vacio">Sin datos de bolsa por ahora.</li>`;
 
@@ -187,6 +189,8 @@ async function cargarMercadosMini() {
   const ok = (await api("/mercados")).filter((d) => !d.error);
   $("#lista-mercados").innerHTML = ok.length ? ok.slice(0, 5).map(filaMercado).join("") : sinBolsa;
   pintarTicker(ok);
+  hud.mercados = ok;
+  avisarVivo();
 }
 
 // Tablero unificado de bolsa y noticias (se arma la primera vez que se abre la sección).
@@ -399,7 +403,7 @@ setInterval(aplicarMood, 60_000);
 aplicarMood();
 
 // ---------------- Inicio tipo centro de mando (HUD) ----------------
-const hud = { panel: null, correo: null, noticias: null, extraEn: 0 };
+const hud = { panel: null, correo: null, noticias: null, mercados: [], clima: "", extraEn: 0 };
 const ICONOS = {
   cita: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   tarea: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>',
@@ -425,6 +429,39 @@ function pintarMosaicos() {
     caja.innerHTML = html;
     caja.querySelectorAll("b[data-cuenta]").forEach((b, i) => { if (b.dataset.cuenta !== "" && antes[i] !== b.dataset.cuenta) contar(b, Number(b.dataset.cuenta)); });
   }
+  avisarVivo();
+}
+
+// Lo que se ve alrededor del orbe (satélites y anillo de texto) y la línea del día.
+function avisarVivo() {
+  const p = hud.panel;
+  const prox = p?.eventos.find((e) => new Date(e.fin || e.inicio) > Date.now());
+  datosVivos({
+    panel: p,
+    sinLeer: totalSinLeer(hud.correo),
+    mercados: hud.mercados,
+    clima: hud.clima,
+    fecha: new Intl.DateTimeFormat("es-MX", { timeZone: zona, weekday: "long", day: "numeric", month: "long" }).format(new Date()),
+    siguiente: prox ? { cuando: faltaPara(prox.inicio), titulo: prox.titulo } : null,
+  });
+  pintarLineaDia();
+}
+
+// Línea del día (6:00 a 24:00): las citas de hoy como puntos y un punto brillante que marca "ahora".
+const minutosEn = (fecha) => {
+  const x = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zona, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(fecha).map((y) => [y.type, y.value]));
+  return Number(x.hour) * 60 + Number(x.minute);
+};
+const posLinea = (min) => Math.max(0, Math.min(100, ((min - 360) / 1080) * 100));
+function pintarLineaDia() {
+  const caja = $("#hud-linea-citas");
+  if (!caja) return;
+  const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: zona }).format(new Date());
+  const citas = (hud.panel?.eventos || []).filter((e) => new Intl.DateTimeFormat("en-CA", { timeZone: zona }).format(new Date(e.inicio)) === hoy);
+  caja.innerHTML = citas.map((e) => {
+    const pasada = new Date(e.fin || e.inicio) < Date.now();
+    return `<a href="#/agenda" class="hud-linea-cita${pasada ? " pasada" : ""}" style="left:${posLinea(minutosEn(new Date(e.inicio))).toFixed(2)}%"><span>${fmtHora(e.inicio)} · ${esc(e.titulo)}</span></a>`;
+  }).join("");
 }
 
 // Los números suben de 0 a su valor (rápido y suave).
@@ -486,9 +523,10 @@ function relojHud() {
   $("#hud-ampm").textContent = (partes.dayPeriod || "").replace(/\s/g, "").toLowerCase();
   $("#hud-fecha").textContent = new Intl.DateTimeFormat("es-MX", { timeZone: zona, weekday: "long", day: "numeric", month: "long" }).format(ahora);
   // Barra fina con cuánto del día ya pasó
-  const h = horaEn(ahora), m = Number(partes.minute);
-  $("#hud-progreso").style.width = `${((h * 60 + m) / 1440) * 100}%`;
-  if (partes.second === "00") { pintarFrase(); pintarSiguiente(); }
+  const pos = posLinea(minutosEn(ahora));
+  $("#hud-progreso").style.width = `${pos}%`;
+  $("#hud-ahora").style.left = `${pos}%`;
+  if (partes.second === "00") { pintarFrase(); pintarSiguiente(); avisarVivo(); }
 }
 
 const CLIMA = [
@@ -512,6 +550,8 @@ function pintarClima(d) {
   const max = d.daily?.temperature_2m_max?.[0], min = d.daily?.temperature_2m_min?.[0];
   $("#hud-clima").innerHTML = `<svg viewBox="0 0 24 24">${ICONO_CLIMA[ico]}</svg><div><b>${Math.round(c.temperature_2m)}°</b><span>${texto}${max != null ? ` · ${Math.round(max)}° / ${Math.round(min)}°` : ""}</span></div>`;
   $("#hud-clima").hidden = false;
+  hud.clima = `${Math.round(c.temperature_2m)}° ${texto}`;
+  avisarVivo();
 }
 
 function pintarTicker(lista) {
@@ -2258,4 +2298,5 @@ async function iniciar(conToque = false) {
 }
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
+iniciarInicioVivo();
 iniciar();
