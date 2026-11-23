@@ -998,6 +998,7 @@ function mostrarSeccion(nombre) {
   document.querySelectorAll(".seccion").forEach((x) => x.classList.toggle("visible", x.dataset.seccion === vista));
   document.querySelector('.seccion[data-seccion="inicio"]').classList.toggle("modo-delta", nombre === "delta");
   document.querySelectorAll("[data-ir]").forEach((x) => x.classList.toggle("activa", x.dataset.ir === nombre));
+  pintarMenu();
   $("#mini-orbe").hidden = conDelta(nombre) || esEquipo();
   document.body.dataset.seccion = nombre;
   cerrarMenu();
@@ -1009,6 +1010,40 @@ const seccionDeLaDireccion = () => (location.hash.match(/^#\/(\w+)/) || [])[1] |
 addEventListener("hashchange", () => mostrarSeccion(seccionDeLaDireccion()));
 
 // Menú en el celular: se abre con "Más"
+// Grupos del menú (Personal, Agencia, Herramientas) que se pliegan para que la barra no sea tan larga.
+var menuCerrados = (() => { try { return new Set(JSON.parse(guardado.get("delta_menu_cerrados") || '["herramientas"]')); } catch { return new Set(["herramientas"]); } })();
+(() => {
+  let grupo = null;
+  for (const x of $("#menu").children) {
+    if (x.classList.contains("menu-grupo") && x.id !== "menu-hola") {
+      grupo = x.textContent.trim().toLowerCase();
+      x.dataset.grupo = grupo;
+      x.setAttribute("role", "button");
+      x.tabIndex = 0;
+      continue;
+    }
+    if (grupo && x.classList.contains("menu-item") && !x.classList.contains("solo-equipo")) x.dataset.enGrupo = grupo;
+  }
+  const alternar = (g) => {
+    if (menuCerrados.has(g)) menuCerrados.delete(g); else menuCerrados.add(g);
+    guardado.set("delta_menu_cerrados", JSON.stringify([...menuCerrados]));
+    pintarMenu();
+  };
+  $("#menu").addEventListener("click", (e) => { const g = e.target.closest("[data-grupo]"); if (g) alternar(g.dataset.grupo); });
+  $("#menu").addEventListener("keydown", (e) => { const g = e.target.closest("[data-grupo]"); if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); alternar(g.dataset.grupo); } });
+})();
+function pintarMenu() {
+  for (const g of document.querySelectorAll("#menu [data-grupo]")) {
+    const cerrado = menuCerrados.has(g.dataset.grupo);
+    g.classList.toggle("cerrado", cerrado);
+    g.setAttribute("aria-expanded", String(!cerrado));
+    const items = [...document.querySelectorAll(`#menu [data-en-grupo="${g.dataset.grupo}"]`)];
+    g.classList.toggle("con-aviso", cerrado && items.some((x) => x.querySelector(".badge:not([hidden])")));
+  }
+  for (const x of document.querySelectorAll("#menu [data-en-grupo]")) x.classList.toggle("plegado", menuCerrados.has(x.dataset.enGrupo) && !x.classList.contains("activa"));
+}
+pintarMenu();
+
 function cerrarMenu() { $("#menu").classList.remove("abierto"); $("#menu-fondo").hidden = true; }
 $("#btn-mas").addEventListener("click", () => { $("#menu").classList.add("abierto"); $("#menu-fondo").hidden = false; });
 $("#btn-menu-pc").addEventListener("click", () => { $("#menu").classList.add("abierto"); $("#menu-fondo").hidden = false; });
