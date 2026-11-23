@@ -184,6 +184,19 @@ enum Acciones {
                 return
             }
         }
+        // Si ya está abierta (o Chrome la instaló en otro lado), se busca por su nombre.
+        let yo = Bundle.main.bundleURL.path
+        if let abierta = NSWorkspace.shared.runningApplications.first(where: {
+            ($0.localizedName ?? "").lowercased().hasPrefix("delta") && $0.bundleURL?.path != yo
+        }) {
+            abierta.activate(options: [])
+            return
+        }
+        let encontradas = spotlight("DELTA", casa: casa).map { $0["ruta"] ?? "" }
+        if let app = encontradas.first(where: { $0.hasSuffix(".app") && $0 != yo && ($0 as NSString).lastPathComponent.lowercased().hasPrefix("delta") }) {
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app), configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
         if let u = URL(string: Pref.url) { NSWorkspace.shared.open(u) }
     }
 
