@@ -2298,7 +2298,6 @@ function despertarPorChasquido() {
   orbe.pulso();
   if (!escuchando) escuchar();
 }
-api("/mac/despertar").then((d) => { if (d?.despertar) setTimeout(despertarPorChasquido, 1200); }).catch(() => {});
 
 // ---------------- Ajustes: voz de DELTA ----------------
 let borrarVozPendiente = false;
@@ -2428,7 +2427,7 @@ function arranque(conToque) {
     if (visto) return listo();
     try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
     const el = $("#arranque");
-    const conSonido = sonidosActivos();
+    let conSonido = sonidosActivos();
     const cine = crearArranque(el);
     const reloj = [];
     let terminado = false;
@@ -2467,6 +2466,8 @@ function arranque(conToque) {
     if (conSonido && !conToque) {
       el.classList.add("esperando");
       el.onclick = () => { if (el.classList.contains("esperando")) empezar(); };
+      // Si nadie toca nada, la bienvenida pasa sola en silencio (el navegador no deja sonar sin un toque).
+      reloj.push(setTimeout(() => { if (el.classList.contains("esperando")) { conSonido = false; empezar(); } }, 2500));
     } else {
       el.onclick = null;
       empezar();
@@ -2493,10 +2494,17 @@ async function iniciar(conToque = false) {
     setInterval(() => { cargarPanel().catch(() => {}); refrescar(seccionActual); }, 60_000);
     return;
   }
-  arranque(conToque).then(() => {
-    // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
-    setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);
-  });
+  // ¿Se abrió por los dos chasquidos en la Mac? Entonces nada de pantalla de arranque: a escuchar de una vez.
+  const porChasquido = await api("/mac/despertar").then((d) => Boolean(d?.despertar)).catch(() => false);
+  if (porChasquido) {
+    try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
+    setTimeout(despertarPorChasquido, 700);
+  } else {
+    arranque(conToque).then(() => {
+      // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.
+      setTimeout(() => { if (saludoPendiente()) saludoDelDia(sonidosActivos()); }, 2500);
+    });
+  }
   pintarManos();
   // La primera vez, DELTA adopta la zona horaria de este equipo.
   if (!guardado.get("delta_zona_enviada")) {

@@ -1,18 +1,26 @@
-// Detector de doble chasquido. Todo el sonido se analiza aquí, en la Mac: nada se graba ni se envía.
+// Detector de chasquidos. Todo el sonido se analiza aquí, en la Mac: nada se graba ni se envía.
 //
 // Cómo distingue un chasquido:
-// - Es un golpe muy corto (dura menos de ~40 ms) y con mucho sonido agudo (arriba de 2 kHz).
+// - Es un golpe corto (menos de ~60 ms) con bastante sonido agudo (arriba de 2 kHz).
 //   La voz, una "sss" o la música duran más; un golpe en la mesa es grave.
-// - Se piden DOS seguidos (entre 0.15 y 0.9 s de separación), con silencio antes y después.
-//   Así no se dispara al teclear, con aplausos largos ni con un ruido suelto.
+// - Por defecto se piden DOS seguidos (entre 0.12 y 1 s de separación), con un poco de silencio
+//   antes y después, para que no se dispare al teclear. Se puede pedir uno solo.
 import AVFoundation
 
 final class Chasquidos: @unchecked Sendable {
     var alDetectar: (@MainActor () -> Void)?
     var sensibilidad: Int = Pref.sensibilidad
+    var unoSolo: Bool = Pref.unChasquido
+
+    // Para la ventana de prueba (se leen desde la pantalla)
+    private(set) var activo = false
+    private(set) var nivel: Float = 0 // 0…1: qué tan cerca está el sonido de contar como chasquido
+    private(set) var golpesOidos = 0
+    private(set) var llamados = 0
+    private(set) var ultimoDescarte = ""
+    private(set) var errorMicro = ""
 
     private let motor = AVAudioEngine()
-    private var activo = false
     private var observador: NSObjectProtocol?
 
     // Filtro y bloques de ~5 ms
@@ -27,7 +35,7 @@ final class Chasquidos: @unchecked Sendable {
     private var t: Double = 0 // segundos de audio analizados
 
     // Ruido de fondo
-    private var piso: Float = 0.002
+    private var piso: Float = 0.001
 
     // Golpe en curso
     private var enGolpe = false
@@ -44,9 +52,13 @@ final class Chasquidos: @unchecked Sendable {
 
     func iniciar() throws {
         guard !activo else { return }
+        errorMicro = ""
         let entrada = motor.inputNode
         let formato = entrada.outputFormat(forBus: 0)
-        guard formato.sampleRate > 0, formato.channelCount > 0 else { throw ErrorDelta(mensaje: "Sin micrófono") }
+        guard formato.sampleRate > 0, formato.channelCount > 0 else {
+            errorMicro = "No encontré un micrófono."
+            throw ErrorDelta(mensaje: errorMicro)
+        }
         tasa = formato.sampleRate
         tamBloque = max(64, Int(tasa / 200))
         let rc: Float = 1 / (2 * Float.pi * 2000)
@@ -56,8 +68,14 @@ final class Chasquidos: @unchecked Sendable {
             self?.procesar(buffer)
         }
         motor.prepare()
-        try motor.start()
+        do { try motor.start() } catch {
+            entrada.removeTap(onBus: 0)
+            errorMicro = "El micrófono no arrancó: \(error.localizedDescription)"
+            Registro.anotar(errorMicro)
+            throw error
+        }
         activo = true
+        Registro.anotar("Micrófono encendido (\(Int(tasa)) Hz, \(formato.channelCount) canal/es)")
         observador = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: motor, queue: .main) { [weak self] _ in
             // Cambió el micrófono (audífonos, otra entrada): se vuelve a empezar.
             guard let self, self.activo else { return }
@@ -73,22 +91,26 @@ final class Chasquidos: @unchecked Sendable {
         motor.inputNode.removeTap(onBus: 0)
         motor.stop()
         activo = false
+        nivel = 0
     }
 
     /// Cuántas veces más fuerte que el ruido de fondo, y un mínimo absoluto.
     private func umbrales() -> (Float, Float) {
         switch sensibilidad {
-        case 0: return (16, 0.035)
-        case 2: return (6, 0.008)
-        default: return (10, 0.018)
+        case 0: return (10, 0.015)
+        case 2: return (4, 0.003)
+        default: return (6, 0.007)
         }
     }
 
     private func procesar(_ buffer: AVAudioPCMBuffer) {
-        guard let canal = buffer.floatChannelData?[0] else { return }
+        guard let canales = buffer.floatChannelData else { return }
         let cuantos = Int(buffer.frameLength)
+        let numCanales = Int(buffer.format.channelCount)
         for i in 0..<cuantos {
-            let x = canal[i]
+            var x: Float = 0
+            for c in 0..<numCanales { x += canales[c][i] }
+            x /= Float(numCanales)
             let y = alfa * (hpPrev + x - xPrev) // filtro de agudos
             hpPrev = y
             xPrev = x
@@ -107,36 +129,50 @@ final class Chasquidos: @unchecked Sendable {
 
     private func analizar(agudos: Float, todo: Float) {
         let (veces, minimo) = umbrales()
+        let umbral = max(piso * veces, minimo)
+        nivel = max(nivel * 0.85, min(1, agudos / umbral))
 
         if !enGolpe {
-            if agudos > max(piso * veces, minimo) && agudos > todo * 0.35 {
+            if agudos > umbral && agudos > todo * 0.25 {
                 enGolpe = true
                 inicioGolpe = t
                 pico = agudos
                 bloquesAltos = 1
             } else {
-                piso = max(0.0003, piso * 0.995 + agudos * 0.005)
+                piso = max(0.0002, piso * 0.995 + agudos * 0.005)
             }
         } else {
             if agudos > pico { pico = agudos }
             if agudos > pico * 0.35 { bloquesAltos += 1 }
-            if t - inicioGolpe >= 0.08 {
+            if t - inicioGolpe >= 0.1 {
                 enGolpe = false
-                let corto = bloquesAltos <= 8 && agudos < pico * 0.3
-                if corto { golpe(en: inicioGolpe) } else { ruido(en: inicioGolpe) }
+                let corto = bloquesAltos <= 12 && agudos < pico * 0.4
+                if corto {
+                    golpesOidos += 1
+                    golpe(en: inicioGolpe)
+                } else {
+                    ultimoDescarte = "Oí un sonido largo (voz o ruido), no un chasquido."
+                    ruido(en: inicioGolpe)
+                }
+                Registro.anotar(String(format: "%@ pico=%.4f piso=%.4f altos=%d", corto ? "golpe" : "largo", pico, piso, bloquesAltos))
             }
         }
 
-        // ¿Ya pasó el silencio después del segundo chasquido?
-        if let p = pendiente, t - p > 0.45 {
+        // ¿Ya pasó el silencio después del último chasquido?
+        if let p = pendiente, t - p > 0.35 {
             pendiente = nil
             golpes.removeAll()
-            if ultimoSonido <= p + 0.001 {
-                enfriarHasta = t + 2.5
-                if let aviso = alDetectar {
-                    Task { @MainActor in aviso() }
-                }
-            }
+            if ultimoSonido <= p + 0.001 { disparar() }
+        }
+    }
+
+    private func disparar() {
+        enfriarHasta = t + 2.5
+        llamados += 1
+        ultimoDescarte = ""
+        Registro.anotar("¡Llamado a DELTA!")
+        if let aviso = alDetectar {
+            Task { @MainActor in aviso() }
         }
     }
 
@@ -148,21 +184,57 @@ final class Chasquidos: @unchecked Sendable {
 
     private func golpe(en tg: Double) {
         if tg < enfriarHasta { ultimoSonido = tg; return }
-        golpes = golpes.filter { tg - $0 < 1.0 }
+        golpes = golpes.filter { tg - $0 < 1.2 }
         if golpes.isEmpty { silencioAntesDelPrimero = tg - ultimoSonido }
         ultimoSonido = tg
         golpes.append(tg)
-        if golpes.count == 2 {
+        if unoSolo {
+            if golpes.count == 1 && silencioAntesDelPrimero > 0.25 { pendiente = tg } else { pendiente = nil }
+            return
+        }
+        if golpes.count == 1 {
+            ultimoDescarte = "Oí un chasquido. Falta el segundo."
+        } else if golpes.count == 2 {
             let separacion = golpes[1] - golpes[0]
-            if separacion >= 0.15 && separacion <= 0.9 && silencioAntesDelPrimero > 0.35 {
+            if separacion >= 0.12 && separacion <= 1.0 && silencioAntesDelPrimero > 0.25 {
                 pendiente = tg
             } else {
+                ultimoDescarte = separacion < 0.12 ? "Los dos chasquidos fueron demasiado rápidos." : "Hubo ruido justo antes del primer chasquido."
                 golpes = [tg]
                 silencioAntesDelPrimero = separacion
             }
-        } else if golpes.count > 2 {
+        } else {
             // Muchos golpes seguidos: teclado, aplausos… no es el llamado.
+            ultimoDescarte = "Oí muchos golpes seguidos (¿teclado?)."
             pendiente = nil
+        }
+    }
+}
+
+/// Bitácora corta en ~/Library/Logs/DELTA Mac.log para revisar qué pasó (sin audio, solo números).
+enum Registro {
+    private static let cola = DispatchQueue(label: "delta.registro")
+    private static let archivo = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/DELTA Mac.log")
+    private static let formato: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    static func anotar(_ texto: String) {
+        let linea = "\(formato.string(from: Date())) \(texto)\n"
+        cola.async {
+            let fm = FileManager.default
+            if let tam = (try? fm.attributesOfItem(atPath: archivo.path)[.size] as? Int), tam > 500_000 {
+                try? fm.removeItem(at: archivo)
+            }
+            if let h = try? FileHandle(forWritingTo: archivo) {
+                h.seekToEndOfFile()
+                h.write(Data(linea.utf8))
+                try? h.close()
+            } else {
+                fm.createFile(atPath: archivo.path, contents: Data(linea.utf8))
+            }
         }
     }
 }

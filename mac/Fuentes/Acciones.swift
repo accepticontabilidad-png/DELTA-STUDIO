@@ -200,6 +200,28 @@ enum Acciones {
         if let u = URL(string: Pref.url) { NSWorkspace.shared.open(u) }
     }
 
+    /// Los navegadores no dejan que una página hable ni suene hasta que la persona toca una tecla.
+    /// Cuando DELTA ya está al frente, se "toca" la tecla Mayúsculas (no escribe nada) para que pueda
+    /// contestar en voz alta. Solo si hay permiso de Accesibilidad y DELTA es la app de enfrente.
+    static func darToqueADelta() {
+        guard Permisos.accesibilidad(preguntar: false) else { return }
+        Task { @MainActor in
+            let yo = ProcessInfo.processInfo.processIdentifier
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard let f = NSWorkspace.shared.frontmostApplication, f.processIdentifier != yo else { continue }
+                guard (f.localizedName ?? "").lowercased().hasPrefix("delta") || f.bundleIdentifier?.hasPrefix("com.google.Chrome") == true else { continue }
+                try? await Task.sleep(nanoseconds: 900_000_000) // que la página termine de cargar
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == f.processIdentifier else { return }
+                let fuente = CGEventSource(stateID: .combinedSessionState)
+                for bajando in [true, false] {
+                    CGEvent(keyboardEventSource: fuente, virtualKey: CGKeyCode(kVK_Shift), keyDown: bajando)?.post(tap: .cghidEventTap)
+                }
+                return
+            }
+        }
+    }
+
     // MARK: Apps
 
     static let alias: [String: String] = [
