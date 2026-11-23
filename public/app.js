@@ -2467,7 +2467,8 @@ function arranque(conToque) {
       el.classList.add("esperando");
       el.onclick = () => { if (el.classList.contains("esperando")) empezar(); };
       // Si nadie toca nada, la bienvenida pasa sola en silencio (el navegador no deja sonar sin un toque).
-      reloj.push(setTimeout(() => { if (el.classList.contains("esperando")) { conSonido = false; empezar(); } }, 2500));
+      // (Con DELTA Mac, la Mac da ese toque sola y la bienvenida suena.)
+      reloj.push(setTimeout(() => { if (el.classList.contains("esperando")) { conSonido = false; empezar(); } }, 4000));
     } else {
       el.onclick = null;
       empezar();
@@ -2497,8 +2498,9 @@ async function iniciar(conToque = false) {
   // ¿Se abrió por los dos chasquidos en la Mac? Entonces nada de pantalla de arranque: a escuchar de una vez.
   const porChasquido = await api("/mac/despertar").then((d) => Boolean(d?.despertar)).catch(() => false);
   if (porChasquido) {
-    try { sessionStorage.setItem("delta_arranque", "1"); } catch {}
-    setTimeout(despertarPorChasquido, 700);
+    // Con el chasquido: la bienvenida con su sonido (la app de la Mac da el "toque" que el navegador pide)
+    // y en cuanto termina, DELTA ya está escuchando. Sin saludo largo del día.
+    arranque(conToque).then(() => setTimeout(despertarPorChasquido, 300));
   } else {
     arranque(conToque).then(() => {
       // Si el arranque no habló (ya se había visto o sin sonido), el saludo se muestra escrito y se intenta decir.

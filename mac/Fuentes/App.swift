@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.2"
+let VERSION = "1.3"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
@@ -66,6 +66,13 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
         conexion.empezar()
 
         Registro.anotar("DELTA Mac \(VERSION) abierta")
+        // Cada vez que DELTA pasa al frente, el "toque" para que pueda sonar la bienvenida y su voz.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { n in
+            let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                if Acciones.esDelta(app) { Acciones.darToqueADelta(esperarQueAparezca: false) }
+            }
+        }
         // Si la abrió usted (no al prender la Mac), se muestra la ventanita de estado.
         if ProcessInfo.processInfo.systemUptime > 180 || !Llave.hay() {
             Task { @MainActor [weak self] in
