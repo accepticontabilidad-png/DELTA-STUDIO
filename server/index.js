@@ -352,6 +352,10 @@ api.delete("/crm/borradores/:id", envolver((req) => crm.descartarBorrador(Number
 // Enviar SIEMPRE lo pide el dueño con un toque en la pantalla; DELTA no tiene herramienta para esto.
 api.post("/crm/prospectos/:id/enviar", envolver((req) => crm.enviarWhatsAppProspecto(Number(req.params.id), req.body || {})));
 api.post("/crm/prospectos/:id/enviado", envolver((req) => crm.marcarEnviado(Number(req.params.id), req.body || {})));
+api.post("/crm/meta", envolver(async (req) => {
+  try { return await crm.importarDeMeta(String(req.body?.cliente || "")); }
+  catch (e) { if (e.permiso === false) return { sin_permiso: true }; throw e; }
+}));
 api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
 api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
 api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
@@ -506,4 +510,5 @@ app.listen(PUERTO, () => {
   reportes.iniciarReportes();
   tendencias.iniciarTendencias();
   seo.iniciarSeo();
+  crm.iniciarCrm();
 });

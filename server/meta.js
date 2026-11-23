@@ -19,6 +19,7 @@ const GRAPH = () => `https://graph.facebook.com/${VERSION()}`;
 const PERMISOS = [
   "ads_read", "business_management", "pages_show_list", "pages_read_engagement",
   "read_insights", "instagram_basic", "instagram_manage_insights",
+  "leads_retrieval", "pages_manage_ads", // formularios instantáneos (clientes potenciales) para el CRM
 ].join(",");
 const DIA = 864e5;
 const CADA = 6 * 3600e3; // se actualiza sola cada 6 horas
@@ -389,6 +390,59 @@ export async function sincronizarCliente(clienteId) {
       ON CONFLICT(cliente_id, fecha) DO UPDATE SET datos = excluded.datos, actualizado = strftime('%Y-%m-%dT%H:%M:%fZ','now')`)
     .run(clienteId, fecha, JSON.stringify(foto));
   return foto;
+}
+
+// ---------- Formularios instantáneos (clientes potenciales) para el CRM ----------
+let leadsDePrueba = null;
+export const _leadsDePrueba = (fn) => { leadsDePrueba = fn; };
+const sinPermiso = (e) => [10, 200, 3, 294].includes(e.codigo) || /permission|permiso|leads_retrieval|pages_manage_ads/i.test(e.message);
+
+/**
+ * Las personas que llenaron un formulario de anuncio en las páginas de este cliente desde `desde` (ISO).
+ * Devuelve { formularios, leads: [{ id, fecha, nombre, telefono, correo, campana, anuncio, respuestas }] }.
+ * Si Meta no dio el permiso, lanza un error con .permiso = false.
+ */
+export async function formulariosDeCliente(clienteId, { desde } = {}) {
+  const paginas = db.prepare("SELECT * FROM meta_activos WHERE cliente_id = ? AND tipo = 'pagina'").all(clienteId);
+  if (!paginas.length) return { paginas: 0, formularios: 0, leads: [] };
+  if (leadsDePrueba) return leadsDePrueba(clienteId, { desde, paginas });
+  if (!metaConectado()) throw new Error("Meta no está conectado");
+  const corte = desde ? Math.floor(Date.parse(desde) / 1000) : Math.floor((Date.now() - 90 * DIA) / 1000);
+  const leads = [];
+  let formularios = 0;
+  for (const pg of paginas) {
+    const token = pg.token || tokenPrincipal();
+    const id = pg.id.replace(/^page:/, "");
+    let forms;
+    try { forms = await todo(`/${id}/leadgen_forms`, { fields: "id,name,status" }, token, 200); }
+    catch (e) { if (sinPermiso(e)) { const x = new Error("Falta el permiso de Meta para ver los formularios de anuncios"); x.permiso = false; throw x; } throw e; }
+    for (const f of forms) {
+      formularios++;
+      let filas;
+      try {
+        filas = await todo(`/${f.id}/leads`, {
+          fields: "id,created_time,field_data,ad_name,campaign_name,form_id",
+          filtering: [{ field: "time_created", operator: "GREATER_THAN", value: corte }],
+        }, token, 1000);
+      } catch (e) { if (sinPermiso(e)) { const x = new Error("Falta el permiso de Meta para leer los formularios de anuncios"); x.permiso = false; throw x; } throw e; }
+      for (const l of filas) leads.push(leerLead(l, f.name));
+    }
+  }
+  return { paginas: paginas.length, formularios, leads };
+}
+
+/** Convierte las respuestas del formulario en nombre, teléfono, correo y lo demás. */
+export function leerLead(l, formulario = null) {
+  const campos = Object.fromEntries((l.field_data || []).map((x) => [String(x.name || "").toLowerCase(), (x.values || []).join(", ")]));
+  const tomar = (...k) => { for (const x of k) if (campos[x]) { const v = campos[x]; delete campos[x]; return v; } return null; };
+  const nombre = tomar("full_name", "nombre_completo", "nombre", "name") || [tomar("first_name"), tomar("last_name")].filter(Boolean).join(" ") || null;
+  const telefono = tomar("phone_number", "telefono", "teléfono", "whatsapp", "celular", "phone");
+  const correo = tomar("email", "correo", "correo_electronico");
+  return {
+    id: String(l.id), fecha: l.created_time ? new Date(l.created_time).toISOString() : new Date().toISOString(),
+    nombre, telefono, correo, campana: l.campaign_name || null, anuncio: l.ad_name || null, formulario,
+    respuestas: Object.entries(campos).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, " ").replace(/\?$/, "")}: ${v}`),
+  };
 }
 
 let enCurso = null;

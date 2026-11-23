@@ -1846,3 +1846,5 @@ html[data-mood="dia"] .crm-redactar button, html[data-mood="dia"] .crm-link-boto
 html[data-mood="dia"] .crm-redactar button.primario { background: linear-gradient(135deg, #7b5cff, #6a4cf0); color: #fff; border-color: transparent; }
 html[data-mood="dia"] .crm-wa-on { color: #0f9a72; }
 html[data-mood="dia"] .crm-bor-item:hover { background: rgba(106,76,240,.08); }
+.crm-aviso-meta { border-left: 3px solid var(--amarillo); display: grid; gap: 4px; }
+.crm-aviso-meta p { margin: 0; }

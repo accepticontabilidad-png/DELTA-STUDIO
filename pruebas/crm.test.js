@@ -161,3 +161,38 @@ test("webhook: lo del número del cliente va al CRM y no a DELTA", async () => {
   assert.equal(j.cliente, "Kardia");
   assert.equal(crm.fichaProspecto(j.id).historial.at(-1).texto, "Quiero informes");
 });
+
+test("formularios de anuncios de Meta: entran una sola vez, con su fecha y respuestas", async () => {
+  const meta = await import("../server/meta.js");
+  const { setAjuste } = await import("../server/db.js");
+  const c = agencia.crearCliente({ nombre: "Dr. Escutia" });
+  db.prepare("INSERT INTO meta_activos (id, tipo, nombre, extra, cliente_id) VALUES ('page:99','pagina','Dr. Escutia','{}',?)").run(c.id);
+  const lead = (id, extra = []) => ({ id, created_time: "2026-11-05T15:00:00+0000", campaign_name: "Consulta noviembre", ad_name: "Video 1",
+    field_data: [{ name: "full_name", values: ["Rosa Méndez"] }, { name: "phone_number", values: ["+52 55 1111 2222"] }, { name: "¿qué_te_interesa?", values: ["Valoración"] }, ...extra] });
+  let llamadas = 0;
+  meta._leadsDePrueba(async () => { llamadas++; return { paginas: 1, formularios: 1, leads: [meta.leerLead(lead("L1"), "Form consulta"), meta.leerLead({ id: "L2", created_time: "2026-11-06T10:00:00+0000", field_data: [{ name: "first_name", values: ["Juan"] }, { name: "last_name", values: ["Paz"] }, { name: "email", values: ["juan@x.mx"] }] })] }; });
+  const r1 = await crm.importarDeMeta(c.id);
+  assert.equal(r1.nuevos, 2);
+  const r2 = await crm.importarDeMeta(c.id);
+  assert.equal(r2.nuevos, 0);
+  assert.equal(r2.repetidos, 2);
+  const rosa = crm.buscarProspecto({ nombre: "Rosa" });
+  assert.equal(rosa.fuente, "anuncios");
+  assert.equal(rosa.campana, "Consulta noviembre");
+  assert.equal(rosa.telefono, "525511112222");
+  assert.equal(rosa.creado, "2026-11-05T15:00:00.000Z");
+  assert.match(rosa.notas, /qué te interesa: Valoración/);
+  assert.match(crm.fichaProspecto(rosa.id).historial[0].texto, /formulario de anuncio/);
+  assert.equal(crm.buscarProspecto({ nombre: "Juan Paz" }).correo, "juan@x.mx");
+  // Sin permiso: lo dice, no truena
+  meta._leadsDePrueba(async () => { const e = new Error("x"); e.permiso = false; throw e; });
+  await assert.rejects(crm.importarDeMeta(c.id), (e) => e.permiso === false);
+  // Lo que dice Meta del mes aparece en el embudo
+  const m = "2026-11";
+  db.prepare("INSERT INTO meta_fotos (cliente_id, fecha, datos) VALUES (?,?,?)").run(c.id, `${m}-20`, JSON.stringify({ anuncios: { conversaciones: 40, prospectos: 2, gasto_mes: 1877 } }));
+  const e = crm.embudo({ cliente: c.id, mes: m });
+  assert.equal(e.meta.conversaciones, 40);
+  assert.equal(e.meta.costo_conversacion, 46.93);
+  meta._leadsDePrueba(null);
+  setAjuste("x", "y");
+});
