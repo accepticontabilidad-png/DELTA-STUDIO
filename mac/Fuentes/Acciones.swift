@@ -214,9 +214,8 @@ enum Acciones {
             for _ in 0..<(esperarQueAparezca ? 30 : 1) {
                 if esDelta(NSWorkspace.shared.frontmostApplication) {
                     let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-                    if agrandar, let pid {
-                        try? await Task.sleep(nanoseconds: 250_000_000)
-                        agrandarVentana(pid: pid)
+                    if let pid, agrandar || !yaAgrandadas.contains(pid) {
+                        await agrandarVentana(pid: pid)
                     }
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // que la página termine de cargar
                     guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
@@ -231,28 +230,66 @@ enum Acciones {
         }
     }
 
+    /// Ventanas de DELTA ya agrandadas (una vez por cada vez que se abre), para no pelear si usted la achica.
+    static var yaAgrandadas = Set<pid_t>()
+
     /// Pone la ventana de DELTA a pantalla completa (todo el espacio, dejando la barra de arriba y el Dock).
-    static func agrandarVentana(pid: pid_t) {
+    /// Reintenta un par de segundos porque la ventana tarda en aparecer al abrir la app.
+    static func agrandarVentana(pid: pid_t) async {
+        for intento in 0..<8 {
+            if let v = ventanaDeDelta(pid: pid), ajustar(v) {
+                yaAgrandadas.insert(pid)
+                Registro.anotar("Ventana de DELTA agrandada (intento \(intento + 1))")
+                return
+            }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
+        Registro.anotar("No pude agrandar la ventana de DELTA (¿falta el permiso de Accesibilidad?)")
+    }
+
+    private static func ventanas(de pid: pid_t) -> [AXUIElement] {
         let app = AXUIElementCreateApplication(pid)
         var valor: CFTypeRef?
-        var ventana: AXUIElement?
-        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &valor) == .success, let v = valor {
-            ventana = (v as! AXUIElement)
-        } else if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &valor) == .success, let lista = valor as? [AXUIElement] {
-            ventana = lista.first
+        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &valor) == .success, let v = valor,
+           CFGetTypeID(v) == AXUIElementGetTypeID() {
+            return [v as! AXUIElement]
         }
-        guard let ventana else { Registro.anotar("No encontré la ventana de DELTA para agrandarla"); return }
+        if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &valor) == .success, let lista = valor as? [AXUIElement] {
+            return lista
+        }
+        return []
+    }
+
+    private static func titulo(_ v: AXUIElement) -> String {
+        var valor: CFTypeRef?
+        AXUIElementCopyAttributeValue(v, kAXTitleAttribute as CFString, &valor)
+        return (valor as? String) ?? ""
+    }
+
+    /// La ventana de DELTA: la de su propia app o, si Chrome la maneja, la ventana de Chrome que se llama DELTA.
+    private static func ventanaDeDelta(pid: pid_t) -> AXUIElement? {
+        if let v = ventanas(de: pid).first { return v }
+        for chrome in NSWorkspace.shared.runningApplications where chrome.bundleIdentifier?.hasPrefix("com.google.Chrome") == true {
+            if let v = ventanas(de: chrome.processIdentifier).first(where: { titulo($0).lowercased().contains("delta") }) { return v }
+        }
+        return nil
+    }
+
+    private static func ajustar(_ ventana: AXUIElement) -> Bool {
         let raton = NSEvent.mouseLocation
         guard let pantalla = NSScreen.screens.first(where: { NSMouseInRect(raton, $0.frame, false) }) ?? NSScreen.main,
-              let principal = NSScreen.screens.first else { return }
+              let principal = NSScreen.screens.first else { return false }
         let marco = pantalla.visibleFrame
         // Las coordenadas de Accesibilidad empiezan arriba a la izquierda de la pantalla principal.
         var punto = CGPoint(x: marco.origin.x, y: principal.frame.height - marco.origin.y - marco.height)
         var tam = CGSize(width: marco.width, height: marco.height)
-        if let p = AXValueCreate(.cgPoint, &punto) { AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p) }
-        if let t = AXValueCreate(.cgSize, &tam) { AXUIElementSetAttributeValue(ventana, kAXSizeAttribute as CFString, t) }
+        guard let p = AXValueCreate(.cgPoint, &punto), let t = AXValueCreate(.cgSize, &tam) else { return false }
+        let r1 = AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p)
+        let r2 = AXUIElementSetAttributeValue(ventana, kAXSizeAttribute as CFString, t)
         // Algunas ventanas solo aceptan el tamaño después de moverlas: se repite una vez.
-        if let p = AXValueCreate(.cgPoint, &punto) { AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p) }
+        AXUIElementSetAttributeValue(ventana, kAXPositionAttribute as CFString, p)
+        AXUIElementSetAttributeValue(ventana, kAXSizeAttribute as CFString, t)
+        return r1 == .success || r2 == .success
     }
 
     // MARK: Apps

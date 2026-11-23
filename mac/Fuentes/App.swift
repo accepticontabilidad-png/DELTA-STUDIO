@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.4"
+let VERSION = "1.5"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
@@ -72,6 +72,11 @@ final class Delegado: NSObject, NSApplicationDelegate, NSMenuDelegate {
             MainActor.assumeIsolated {
                 if Acciones.esDelta(app) { Acciones.darToqueADelta(esperarQueAparezca: false) }
             }
+        }
+        // Al cerrar DELTA se olvida, para que la próxima vez que se abra salga en grande otra vez.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { n in
+            let pid = (n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated { if let pid { Acciones.yaAgrandadas.remove(pid) } }
         }
         // Si la abrió usted (no al prender la Mac), se muestra la ventanita de estado.
         if ProcessInfo.processInfo.systemUptime > 180 || !Llave.hay() {
