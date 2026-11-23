@@ -5,7 +5,7 @@ import AppKit
 import AVFoundation
 import ServiceManagement
 
-let VERSION = "1.6"
+let VERSION = "1.7"
 let URL_POR_DEFECTO = "https://delta-studio-production.up.railway.app"
 
 // MARK: - Preferencias
