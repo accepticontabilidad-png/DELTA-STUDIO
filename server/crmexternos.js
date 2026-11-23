@@ -201,7 +201,7 @@ function guardar(f, x) {
   try { tel = normalizarTelefono(x.telefono); } catch { /* raro: se omite */ }
   const ya = db.prepare("SELECT id, etapa, externo_etapa, campana FROM prospectos WHERE externo_id = ?").get(x.id);
   if (ya) {
-    if (x.campana && !ya.campana) db.prepare("UPDATE prospectos SET campana = ? WHERE id = ?").run(x.campana.slice(0, 160), ya.id);
+    if (x.campana && x.campana !== ya.campana && (!ya.campana || /^Anuncio( \(clic a WhatsApp\)| \d+)?$/.test(ya.campana))) db.prepare("UPDATE prospectos SET campana = ? WHERE id = ?").run(x.campana.slice(0, 160), ya.id);
     // Solo se mueve si cambió allá (así no se pisa lo que tú cambies en DELTA)
     if (!x.solo_nuevos && x.etapa !== ya.externo_etapa) {
       const cambios = { etapa: x.etapa };
@@ -244,7 +244,7 @@ export async function sincronizarFuente(id) {
   const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(id));
   if (!f) throw new Error("Esa conexión ya no existe");
   // Pancake: si hay conversaciones de antes sin su número de mensajes (versión vieja), se repasa el mes completo
-  const repasar = f.tipo === "pancake" && db.prepare("SELECT 1 FROM prospectos WHERE externo_id LIKE ? AND externo_mensajes IS NULL LIMIT 1").get(`pancake:${f.cuenta}:%`);
+  const repasar = f.tipo === "pancake" && db.prepare("SELECT 1 FROM prospectos WHERE externo_id LIKE ? AND (externo_mensajes IS NULL OR campana = 'Anuncio (clic a WhatsApp)') LIMIT 1").get(`pancake:${f.cuenta}:%`);
   const desde = f.ultimo && !repasar ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
   const inicio = new Date().toISOString();
   try {
@@ -255,7 +255,10 @@ export async function sincronizarFuente(id) {
       if (q === "nuevo") r.nuevos++;
       if (q === "movido") r.movidos++;
     }
-    if (repasar) db.prepare("UPDATE prospectos SET externo_mensajes = 0 WHERE externo_id LIKE ? AND externo_mensajes IS NULL").run(`pancake:${f.cuenta}:%`);
+    if (repasar) {
+      db.prepare("UPDATE prospectos SET externo_mensajes = 0 WHERE externo_id LIKE ? AND externo_mensajes IS NULL").run(`pancake:${f.cuenta}:%`);
+      db.prepare("UPDATE prospectos SET campana = 'Anuncio' WHERE externo_id LIKE ? AND campana = 'Anuncio (clic a WhatsApp)'").run(`pancake:${f.cuenta}:%`);
+    }
     const previo = f.resultado ? JSON.parse(f.resultado) : {};
     if (previo.chats) r.chats = previo.chats;
     db.prepare("UPDATE crm_fuentes SET ultimo = ?, resultado = ?, error = NULL WHERE id = ?").run(inicio, JSON.stringify(r), f.id);
