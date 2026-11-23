@@ -16,6 +16,7 @@ import * as contenido from "./contenido.js";
 import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
+import * as crm from "./crm.js";
 import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 
@@ -78,7 +79,7 @@ La agencia (eres su directora):
 - Para ver lo que entregaron usa ver_trabajos y leer_trabajo, y resume lo importante.
 - Diseño (diseno) entrega piezas TERMINADAS en imagen: carruseles, posts, historias, portadas y, con Higgsfield conectado, imágenes y videos con IA. Cuando pidan "hazme un carrusel/post/historia/video", encárgaselo a Diseño (con el tema, el cliente y el estilo). Al terminar, las piezas aparecen en el Estudio de diseño para descargarlas.
 - Aprobaciones: los departamentos dejan en la bandeja lo que tiene que salir de la agencia o cuesta dinero. Solo usa resolver_aprobacion cuando el usuario diga claramente que aprueba o rechaza ese punto. Aprobar todavía no publica ni envía nada solo (Meta y WhatsApp se conectan al final): queda aprobado y listo para usarse.
-- Pantallas de la agencia: Panel general (Pulso, resumen y alertas del día), Finanzas (cobros, gastos, utilidad), Paid media (anuncios, costo por contacto y retorno), Contenido (piezas por etapa), Tendencias (lo viral del nicho e ideas), SEO y web (sitio y Google), Analítica (reporte mensual de cada cliente), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
+- Pantallas de la agencia: Panel general (Pulso, resumen y alertas del día), Finanzas (cobros, gastos, utilidad), Paid media (anuncios, costo por contacto y retorno), Contenido (piezas por etapa), Tendencias (lo viral del nicho e ideas), SEO y web (sitio y Google), CRM (prospectos y embudo), Analítica (reporte mensual de cada cliente), Cuentas (ficha y semáforo de cada cliente), Departamentos (tarjetas con su trabajo) y Aprobaciones.
 - Delta Score: calificación de 0 a 100 por cliente (80+ Excelente, 65-79 Saludable, 50-64 Atención, menos de 50 En riesgo). Junta Entregas (25), Pagos (20), Anuncios con tope y resultados (20), Redes con seguidores y publicaciones de Meta (20) y Seguimiento (15: aprobaciones detenidas y movimiento); lo que no tiene datos no cuenta. Un cliente en rojo no pasa de 49 y en amarillo no pasa de 64 (el color del semáforo y el de la calificación siempre coinciden). Viene en ver_cliente (score.partes con la nota de cada parte) y en tablero_agencia (score_clientes, del más bajo al más alto). Cuando pregunten "cómo va" un cliente, da su calificación y di qué parte la baja y qué haría subirla.
 - Salud de cada cliente (semáforo): rojo si tiene entregas atrasadas, los anuncios se pasaron del tope o un pago lleva más de 30 días de retraso; amarillo si una entrega vence en menos de 2 días, un pago lleva más de 7 días de retraso, su Delta Score baja de 65 (rojo si baja de 50), algo espera aprobación más de 2 días, los anuncios van arriba del 85 % del tope o lleva un mes sin movimiento; si no, verde. El dueño puede marcarla a mano (salud_manual) con una nota. Cuando pregunte cómo van sus clientes, usa tablero_agencia o ver_cliente y explica los motivos en palabras sencillas.
 - Meta (Facebook, Instagram y anuncios de los clientes): se conecta en Ajustes ⚙ → "Conectar Meta". Ya conectado, DELTA lee sola cada 6 horas los seguidores, alcance y publicaciones de las páginas e Instagram de cada cliente, y el gasto y resultados de sus cuentas de anuncios; el gasto de Meta se anota solo (no uses registrar_gasto_anuncios para Meta salvo que Meta no esté conectado). Para hablar de las redes o los anuncios de un cliente usa redes_cliente; si los números son viejos o pide lo más reciente, usa actualizar_meta. Si una página o cuenta no está asignada al cliente correcto, usa asignar_meta. Solo LEES: no publicas ni cambias campañas.
@@ -87,6 +88,7 @@ La agencia (eres su directora):
 - Contenido por etapas (pantalla Contenido): cada pieza de cada cliente (reel, carrusel, post, historia…) pasa por planeado → por grabar → en edición → esperando al cliente → aprobado → publicado. "Atrasada" = no publicada y ya pasó su fecha. Usa contenido_agencia para "cómo va el contenido", crear_contenido para agregar piezas y mover_contenido cuando digan "ya grabamos el reel de Kardia", "se lo mandé al cliente", "ya lo aprobó", "ya salió" o cambien la fecha. Una pieza atrasada pone al cliente en amarillo (rojo con más de 3 días) y baja su Delta Score; esperar al cliente 2 días o más también resta.
 - Tendencias (pantalla Tendencias): por cliente, lo que está funcionando en su nicho (publicaciones de sus cuentas de Instagram de referencia muy por encima de su promedio), las búsquedas de Google de hoy que tocan su tema y noticias de la semana, más ideas listas (gancho, formato, pasos). Cada lunes temprano se buscan solas. Para "qué está de moda", "dame ideas para Kardia" usa tendencias_cliente; si no hay o son viejas, buscar_tendencias. Para configurar su nicho o sus cuentas de referencia, configurar_tendencias. Para "pásala a contenido" usa usar_idea. Instagram solo deja ver cuentas de empresa o creador.
 - SEO y web (pantalla SEO y web): DELTA revisa el sitio de cada cliente cada lunes (títulos, descripciones, encabezados, imágenes sin texto, si Google lo puede ver, sitemap y velocidad en celular) y avisa si un sitio no abre. Si Google está conectado para SEO, también ve visitas (Analytics) y clics y posición en Google (Search Console). Para "cómo va la web de Kardia" usa seo_cliente y empieza por lo rojo y las oportunidades "casi en primera página"; para revisar ya, revisar_sitio; para anotar su sitio, configurar_seo. Explica sin tecnicismos ("posición promedio en Google", no "avg position"). Solo lees: no cambias el sitio.
+- CRM y embudo (pantalla CRM): los prospectos de cada cliente (pacientes potenciales) y su embudo: nuevo → contactado → cita agendada → asistió → venta (o perdido). Llegan a mano, por el formulario público de cada cliente o por el WhatsApp del cliente si está conectado. Para "cómo va el embudo", "cuántas citas", "quién no ha recibido respuesta" usa crm_agencia y empieza por los que llevan más de un día sin respuesta. Cuando digan "entró un prospecto", usa crear_prospecto; "ya agendó", "ya vino", "compró 12 mil", "no le interesó", usa actualizar_prospecto. Para escribirle a un prospecto usa borrador_whatsapp: NUNCA envías mensajes; queda como borrador y el dueño lo manda desde CRM. Di "prospectos" o "pacientes potenciales", no "leads".
 - Paid media (pantalla Paid media): inversión en anuncios de cada cliente, contactos (mensajes + prospectos), costo por contacto, ventas y retorno (ROAS: pesos vendidos por cada peso invertido; 3 o más es bueno, menos de 1 pierde dinero). Los números de campañas vienen de Meta; lo que el cliente reporta (prospectos, ventas, cuánto vendió) se anota con registrar_resultados_anuncios y manda sobre Meta. Para "cómo van los anuncios", "qué campaña no sirve" o "cuánto le cuesta cada cliente" usa paid_media y empieza por los avisos rojos (campañas gastando sin resultados). Explica en palabras sencillas: "costo por contacto", no "CPL". Solo lees: no puedes apagar ni cambiar campañas; recomienda qué hacer y el dueño lo hace en Meta.
 - Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
 - Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
@@ -902,11 +904,82 @@ herramientasBase.push(
 );
 herramientasBase.push(
   betaTool({
+    name: "crm_agencia",
+    description: "CRM de prospectos de los clientes y su embudo del mes (prospectos → contactados → cita → asistieron → compraron), con porcentajes, valor vendido, tiempo de respuesta, costo por prospecto/cita/venta (con la inversión en anuncios) y de dónde llegan. Incluye quién lleva más de un día sin respuesta, citas de hoy y citas pasadas sin confirmar si asistió. Con nombre o teléfono: la ficha de ese prospecto con su historial y mensajes.",
+    inputSchema: {
+      type: "object",
+      properties: { cliente: { type: "string" }, mes: { type: "string", description: "AAAA-MM" }, prospecto: { type: "string", description: "Nombre o teléfono de un prospecto" } },
+      additionalProperties: false,
+    },
+    run: ({ cliente, mes, prospecto }) => {
+      if (prospecto) {
+        const p = crm.buscarProspecto(/\d{7,}/.test(prospecto.replace(/\D/g, "")) ? { telefono: prospecto, cliente } : { nombre: prospecto, cliente });
+        return json(crm.fichaProspecto(p.id));
+      }
+      const t = crm.tableroCrm({ cliente, mes });
+      const corto = (p) => ({ nombre: p.nombre, cliente: p.cliente, etapa: p.etapa_nombre, fuente: p.fuente_nombre, cita: p.cita, horas_esperando: p.horas_esperando });
+      return json({ embudo: t.embudo, embudo_mes_anterior: { mes: t.embudo_anterior.mes, prospectos: t.embudo_anterior.prospectos, ventas: t.embudo_anterior.ventas, cierre_pct: t.embudo_anterior.cierre_pct },
+        sin_responder: t.sin_responder.map(corto), citas_hoy: t.citas_hoy.map(corto), citas_pasadas: t.citas_pasadas.map(corto),
+        abiertos: t.etapas.filter((e) => !["venta", "perdido"].includes(e.clave)).map((e) => ({ etapa: e.nombre, n: e.prospectos.length })), borradores_pendientes: t.borradores.length });
+    },
+  }),
+  betaTool({
+    name: "crear_prospecto",
+    description: "Agrega un prospecto (persona interesada) al CRM de un cliente. Si ya existe con ese teléfono, no lo duplica.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string" }, nombre: { type: "string" }, telefono: { type: "string" }, correo: { type: "string" },
+        fuente: { type: "string", description: "anuncios, whatsapp, instagram, facebook, google, web, referido, llamada u otra" },
+        interes: { type: "string", description: "Qué servicio le interesa" }, notas: { type: "string" },
+        etapa: { type: "string" }, cita: { type: "string", description: "AAAA-MM-DDTHH:MM hora local" }, valor: { type: "number" },
+      },
+      required: ["cliente"],
+      additionalProperties: false,
+    },
+    run: (x) => json(crm.crearProspecto(x)),
+  }),
+  betaTool({
+    name: "actualizar_prospecto",
+    description: "Cambia la etapa de un prospecto (contactado, cita, asistió, venta, perdido), su cita, cuánto compró (valor), el motivo si se perdió, o agrega una nota. Se busca por nombre o teléfono. Ej.: 'Laura de Kardia ya agendó para el jueves a las 5', 'Pedro compró 12 mil'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prospecto: { type: "string", description: "Nombre o teléfono" }, cliente: { type: "string" },
+        etapa: { type: "string" }, cita: { type: "string", description: "AAAA-MM-DDTHH:MM hora local" }, valor: { type: "number" },
+        motivo_perdido: { type: "string" }, interes: { type: "string" }, nota: { type: "string" },
+      },
+      required: ["prospecto"],
+      additionalProperties: false,
+    },
+    run: ({ prospecto, cliente, nota, ...cambios }) => {
+      const p = crm.buscarProspecto(/\d{7,}/.test(prospecto.replace(/\D/g, "")) ? { telefono: prospecto, cliente } : { nombre: prospecto, cliente });
+      if (nota) crm.notaProspecto(p.id, nota);
+      return json(Object.keys(cambios).length ? crm.actualizarProspecto(p.id, cambios) : crm.obtenerProspecto(p.id));
+    },
+  }),
+  betaTool({
+    name: "borrador_whatsapp",
+    description: "Prepara un mensaje de WhatsApp para un prospecto y lo deja como BORRADOR en su ficha del CRM. NO lo envía: el dueño lo revisa y lo manda él desde la pantalla CRM (o con el link que abre WhatsApp). Si no das texto, DELTA lo redacta según la etapa y la conversación.",
+    inputSchema: {
+      type: "object",
+      properties: { prospecto: { type: "string" }, cliente: { type: "string" }, texto: { type: "string" }, indicacion: { type: "string", description: "Qué debe decir, si no das el texto" } },
+      required: ["prospecto"],
+      additionalProperties: false,
+    },
+    run: async ({ prospecto, cliente, texto, indicacion }) => {
+      const p = crm.buscarProspecto(/\d{7,}/.test(prospecto.replace(/\D/g, "")) ? { telefono: prospecto, cliente } : { nombre: prospecto, cliente });
+      return json({ ...(texto ? crm.guardarBorrador(p.id, texto) : await crm.sugerirMensaje(p.id, { indicacion })), nota: "Quedó como borrador. No se ha enviado: el dueño lo manda desde CRM." });
+    },
+  }),
+);
+herramientasBase.push(
+  betaTool({
     name: "abrir_seccion",
     description: "Abre una sección de la app en la pantalla del usuario (solo funciona en la app, no por WhatsApp). Úsala cuando pida ver o abrir su agenda, tareas, correo, mercados o noticias.",
     inputSchema: {
       type: "object",
-      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "contenido", "tendencias", "seo", "analitica", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
+      properties: { seccion: { type: "string", enum: ["inicio", "agenda", "tareas", "correo", "mercados", "agencia", "finanzas", "paidmedia", "contenido", "tendencias", "seo", "crm", "analitica", "cuentas", "departamentos", "estudio", "aprobaciones"] } },
       required: ["seccion"],
       additionalProperties: false,
     },
@@ -926,6 +999,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
   "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia", "registrar_resultados_anuncios", "crear_contenido", "mover_contenido", "compartir_reporte",
   "configurar_tendencias", "buscar_tendencias", "usar_idea", "configurar_seo", "revisar_sitio",
+  "crear_prospecto", "actualizar_prospecto", "borrador_whatsapp",
 ]);
 
 /**

@@ -26,6 +26,7 @@ import * as contenido from "./contenido.js";
 import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
+import * as crm from "./crm.js";
 import { DEPARTAMENTOS, encargar, iniciarRutinas } from "./departamentos.js";
 import * as diseno from "./diseno.js";
 import * as habilidades from "./habilidades.js";
@@ -76,7 +77,7 @@ app.post("/api/salir", (req, res) => {
 
 // ---------- WhatsApp ----------
 app.get("/webhook/whatsapp", verificarWebhook);
-app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta));
+app.post("/webhook/whatsapp", crearReceptorWebhook(hablarConDelta, crm.recibirWhatsApp));
 
 // ---------- Correo: Google o Microsoft regresan aquí después de que el usuario da permiso ----------
 // (Llegan desde fuera, así que no traen la cookie; se valida con el "estado" de un solo uso.)
@@ -115,6 +116,23 @@ app.get("/oauth/meta", async (req, res) => {
   } catch (e) {
     console.error("[meta]", e.message);
     res.redirect("/?meta=error&motivo=" + encodeURIComponent(e.message.slice(0, 200)) + "#/cuentas");
+  }
+});
+
+// ---------- Formulario público de prospectos de cada cliente (/p/<token>) ----------
+app.get("/p/:token", (req, res) => {
+  const x = crm.clientePorFormulario(req.params.token);
+  if (!x) return res.status(404).type("text").send("Este formulario no existe o ya no está disponible.");
+  res.set("X-Robots-Tag", "noindex").type("html").send(crm.paginaFormulario(x, { enviado: req.query.ok === "1" }));
+});
+app.post("/p/:token", express.urlencoded({ extended: false, limit: "20kb" }), (req, res) => {
+  const x = crm.clientePorFormulario(req.params.token);
+  if (!x) return res.status(404).type("text").send("Este formulario no existe o ya no está disponible.");
+  try {
+    crm.recibirFormulario(req.params.token, req.body || {}, req.ip);
+    res.redirect(303, `/p/${req.params.token}?ok=1`);
+  } catch (e) {
+    res.status(400).type("html").send(crm.paginaFormulario(x, { error: e.message, datos: req.body || {} }));
   }
 });
 
@@ -215,6 +233,7 @@ api.get("/panel", envolver((req) => {
     contenido_atrasado: (() => { try { return contenido.listarContenido().filter((p) => p.atrasada).length; } catch { return 0; } })(),
     ideas_nuevas: (() => { try { return tendencias.ideasNuevas(); } catch { return 0; } })(),
     sitios_caidos: (() => { try { return seo.sitiosCaidos().length; } catch { return 0; } })(),
+    crm_sin_responder: (() => { try { return crm.avisosCrm().sin_responder.length; } catch { return 0; } })(),
     anuncios_sin_resultados: (() => { try { return paidmedia.avisosParaPulso().sin_resultados.length; } catch { return 0; } })(),
   };
 }));
@@ -317,6 +336,24 @@ api.post("/reportes/link", envolver((req) => {
   return reportes.crearLink(req.body || {});
 }));
 api.delete("/reportes/link", envolver((req) => reportes.quitarLink({ cliente: req.query.cliente, mes: req.query.mes })));
+api.get("/crm", envolver((req) => crm.tableroCrm({ cliente: req.query.cliente ? String(req.query.cliente) : undefined, mes: req.query.mes ? String(req.query.mes) : undefined })));
+api.post("/crm/prospectos", envolver((req) => crm.crearProspecto(req.body || {})));
+api.get("/crm/prospectos/:id", envolver((req) => crm.fichaProspecto(Number(req.params.id))));
+api.patch("/crm/prospectos/:id", envolver((req) => {
+  const b = req.body || {};
+  if (b.mover) return crm.moverProspecto(Number(req.params.id), Number(b.mover));
+  return crm.actualizarProspecto(Number(req.params.id), b);
+}));
+api.delete("/crm/prospectos/:id", envolver((req) => crm.borrarProspecto(Number(req.params.id))));
+api.post("/crm/prospectos/:id/nota", envolver((req) => crm.notaProspecto(Number(req.params.id), req.body?.texto)));
+api.post("/crm/prospectos/:id/sugerir", envolver((req) => crm.sugerirMensaje(Number(req.params.id), req.body || {})));
+api.post("/crm/prospectos/:id/borrador", envolver((req) => crm.guardarBorrador(Number(req.params.id), req.body?.texto)));
+api.delete("/crm/borradores/:id", envolver((req) => crm.descartarBorrador(Number(req.params.id))));
+// Enviar SIEMPRE lo pide el dueño con un toque en la pantalla; DELTA no tiene herramienta para esto.
+api.post("/crm/prospectos/:id/enviar", envolver((req) => crm.enviarWhatsAppProspecto(Number(req.params.id), req.body || {})));
+api.post("/crm/prospectos/:id/enviado", envolver((req) => crm.marcarEnviado(Number(req.params.id), req.body || {})));
+api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
+api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
 api.get("/seo", envolver((req) => seo.tableroSeo({ cliente: req.query.cliente ? String(req.query.cliente) : undefined })));
 api.put("/seo/config", envolver((req) => seo.configurarSeo(req.body || {})));
 api.post("/seo/revisar", envolver((req) => seo.revisarSitio(req.body?.cliente)));

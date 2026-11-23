@@ -1589,5 +1589,414 @@ export function iniciarAgencia(h) {
     } catch (err) { avisar(err.message); }
   });
 
-  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarSeo, cargarAnalitica, abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
+  // =====================================================================
+  //  CRM Y EMBUDO
+  // =====================================================================
+  let ultimaCrm = null;
+  let etapaCrmCel = "nuevo";
+  let clienteCrm = guardado.get("delta_crm_cliente") || "";
+  let fichaCrm = null;
+  const DIAS_SEM = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  // La cita se guarda en hora local "AAAA-MM-DDTHH:MM"
+  const citaBonita = (c) => {
+    if (!c) return "";
+    const [f, hm] = c.split("T");
+    const [a, m, d] = f.split("-").map(Number);
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: h.zona() });
+    const man = new Date(Date.now() + 864e5).toLocaleDateString("en-CA", { timeZone: h.zona() });
+    const dia = f === hoy ? "hoy" : f === man ? "mañana" : `${DIAS_SEM[new Date(a, m - 1, d).getDay()]} ${d} ${MESES[m - 1]}`;
+    const [hh, mm] = hm.split(":").map(Number);
+    return `${dia}, ${hh % 12 || 12}:${String(mm).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
+  };
+  const esperaTxt = (horas) => (horas < 1 ? "acaba de llegar" : horas < 24 ? `lleva ${horas} h esperando` : `lleva ${Math.floor(horas / 24)} día${Math.floor(horas / 24) === 1 ? "" : "s"} esperando`);
+  const minutosTxt = (m) => (m === null || m === undefined ? "–" : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`);
+
+  async function cargarCrm() {
+    if (!clientesFi.length) await prepararFinanzas();
+    const q = clienteCrm ? `?cliente=${encodeURIComponent(clienteCrm)}` : "";
+    let t;
+    try { t = await api(`/crm${q}`); }
+    catch (err) { if (!clienteCrm) throw err; clienteCrm = ""; guardado.set("delta_crm_cliente", ""); t = await api("/crm"); }
+    ultimaCrm = t;
+    pintarCrm(t);
+  }
+
+  function tarjetaProspecto(p, i, ultima) {
+    const n = p.sin_responder || p.cita_pasada ? (p.sin_responder ? "rojo" : "amarillo") : p.cita_hoy ? "verde" : "";
+    const linea = p.etapa === "nuevo" && p.horas_esperando !== null ? esperaTxt(p.horas_esperando)
+      : p.etapa === "cita" && p.cita ? (p.cita_pasada ? `la cita fue ${citaBonita(p.cita)}` : `cita ${citaBonita(p.cita)}`)
+      : p.etapa === "venta" ? (p.valor ? dinero(p.valor) : "venta sin monto")
+      : p.etapa === "perdido" ? (p.motivo_perdido || "perdido")
+      : p.dias_en_etapa ? `${p.dias_en_etapa} día${p.dias_en_etapa === 1 ? "" : "s"} en esta etapa` : "pasó a esta etapa hoy";
+    return `<article class="ct-pieza crm-p ${n ? "n-" + n : ""}" draggable="true" data-prospecto="${p.id}" tabindex="0" aria-label="${esc(p.nombre)}">
+      <div class="ct-p-cabeza"><span class="ct-fmt">${esc(p.fuente_nombre)}${p.whatsapp_abierto ? ` · <span class="crm-wa-on" title="Escribió en las últimas 24 h">WhatsApp abierto</span>` : ""}</span></div>
+      <b class="ct-p-titulo">${esc(p.nombre)}</b>
+      ${p.interes ? `<span class="ct-p-cliente">${esc(p.interes)}</span>` : ""}
+      ${clienteCrm ? "" : `<span class="crm-p-cliente tenue">${esc(p.cliente)}</span>`}
+      <div class="ct-p-pie">
+        <span class="ct-p-fecha ${n ? "t-" + n : "tenue"}">${esc(linea)}</span>
+        ${p.responsable ? `<span class="ct-p-resp tenue" title="Lo atiende">${esc(p.responsable)}</span>` : ""}
+      </div>
+      <div class="ct-p-mover">
+        <button type="button" data-crm-mover="-1" aria-label="Etapa anterior" ${i === 0 ? "disabled" : ""}>‹</button>
+        <button type="button" data-crm-mover="1" aria-label="Siguiente etapa" ${ultima ? "disabled" : ""}>›</button>
+      </div>
+    </article>`;
+  }
+
+  function pintarCrm(t) {
+    const sel = $("#crm-cliente");
+    sel.innerHTML = `<option value="">Todos los clientes</option>` + clientesFi.map((c) => `<option value="${c.id}" ${String(c.id) === String(clienteCrm) ? "selected" : ""}>${esc(c.nombre)}</option>`).join("");
+    $("#crm-config").hidden = !clienteCrm;
+    const e = t.embudo, a = t.embudo_anterior;
+    const mesNombre = MESES_LARGOS[Number(e.mes.slice(5)) - 1];
+    const cambio = (x, y) => (y ? `${x >= y ? "+" : "−"}${Math.abs(Math.round(((x - y) / y) * 100))} % vs. mes pasado` : x ? "primer mes con datos" : "");
+    const kpi = (k) => `<div class="tb-kpi pg-kpi fi-kpi" ${k.ir ? `data-crm-ir="${k.ir}" role="button" tabindex="0"` : ""}>
+        <span class="tb-kpi-nombre">${esc(k.nombre)}</span>
+        <b>${esc(k.valor)}</b>
+        ${k.chip ? `<span class="tb-chip s-${k.chip[0]}">${esc(k.chip[1])}</span>` : ""}
+        <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
+      </div>`;
+    const sr = t.sin_responder.length;
+    $("#crm-kpis").innerHTML = [
+      { nombre: `Prospectos en ${mesNombre}`, valor: String(e.prospectos), extra: cambio(e.prospectos, a.prospectos) || "aún no llega nadie este mes", ir: "nuevo" },
+      { nombre: "Agendaron cita", valor: String(e.citas), extra: e.prospectos ? `${e.pasos[2].del_total ?? 0} % de los prospectos${e.costo_cita ? ` · ${dinero(e.costo_cita)} c/u` : ""}` : "", ir: "cita" },
+      { nombre: "Ventas", valor: e.valor_ventas ? dinero(e.valor_ventas) : String(e.ventas), chip: e.cierre_pct === null ? null : [e.cierre_pct >= 20 ? "verde" : e.cierre_pct >= 10 ? "amarillo" : "rojo", `${e.cierre_pct} % cierre`], extra: `${e.ventas} venta${e.ventas === 1 ? "" : "s"}${e.retorno ? ` · retorno ${e.retorno.toLocaleString("es-MX")}x` : ""}`, ir: "venta" },
+      { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null },
+    ].map(kpi).join("");
+
+    // Embudo: barras que se van angostando
+    $("#crm-embudo-mes").textContent = `${mesNombre} ${e.mes.slice(0, 4)}`;
+    const max = Math.max(1, e.pasos[0].n);
+    $("#crm-embudo").innerHTML = e.prospectos
+      ? e.pasos.map((x, i) => `<div class="crm-paso">
+          <span class="crm-paso-nombre">${esc(x.nombre)}</span>
+          <span class="crm-paso-barra"><i data-ancho="${Math.max(x.n ? 4 : 0, Math.round((x.n / max) * 100))}" class="p${i}"></i><b>${x.n}</b></span>
+          <span class="crm-paso-pct tenue">${i ? `${x.de_anterior ?? 0} %` : ""}</span>
+        </div>`).join("")
+      : `<p class="ct-vacia">Cuando lleguen prospectos este mes vas a ver aquí cuántos pasan de un paso al siguiente.</p>`;
+    const costos = [
+      e.inversion ? ["Inversión en anuncios", dinero(e.inversion)] : null,
+      e.costo_prospecto ? ["Costo por prospecto", dinero(e.costo_prospecto)] : null,
+      e.costo_cita ? ["Costo por cita", dinero(e.costo_cita)] : null,
+      e.costo_venta ? ["Costo por venta", dinero(e.costo_venta)] : null,
+      e.ticket_promedio ? ["Ticket promedio", dinero(e.ticket_promedio)] : null,
+    ].filter(Boolean);
+    $("#crm-costos").innerHTML = costos.length
+      ? costos.map(([k, v]) => `<div><span class="tenue">${esc(k)}</span><b>${esc(v)}</b></div>`).join("")
+      : e.prospectos ? `<p class="tenue chico">Anota el gasto de anuncios en Paid media para ver cuánto cuesta cada prospecto, cita y venta.</p>` : "";
+    $("#crm-fuentes").innerHTML = e.por_fuente.length
+      ? `<span class="crm-sub tenue">De dónde llegan</span>` + e.por_fuente.slice(0, 5).map((f) => `<div class="crm-fuente"><span>${esc(f.nombre)}</span><span class="pg-barra"><i data-ancho="${Math.round((f.prospectos / e.prospectos) * 100)}"></i></span><small class="tenue">${f.prospectos} · ${f.citas} cita${f.citas === 1 ? "" : "s"} · ${f.ventas} venta${f.ventas === 1 ? "" : "s"}</small></div>`).join("")
+      : "";
+
+    // Para hoy
+    const lineas = [
+      ...t.sin_responder.map((p) => ({ p, nivel: "rojo", txt: `${esperaTxt(p.horas_esperando)}${p.telefono_bonito ? ` · ${p.telefono_bonito}` : ""}` })),
+      ...t.citas_hoy.map((p) => ({ p, nivel: "verde", txt: `cita ${citaBonita(p.cita)}` })),
+      ...t.citas_pasadas.map((p) => ({ p, nivel: "amarillo", txt: `¿vino? su cita fue ${citaBonita(p.cita)}` })),
+      ...t.esperando.filter((p) => !p.sin_responder).map((p) => ({ p, nivel: "info", txt: esperaTxt(p.horas_esperando) })),
+    ];
+    const bor = t.borradores;
+    $("#crm-hoy").innerHTML = `<div class="ag-cabeza"><h2>Para hoy</h2><span class="tb-hora">${lineas.length ? `${lineas.length} pendiente${lineas.length === 1 ? "" : "s"}` : "todo al día"}</span></div>
+      ${lineas.length ? `<ul class="pm-avisos ct-avisos">${lineas.slice(0, 10).map(({ p, nivel, txt }) => `<li class="pm-aviso n-${nivel}" data-prospecto="${p.id}" tabindex="0">${foco(nivel)}<span class="pg-linea-txt"><b>${esc(p.nombre)}</b><small>${esc(p.cliente)} · ${esc(txt)}</small></span></li>`).join("")}</ul>`
+        : `<p class="ct-vacia">Nadie esperando respuesta y ninguna cita hoy.</p>`}
+      ${bor.length ? `<div class="crm-bor"><span class="crm-sub tenue">Mensajes listos para mandar (${bor.length})</span>${bor.slice(0, 4).map((b) => `<button type="button" class="crm-bor-item" data-prospecto="${b.prospecto_id}"><b>${esc(b.nombre)}</b><span class="tenue">${esc(b.texto.slice(0, 90))}${b.texto.length > 90 ? "…" : ""}</span></button>`).join("")}</div>` : ""}`;
+
+    // Pestañas (celular) y columnas
+    $("#crm-tabs").innerHTML = t.etapas.map((x) => `<button type="button" data-crm-tab="${x.clave}" class="${x.clave === etapaCrmCel ? "activa" : ""}">${esc(x.nombre)} <small>${x.prospectos.length}</small></button>`).join("");
+    $("#crm-board").innerHTML = t.etapas.map((x, i) => `<section class="ct-col crm-col ${x.clave === etapaCrmCel ? "sel" : ""}" data-crm-etapa="${x.clave}">
+        <header class="ct-col-cabeza"><span>${esc(x.nombre)}</span><small>${x.prospectos.length}</small>${x.clave === "nuevo" ? `<button type="button" class="ct-mas" data-crm-nuevo aria-label="Nuevo prospecto">+</button>` : ""}</header>
+        <div class="ct-col-piezas">${x.prospectos.length ? x.prospectos.map((p) => tarjetaProspecto(p, i, i === t.etapas.length - 1)).join("") : `<p class="ct-vacia">${x.clave === "nuevo" ? "Aquí caen los del formulario y WhatsApp" : x.clave === "venta" || x.clave === "perdido" ? "Últimos 30 días" : "Nadie aquí"}</p>`}</div>
+      </section>`).join("");
+    medidas($('[data-seccion="crm"]'));
+  }
+
+  const prospectoPorId = (id) => ultimaCrm?.etapas.flatMap((e) => e.prospectos).find((p) => p.id === Number(id));
+
+  // ----- Ficha del prospecto -----
+  const HIST_ICONO = { entrante: "💬", saliente: "↗", nota: "✎", etapa: "•", borrador: "✉" };
+  function pintarHistorial(f) {
+    const hist = f.historial.filter((x) => !(x.tipo === "borrador" && x.estado === "pendiente"));
+    $("#crm-historial").innerHTML = hist.length ? hist.map((x) => `<li class="crm-h t-${x.tipo}">
+        <span class="crm-h-txt">${x.tipo === "borrador" ? `<small class="tenue">Borrador sin mandar</small>` : ""}${esc(x.texto || "")}</span>
+        <small class="tenue">${HIST_ICONO[x.tipo] || ""} ${esc(fmtDia(x.fecha))} ${esc(fmtHora(x.fecha))}</small>
+      </li>`).join("") : `<li class="ct-vacia">Sin movimientos todavía</li>`;
+    const h0 = $("#crm-historial");
+    requestAnimationFrame(() => { h0.scrollTop = h0.scrollHeight; });
+    const wa = f.whatsapp_api;
+    $("#crm-wa-estado").innerHTML = !f.telefono ? `<span class="tb-chip s-amarillo">Sin teléfono</span> <span class="tenue chico">Agrégale su número para escribirle.</span>`
+      : wa && f.whatsapp_abierto ? `<span class="tb-chip s-verde">WhatsApp abierto</span> <span class="tenue chico">Escribió hace menos de 24 h: puedes mandarle el mensaje desde aquí.</span>`
+      : wa ? `<span class="tb-chip s-amarillo">Ventana cerrada</span> <span class="tenue chico">Pasaron más de 24 h desde su último mensaje; ábrelo en WhatsApp desde el teléfono del cliente.</span>`
+      : `<span class="tenue chico">${esc(f.telefono_bonito)} · DELTA te deja el mensaje listo y tú lo mandas desde WhatsApp.</span>`;
+    const b = f.borradores.at(-1);
+    $("#crm-mensaje").value = b?.texto || "";
+    $("#crm-borrador-id").value = b?.id || "";
+    actualizarBotonesWa();
+  }
+  function actualizarBotonesWa() {
+    const f = fichaCrm;
+    if (!f) return;
+    const txt = $("#crm-mensaje").value.trim();
+    const link = $("#crm-abrir-wa");
+    link.hidden = !f.telefono;
+    link.href = f.telefono ? `https://wa.me/${f.telefono}${txt ? `?text=${encodeURIComponent(txt)}` : ""}` : "#";
+    $("#crm-enviar").hidden = !(f.whatsapp_api && f.whatsapp_abierto && f.telefono);
+    $("#crm-enviar").disabled = !txt;
+    $("#crm-marcar").disabled = !txt;
+  }
+
+  async function abrirProspecto(id = null) {
+    const t = ultimaCrm;
+    if (!t) return;
+    fichaCrm = null;
+    let f = null;
+    if (id) {
+      try { f = await api(`/crm/prospectos/${id}`); } catch (err) { return avisar(err.message); }
+      fichaCrm = f;
+    }
+    $("#crm-dlg-titulo").textContent = f ? f.nombre : "Nuevo prospecto";
+    $("#crm-id").value = f?.id || "";
+    $("#crm-nombre").value = f?.nombre || "";
+    $("#crm-telefono").value = f?.telefono_bonito || "";
+    $("#crm-correo").value = f?.correo || "";
+    $("#crm-f-cliente").innerHTML = clientesFi.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("") || `<option value="">Primero da de alta un cliente</option>`;
+    $("#crm-f-cliente").value = String(f?.cliente_id || clienteCrm || clientesFi[0]?.id || "");
+    $("#crm-etapa").innerHTML = t.etapas.map((e) => `<option value="${e.clave}">${esc(e.nombre)}</option>`).join("");
+    $("#crm-etapa").value = f?.etapa || (matchMedia("(max-width: 900px)").matches && etapaCrmCel !== "perdido" ? etapaCrmCel : "nuevo");
+    $("#crm-fuente").innerHTML = Object.entries(t.fuentes).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    $("#crm-fuente").value = f?.fuente || "whatsapp";
+    $("#crm-interes").value = f?.interes || "";
+    $("#crm-cita").value = f?.cita || "";
+    $("#crm-valor").value = f?.valor ?? "";
+    $("#crm-responsable").value = f?.responsable || "";
+    $("#crm-motivo").value = f?.motivo_perdido || "";
+    $("#crm-notas").value = f?.notas || "";
+    $("#crm-notas-l").hidden = Boolean(f && !f.notas);
+    $("#crm-nota").value = "";
+    $("#crm-msg").hidden = true;
+    $("#crm-borrar").hidden = !f;
+    $("#crm-borrar").textContent = "Quitar";
+    $("#crm-borrar").classList.remove("seguro");
+    $("#crm-conversa").hidden = !f;
+    $("#dlg-prospecto").classList.toggle("con-conversa", Boolean(f));
+    if (f) pintarHistorial(f);
+    mostrarMotivo();
+    $("#dlg-prospecto").showModal();
+    if (!f) setTimeout(() => $("#crm-nombre").focus(), 50);
+  }
+  const mostrarMotivo = () => { $("#crm-motivo-l").hidden = $("#crm-etapa").value !== "perdido"; };
+  $("#crm-etapa").addEventListener("change", mostrarMotivo);
+  $("#crm-mensaje").addEventListener("input", actualizarBotonesWa);
+
+  const errorCrm = (err) => { $("#crm-msg").textContent = err.message; $("#crm-msg").hidden = false; };
+  $("#form-prospecto").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("#crm-id").value;
+    const datos = {
+      nombre: $("#crm-nombre").value.trim(), telefono: $("#crm-telefono").value.trim() || null, correo: $("#crm-correo").value.trim() || null,
+      cliente: $("#crm-f-cliente").value, etapa: $("#crm-etapa").value, fuente: $("#crm-fuente").value,
+      interes: $("#crm-interes").value.trim() || null, cita: $("#crm-cita").value || null,
+      valor: $("#crm-valor").value === "" ? null : Number($("#crm-valor").value), responsable: $("#crm-responsable").value.trim() || null,
+      notas: $("#crm-notas").value.trim() || null,
+    };
+    if ($("#crm-etapa").value === "perdido") datos.motivo_perdido = $("#crm-motivo").value.trim() || null;
+    if (!datos.nombre && !datos.telefono) return errorCrm(new Error("Pon al menos el nombre o el teléfono"));
+    try {
+      const r = await api(id ? `/crm/prospectos/${id}` : "/crm/prospectos", { method: id ? "PATCH" : "POST", body: datos });
+      sonar("accion");
+      $("#dlg-prospecto").close();
+      if (r?.ya_existia) avisar(`${r.nombre} ya estaba en el CRM; te abro su ficha.`);
+      await cargarCrm();
+      if (r?.ya_existia) abrirProspecto(r.id);
+    } catch (err) { errorCrm(err); }
+  });
+  $("#crm-cancelar").addEventListener("click", () => $("#dlg-prospecto").close());
+  $("#dlg-prospecto").addEventListener("close", () => { if (fichaCrm) cargarCrm().catch(() => {}); fichaCrm = null; });
+  $("#crm-borrar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Seguro? Toca otra vez"; return; }
+    try { await api(`/crm/prospectos/${$("#crm-id").value}`, { method: "DELETE" }); sonar("accion"); fichaCrm = null; $("#dlg-prospecto").close(); await cargarCrm(); }
+    catch (err) { errorCrm(err); }
+  });
+  async function accionFicha(boton, fn) {
+    boton.disabled = true;
+    $("#crm-msg").hidden = true;
+    try { const f = await fn(); if (f?.historial) { fichaCrm = f; pintarHistorial(f); } }
+    catch (err) { errorCrm(err); }
+    finally { boton.disabled = false; actualizarBotonesWa(); }
+  }
+  $("#crm-sugerir").addEventListener("click", (e) => accionFicha(e.currentTarget, async () => {
+    const b = e.currentTarget;
+    const antes = b.textContent;
+    b.textContent = "Pensando…";
+    try {
+      const r = await api(`/crm/prospectos/${fichaCrm.id}/sugerir`, { method: "POST", body: {} });
+      return await api(`/crm/prospectos/${fichaCrm.id}`).then((f) => ({ ...f, borradores: f.borradores.length ? f.borradores : [{ id: r.borrador_id, texto: r.texto }] }));
+    } finally { b.textContent = antes; }
+  }));
+  // Guarda lo escrito como borrador (si cambió) y devuelve su id
+  async function borradorActual() {
+    const txt = $("#crm-mensaje").value.trim();
+    const bid = $("#crm-borrador-id").value;
+    const previo = fichaCrm.borradores.find((b) => String(b.id) === bid);
+    if (previo && previo.texto === txt) return Number(bid);
+    if (previo) await api(`/crm/borradores/${bid}`, { method: "DELETE" });
+    const r = await api(`/crm/prospectos/${fichaCrm.id}/borrador`, { method: "POST", body: { texto: txt } });
+    return r.borrador_id;
+  }
+  $("#crm-enviar").addEventListener("click", (e) => accionFicha(e.currentTarget, async () => {
+    const borrador_id = await borradorActual();
+    const f = await api(`/crm/prospectos/${fichaCrm.id}/enviar`, { method: "POST", body: { borrador_id } });
+    sonar("accion");
+    avisar("Mensaje enviado por WhatsApp");
+    return f;
+  }));
+  $("#crm-marcar").addEventListener("click", (e) => accionFicha(e.currentTarget, async () => {
+    const borrador_id = await borradorActual();
+    const f = await api(`/crm/prospectos/${fichaCrm.id}/enviado`, { method: "POST", body: { borrador_id } });
+    sonar("accion");
+    return f;
+  }));
+  // Al abrir WhatsApp se guarda el mensaje como borrador para luego marcarlo como enviado
+  $("#crm-abrir-wa").addEventListener("click", () => {
+    if (!$("#crm-mensaje").value.trim() || !fichaCrm) return;
+    borradorActual().then((id) => { $("#crm-borrador-id").value = id; return api(`/crm/prospectos/${fichaCrm.id}`); })
+      .then((f) => { fichaCrm = f; }).catch(() => {});
+  });
+  const anotar = (b) => accionFicha(b, async () => {
+    const txt = $("#crm-nota").value.trim();
+    if (!txt) return null;
+    await api(`/crm/prospectos/${fichaCrm.id}/nota`, { method: "POST", body: { texto: txt } });
+    $("#crm-nota").value = "";
+    const f = await api(`/crm/prospectos/${fichaCrm.id}`);
+    // no pisar lo que esté escribiendo en el mensaje
+    const msg = $("#crm-mensaje").value, bid = $("#crm-borrador-id").value;
+    fichaCrm = f; pintarHistorial(f); $("#crm-mensaje").value = msg; $("#crm-borrador-id").value = bid;
+    return null;
+  });
+  $("#crm-nota-btn").addEventListener("click", (e) => anotar(e.currentTarget));
+  $("#crm-nota").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); anotar($("#crm-nota-btn")); } });
+
+  // ----- Formulario y WhatsApp del cliente -----
+  let cfgCrm = null;
+  async function abrirConfigCrm() {
+    if (!clienteCrm) return avisar("Elige primero un cliente");
+    try { cfgCrm = await api(`/crm/config?cliente=${encodeURIComponent(clienteCrm)}`); } catch (err) { return avisar(err.message); }
+    $("#crm-cfg-titulo").textContent = `${cfgCrm.cliente}: formulario y WhatsApp`;
+    pintarLinkCrm();
+    $("#crm-cfg-bienvenida").value = cfgCrm.bienvenida || "";
+    $("#crm-cfg-numero").value = cfgCrm.wa_numero || "";
+    $("#crm-cfg-phoneid").value = cfgCrm.wa_phone_id || "";
+    $("#crm-cfg-wa-txt").textContent = cfgCrm.whatsapp_token
+      ? "Con el id del número, los mensajes que le escriban al WhatsApp del cliente llegan aquí solos y puedes contestar desde DELTA (siempre tú das el clic)."
+      : "Con su número, DELTA arma el link para abrir cada conversación en WhatsApp. Para que los mensajes lleguen solos aquí hace falta conectar la API de WhatsApp de Meta; te guío cuando quieras.";
+    $("#crm-cfg-msg").hidden = true;
+    $("#dlg-crm-config").showModal();
+  }
+  function pintarLinkCrm() {
+    const url = cfgCrm.formulario ? `${location.origin}${cfgCrm.formulario}` : null;
+    $("#crm-cfg-link").innerHTML = url
+      ? `<code class="crm-url">${esc(url)}</code><div class="crm-link-botones"><button type="button" data-crm-link="copiar">Copiar</button><a href="${esc(url)}" target="_blank" rel="noopener" class="tb-link">Ver</a><button type="button" data-crm-link="apagar" class="peligro">Desactivar</button></div>`
+      : `<button type="button" class="primario" data-crm-link="crear">Crear formulario</button>`;
+  }
+  $("#crm-cfg-link").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-crm-link]");
+    if (!b) return;
+    const acc = b.dataset.crmLink;
+    if (acc === "copiar") {
+      try { await navigator.clipboard.writeText(`${location.origin}${cfgCrm.formulario}`); b.textContent = "¡Copiado!"; } catch { b.textContent = "Selecciónalo y cópialo"; }
+      return;
+    }
+    if (acc === "apagar" && !b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = "¿Seguro? El link dejará de funcionar"; return; }
+    try {
+      cfgCrm = { ...cfgCrm, ...(await api("/crm/config", { method: "PUT", body: { cliente: clienteCrm, formulario: acc === "crear" } })) };
+      pintarLinkCrm();
+    } catch (err) { $("#crm-cfg-msg").textContent = err.message; $("#crm-cfg-msg").hidden = false; }
+  });
+  $("#form-crm-config").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("/crm/config", { method: "PUT", body: { cliente: clienteCrm, bienvenida: $("#crm-cfg-bienvenida").value.trim() || null, wa_numero: $("#crm-cfg-numero").value.trim() || null, wa_phone_id: $("#crm-cfg-phoneid").value.trim() || null } });
+      sonar("accion");
+      $("#dlg-crm-config").close();
+    } catch (err) { $("#crm-cfg-msg").textContent = err.message; $("#crm-cfg-msg").hidden = false; }
+  });
+  $("#crm-cfg-cancelar").addEventListener("click", () => $("#dlg-crm-config").close());
+  $("#crm-config").addEventListener("click", abrirConfigCrm);
+  $("#crm-nuevo").addEventListener("click", () => abrirProspecto());
+  $("#crm-cliente").addEventListener("change", (e) => {
+    clienteCrm = e.target.value;
+    guardado.set("delta_crm_cliente", clienteCrm);
+    cargarCrm().catch((err) => avisar(err.message));
+  });
+
+  async function moverProspecto(id, cambio) {
+    try { await api(`/crm/prospectos/${id}`, { method: "PATCH", body: cambio }); sonar("accion"); }
+    catch (err) { avisar(err.message); }
+    await cargarCrm().catch(() => {});
+  }
+  const seccionCrm = $('[data-seccion="crm"]');
+  seccionCrm.addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-crm-tab]");
+    if (tab) {
+      etapaCrmCel = tab.dataset.crmTab;
+      seccionCrm.querySelectorAll("[data-crm-tab]").forEach((x) => x.classList.toggle("activa", x === tab));
+      seccionCrm.querySelectorAll(".crm-col").forEach((x) => x.classList.toggle("sel", x.dataset.crmEtapa === etapaCrmCel));
+      return;
+    }
+    const ir = e.target.closest("[data-crm-ir]");
+    if (ir) {
+      if (ir.dataset.crmIr === "hoy") return void $("#crm-hoy").scrollIntoView({ behavior: "smooth", block: "center" });
+      seccionCrm.querySelector(`[data-crm-tab="${ir.dataset.crmIr}"]`)?.click();
+      return void seccionCrm.querySelector(`.crm-col[data-crm-etapa="${ir.dataset.crmIr}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+    if (e.target.closest("[data-crm-nuevo]")) return abrirProspecto();
+    const mover = e.target.closest("[data-crm-mover]");
+    const tarjeta = e.target.closest("[data-prospecto]");
+    if (mover && tarjeta) {
+      mover.disabled = true;
+      return void moverProspecto(tarjeta.dataset.prospecto, { mover: Number(mover.dataset.crmMover) });
+    }
+    if (tarjeta) abrirProspecto(tarjeta.dataset.prospecto);
+  });
+  seccionCrm.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches?.("[data-prospecto], [data-crm-ir]")) e.target.click();
+  });
+  let arrastrandoCrm = null;
+  seccionCrm.addEventListener("dragstart", (e) => {
+    const t = e.target.closest?.(".crm-p");
+    if (!t) return;
+    arrastrandoCrm = t.dataset.prospecto;
+    t.classList.add("arrastrando");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", arrastrandoCrm);
+  });
+  seccionCrm.addEventListener("dragend", (e) => {
+    e.target.closest?.(".crm-p")?.classList.remove("arrastrando");
+    seccionCrm.querySelectorAll(".crm-col.encima").forEach((x) => x.classList.remove("encima"));
+    arrastrandoCrm = null;
+  });
+  seccionCrm.addEventListener("dragover", (e) => {
+    const col = e.target.closest?.(".crm-col");
+    if (!col || !arrastrandoCrm) return;
+    e.preventDefault();
+    seccionCrm.querySelectorAll(".crm-col.encima").forEach((x) => x !== col && x.classList.remove("encima"));
+    col.classList.add("encima");
+  });
+  seccionCrm.addEventListener("drop", (e) => {
+    const col = e.target.closest?.(".crm-col");
+    if (!col || !arrastrandoCrm) return;
+    e.preventDefault();
+    const id = arrastrandoCrm;
+    const p = prospectoPorId(id);
+    col.classList.remove("encima");
+    if (!p || p.etapa === col.dataset.crmEtapa) return;
+    // Al soltar en "Perdido" o "Venta" conviene anotar el motivo o el monto: se abre la ficha
+    moverProspecto(id, { etapa: col.dataset.crmEtapa }).then(() => {
+      if (col.dataset.crmEtapa === "venta" && !p.valor) abrirProspecto(id);
+      if (col.dataset.crmEtapa === "perdido") abrirProspecto(id);
+    });
+  });
+
+  return { cargarPanelGeneral, cargarCuentas, cargarFinanzas: () => prepararFinanzas().then(cargarFinanzas), cargarPaidMedia: () => prepararFinanzas().then(cargarPaidMedia), cargarContenido: () => prepararFinanzas().then(cargarContenido), cargarTendencias: () => prepararFinanzas().then(cargarTendencias), cargarSeo, cargarAnalitica, cargarCrm: () => prepararFinanzas().then(cargarCrm), abrirCuenta, abrirMeta, refrescarFicha: () => (ficha ? cargarFicha(ficha.id) : Promise.resolve()) };
 }

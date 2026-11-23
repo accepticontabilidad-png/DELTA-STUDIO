@@ -109,6 +109,8 @@ async function cargarPanel() {
   $("#badge-contenido").textContent = p.contenido_atrasado || "";
   $("#badge-tendencias").hidden = !p.ideas_nuevas;
   $("#badge-tendencias").textContent = p.ideas_nuevas || "";
+  $("#badge-crm").hidden = !p.crm_sin_responder;
+  $("#badge-crm").textContent = p.crm_sin_responder || "";
   $("#badge-seo").hidden = !p.sitios_caidos;
   $("#badge-seo").textContent = p.sitios_caidos || "";
   $("#badge-paidmedia").hidden = !p.anuncios_sin_resultados;
@@ -926,6 +928,7 @@ const SECCIONES = {
   contenido: { cargar: () => agenciaTableros().cargarContenido(), cada: 30e3 },
   tendencias: { cargar: () => agenciaTableros().cargarTendencias(), cada: 120e3 },
   seo: { cargar: () => agenciaTableros().cargarSeo(), cada: 120e3 },
+  crm: { cargar: () => agenciaTableros().cargarCrm(), cada: 30e3 },
   paidmedia: { cargar: () => agenciaTableros().cargarPaidMedia(), cada: 120e3 },
   cuentas: { cargar: () => cargarCuentas(), cada: 30e3 },
   departamentos: { cargar: () => cargarDeptos(), cada: 30e3 },
@@ -1860,6 +1863,7 @@ function conectarVivo() {
       if (guardado.get("delta_voz") === "1") hablar(d.texto);
       cargarPanel();
     }
+    if (d.tipo === "crm" && seccionActual === "crm") refrescar("crm", true);
     if (d.tipo === "agencia" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
     if (d.tipo === "aviso" && ["agencia", "finanzas", "contenido", "paidmedia", "cuentas", "departamentos", "aprobaciones", "estudio"].includes(seccionActual)) refrescar(seccionActual, true);
   };

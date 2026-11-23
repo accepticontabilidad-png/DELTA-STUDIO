@@ -90,8 +90,12 @@ export function verificarWebhook(req, res) {
   return res.sendStatus(403);
 }
 
-/** Mensajes entrantes de WhatsApp. Solo atiende a tu número. */
-export function crearReceptorWebhook(responder) {
+/**
+ * Mensajes entrantes de WhatsApp. Al número de DELTA solo le hace caso si escribes tú.
+ * Los mensajes que llegan a los números de los CLIENTES (conectados en el CRM) se pasan a `alCliente`
+ * para guardarlos como conversación con su prospecto; nunca se contestan solos.
+ */
+export function crearReceptorWebhook(responder, alCliente = null) {
   return async (req, res) => {
     if (!firmaValida(req.cuerpoOriginal, req.get("X-Hub-Signature-256"))) {
       console.warn("[whatsapp] mensaje rechazado: firma no válida");
@@ -101,6 +105,16 @@ export function crearReceptorWebhook(responder) {
     try {
       const cambios = req.body?.entry?.flatMap((e) => e.changes || []) || [];
       for (const c of cambios) {
+        const numero = c.value?.metadata?.phone_number_id;
+        if (alCliente && numero && numero !== process.env.WHATSAPP_PHONE_ID) {
+          const contactos = c.value?.contacts || [];
+          for (const m of c.value?.messages || []) {
+            try {
+              alCliente({ phoneId: numero, de: m.from, nombre: contactos.find((x) => x.wa_id === m.from)?.profile?.name, texto: m.text?.body || m.button?.text || m.interactive?.button_reply?.title || null, waId: m.id, tipo: m.type });
+            } catch (e) { console.error("[whatsapp crm]", e.message); }
+          }
+          continue;
+        }
         for (const m of c.value?.messages || []) {
           if (soloDigitos(m.from) !== soloDigitos(process.env.WHATSAPP_MI_NUMERO)) continue;
           if (yaVisto(m.id)) continue;
