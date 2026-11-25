@@ -1718,43 +1718,198 @@ function hablar(texto) {
   });
 }
 
+// En iPhone (sobre todo instalada como app) el dictado del navegador no funciona: falla callado.
+// Ahí DELTA graba con el micrófono y el servidor pasa la voz a texto. En Android y la PC se usa
+// el dictado del navegador y, si falla, se cambia a grabar sola.
+const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const puedeGrabar = () => Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+let dictadoFalla = esIOS; // true = usar la grabación en lugar del dictado del navegador
+let transcribiendo = false;
+const usarGrabacion = () => puedeGrabar() && vozNatural.oido && (dictadoFalla || !Reconocimiento);
+
 function escuchar() {
+  if (transcribiendo) return;
+  if (escuchando) { reconocedor?.stop(); return; }
+  if (usarGrabacion()) return escucharGrabando();
   if (!Reconocimiento) {
-    burbuja("aviso", "Este navegador no permite hablarme. En la PC use Chrome o Edge; en iPhone, Safari reciente.");
+    burbuja("aviso", puedeGrabar()
+      ? "Para hablarme desde aquí necesito la clave de ElevenLabs en Railway (la misma de mi voz). Mientras, puede escribirme."
+      : "Este navegador no permite hablarme. En la PC use Chrome o Edge.");
     return;
   }
-  if (escuchando) { reconocedor?.stop(); return; }
   callarVoz();
   reconocedor = new Reconocimiento();
   reconocedor.lang = "es-MX";
   reconocedor.interimResults = true;
   reconocedor.continuous = false;
   let final = "";
-  reconocedor.onstart = () => { if (!manosLibres) sonar("escuchar"); escuchando = true; orbe.estado("escuchando"); $("#btn-mic").classList.add("escuchando"); };
+  let fallo = "";
+  reconocedor.onstart = () => empezoEscucha();
   reconocedor.onresult = (ev) => {
     let parcial = "";
     for (const r of ev.results) (r.isFinal ? (final = r[0].transcript) : (parcial += r[0].transcript));
     $("#texto").value = final || parcial;
     orbe.pulso();
   };
-  reconocedor.onerror = (ev) => { if (ev.error === "not-allowed") burbuja("aviso", "Necesito permiso para usar el micrófono."); };
+  reconocedor.onerror = (ev) => { fallo = ev.error; };
   reconocedor.onend = () => {
+    if (fallo && fallo !== "no-speech" && fallo !== "aborted") {
+      // El dictado del navegador no sirve aquí: se intenta grabando (si se puede) sin que la persona repita el toque.
+      if (fallo !== "not-allowed" && puedeGrabar() && vozNatural.oido) {
+        dictadoFalla = true;
+        escuchando = false;
+        $("#btn-mic").classList.remove("escuchando");
+        return escucharGrabando();
+      }
+      avisoMicrofono(fallo);
+    }
+    terminarEscucha(final || $("#texto").value);
+  };
+  try { reconocedor.start(); } catch (e) { avisoMicrofono(e.name); }
+}
+
+function avisoMicrofono(error) {
+  const msg = error === "not-allowed" || error === "NotAllowedError" || error === "service-not-allowed"
+    ? (esIOS
+      ? "No tengo permiso para el micrófono. En el iPhone: Ajustes → Safari → Micrófono → Permitir (o Preguntar), cierre DELTA y vuelva a abrirla."
+      : "No tengo permiso para el micrófono. Toque el candado junto a la dirección y permita el micrófono.")
+    : error === "NotFoundError" || error === "audio-capture" ? "No encuentro un micrófono en este equipo."
+    : "No pude usar el micrófono ahora. Intente otra vez o escríbame.";
+  burbuja("aviso", msg);
+}
+
+function empezoEscucha() {
+  if (!manosLibres) sonar("escuchar");
+  escuchando = true;
+  orbe.estado("escuchando");
+  $("#btn-mic").classList.add("escuchando");
+}
+
+function terminarEscucha(textoOido) {
+  escuchando = false;
+  $("#btn-mic").classList.remove("escuchando");
+  let texto = String(textoOido || "").trim();
+  $("#texto").value = "";
+  const libre = sinPalabraClave;
+  sinPalabraClave = false;
+  if (manosLibres && !libre) {
+    // En manos libres solo se atiende lo que empieza con "Delta".
+    const m = texto.match(/^\s*(oye\s+)?delta[\s,.:]*(.*)$/i);
+    if (!m) { orbe.estado("reposo"); return setTimeout(() => manosLibres && !ocupado && escuchar(), 300); }
+    texto = m[2].trim() || "Hola";
+  }
+  if (texto) enviar(texto, "voz");
+  else { if (!manosLibres) sonar("fin_escuchar"); orbe.estado("reposo"); }
+}
+
+// ---- Escuchar grabando (iPhone y donde el dictado del navegador no sirve) ----
+let ctxMic = null;
+const textoMarcador = $("#texto").placeholder;
+function tipoGrabacion() {
+  for (const t of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]) {
+    if (MediaRecorder.isTypeSupported?.(t)) return t;
+  }
+  return "";
+}
+async function escucharGrabando() {
+  callarVoz();
+  // Se prepara el medidor dentro del mismo toque (el iPhone lo exige para que funcione).
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (Ctx && !ctxMic) { try { ctxMic = new Ctx(); } catch {} }
+  ctxMic?.resume().catch(() => {});
+  escuchando = true; // evita dobles toques mientras se pide el micrófono
+  let flujo;
+  try {
+    flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (e) {
+    escuchando = false;
+    orbe.estado("reposo");
+    return avisoMicrofono(e.name);
+  }
+  const tipo = tipoGrabacion();
+  let grabadora;
+  try { grabadora = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined); } catch {
+    flujo.getTracks().forEach((t) => t.stop());
+    escuchando = false;
+    return avisoMicrofono("");
+  }
+  const trozos = [];
+  let huboVoz = false;
+  let cancelado = false;
+  let reloj = 0;
+  let fuente = null;
+  const apagar = () => {
+    clearInterval(reloj);
+    try { fuente?.disconnect(); } catch {}
+    flujo.getTracks().forEach((t) => t.stop()); // suelta el micrófono para que la voz de DELTA vuelva a sonar fuerte
+  };
+  const detener = () => { if (grabadora.state !== "inactive") grabadora.stop(); };
+  reconocedor = { stop: detener, abort: () => { cancelado = true; detener(); } };
+  grabadora.ondataavailable = (e) => { if (e.data?.size) trozos.push(e.data); };
+  grabadora.onstop = async () => {
+    apagar();
+    if (cancelado || !huboVoz || !trozos.length) return terminarEscucha("");
     escuchando = false;
     $("#btn-mic").classList.remove("escuchando");
-    let texto = (final || $("#texto").value).trim();
-    $("#texto").value = "";
-    const libre = sinPalabraClave;
-    sinPalabraClave = false;
-    if (manosLibres && !libre) {
-      // En manos libres solo se atiende lo que empieza con "Delta".
-      const m = texto.match(/^\s*(oye\s+)?delta[\s,.:]*(.*)$/i);
-      if (!m) { orbe.estado("reposo"); return setTimeout(() => manosLibres && !ocupado && escuchar(), 300); }
-      texto = m[2].trim() || "Hola";
+    transcribiendo = true;
+    orbe.estado("pensando");
+    $("#texto").placeholder = "Entendiendo lo que dijo…";
+    let texto = "";
+    try {
+      const r = await fetch("/api/voz/escuchar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": grabadora.mimeType || tipo || "application/octet-stream", "X-Delta": "1" },
+        body: new Blob(trozos, { type: grabadora.mimeType || tipo }),
+      });
+      if (r.status === 401) { mostrarEntrada(); throw new Error("sesión cerrada"); }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "no pude entender");
+      texto = d.texto || "";
+    } catch (e) {
+      burbuja("aviso", `No alcancé a entenderle (${e.message}). Intente otra vez o escríbame.`);
+    } finally {
+      transcribiendo = false;
+      $("#texto").placeholder = textoMarcador;
     }
-    if (texto) enviar(texto, "voz");
-    else { if (!manosLibres) sonar("fin_escuchar"); orbe.estado("reposo"); }
+    terminarEscucha(texto);
   };
-  reconocedor.start();
+
+  // Medidor de volumen: se corta sola al terminar de hablar (1.3 s de silencio).
+  let medidor = null;
+  if (ctxMic && ctxMic.state !== "running") await ctxMic.resume().catch(() => {});
+  if (ctxMic?.state === "running") {
+    try {
+      fuente = ctxMic.createMediaStreamSource(flujo);
+      medidor = ctxMic.createAnalyser();
+      medidor.fftSize = 1024;
+      fuente.connect(medidor);
+    } catch { medidor = null; }
+  }
+  const muestras = medidor ? new Float32Array(medidor.fftSize) : null;
+  const inicio = Date.now();
+  let ultimaVoz = 0;
+  let piso = 0.01; // ruido de fondo, se ajusta solo
+  reloj = setInterval(() => {
+    const ahora = Date.now();
+    if (medidor) {
+      medidor.getFloatTimeDomainData(muestras);
+      let suma = 0;
+      for (const v of muestras) suma += v * v;
+      const nivel = Math.sqrt(suma / muestras.length);
+      if (ahora - inicio < 400) piso = Math.max(piso, nivel);
+      if (nivel > Math.max(0.02, piso * 2.2)) { huboVoz = true; ultimaVoz = ahora; orbe.pulso(); }
+      if (huboVoz && ahora - ultimaVoz > 1300 && !espacioHablando) return detener();
+      if (!huboVoz && ahora - inicio > (manosLibres ? 12000 : 8000)) return detener();
+    } else {
+      huboVoz = true; // sin medidor no se sabe: se manda lo grabado al tocar otra vez o al pasar el tiempo
+      if (ahora - inicio > 10000 && !espacioHablando) return detener();
+    }
+    if (ahora - inicio > 45000) detener();
+  }, 80);
+
+  grabadora.start(250);
+  empezoEscucha();
 }
 
 $("#orbe").addEventListener("click", escuchar);

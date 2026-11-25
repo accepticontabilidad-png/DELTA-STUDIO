@@ -359,6 +359,16 @@ api.post("/voz/hablar", async (req, res) => {
   }
 });
 api.post(
+  "/voz/escuchar",
+  express.raw({ type: () => true, limit: voz.MAX_ESCUCHA }),
+  async (req, res) => {
+    try { res.json(await voz.transcribir(req.body)); } catch (e) {
+      console.error("[oído]", e.message);
+      res.status(503).json({ error: e.message });
+    }
+  },
+);
+api.post(
   "/voz/muestras",
   express.raw({ type: () => true, limit: voz.MAX_MUESTRA }),
   envolver((req) => voz.guardarMuestra(req.body)),

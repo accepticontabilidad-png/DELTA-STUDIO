@@ -35,6 +35,7 @@ export function estadoVoz() {
   const voz = vozActual();
   return {
     disponible: Boolean(clave()),
+    oido: Boolean(clave()), // el celular puede mandar su voz para pasarla a texto
     activa: Boolean(clave() && voz && getAjuste("voz_activa", "1") === "1"),
     encendida: getAjuste("voz_activa", "1") === "1",
     voz: voz ? { nombre: voz.nombre, desde: voz.desde } : null,
@@ -107,6 +108,27 @@ export async function sintetizar(textoOriginal) {
   fs.writeFileSync(archivo, audio, { mode: 0o600 });
   podarCache();
   return audio;
+}
+
+export const MAX_ESCUCHA = 12 * 1024 * 1024; // hasta ~1 minuto de voz grabada en el celular
+
+/**
+ * Convierte en texto lo que la persona dijo (oído de DELTA en el celular).
+ * El iPhone instalado como app no deja usar el dictado del navegador, así que el celular graba
+ * y aquí se transcribe con ElevenLabs. No se guarda nada: el audio se usa y se olvida.
+ */
+export async function transcribir(buf) {
+  if (!clave()) throw new Error("El oído de DELTA no está configurado.");
+  if (!buf?.length || buf.length < 800) throw new Error("No alcancé a oír nada.");
+  const tipo = tipoAudio(buf) || { ext: ".webm", mime: "audio/webm" };
+  const form = new FormData();
+  form.append("model_id", process.env.ELEVENLABS_MODELO_OIDO || "scribe_v1");
+  form.append("language_code", "es");
+  form.append("tag_audio_events", "false");
+  form.append("file", new Blob([buf], { type: tipo.mime }), "voz" + tipo.ext);
+  const r = await llamar("/v1/speech-to-text", { method: "POST", body: form });
+  const d = await r.json().catch(() => ({}));
+  return { texto: String(d.text || "").replace(/\s+/g, " ").trim() };
 }
 
 function podarCache() {
