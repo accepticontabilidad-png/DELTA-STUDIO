@@ -1941,8 +1941,13 @@ async function escucharGrabando() {
   $("#texto").placeholder = "Te escucho… toca el micrófono cuando termines";
 }
 
-$("#orbe").addEventListener("click", escuchar);
-$("#btn-mic").addEventListener("click", escuchar);
+// Si algo truena al tocar, se ve en pantalla (antes el toque "no hacía nada").
+const tocarParaHablar = () => {
+  try { const p = escuchar(); p?.catch?.((e) => burbuja("aviso", `No pude abrir el micrófono: ${e.message || e}`)); }
+  catch (e) { burbuja("aviso", `No pude abrir el micrófono: ${e.message || e}`); }
+};
+$("#orbe").addEventListener("click", tocarParaHablar);
+$("#btn-mic").addEventListener("click", tocarParaHablar);
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 
 // ---------------- Orbe animado (logo DELTA al centro) ----------------
