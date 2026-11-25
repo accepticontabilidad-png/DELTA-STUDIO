@@ -1725,7 +1725,7 @@ const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platfor
 const puedeGrabar = () => Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 let dictadoFalla = esIOS; // true = usar la grabación en lugar del dictado del navegador
 let transcribiendo = false;
-const usarGrabacion = () => puedeGrabar() && vozNatural.oido && (dictadoFalla || !Reconocimiento);
+const usarGrabacion = () => puedeGrabar() && (dictadoFalla || !Reconocimiento);
 
 function escuchar() {
   if (transcribiendo) return;
@@ -1755,7 +1755,7 @@ function escuchar() {
   reconocedor.onend = () => {
     if (fallo && fallo !== "no-speech" && fallo !== "aborted") {
       // El dictado del navegador no sirve aquí: se intenta grabando (si se puede) sin que la persona repita el toque.
-      if (fallo !== "not-allowed" && puedeGrabar() && vozNatural.oido) {
+      if (fallo !== "not-allowed" && puedeGrabar()) {
         dictadoFalla = true;
         escuchando = false;
         $("#btn-mic").classList.remove("escuchando");
@@ -1787,6 +1787,7 @@ function empezoEscucha() {
 
 function terminarEscucha(textoOido) {
   escuchando = false;
+  $("#texto").placeholder = textoMarcador;
   $("#btn-mic").classList.remove("escuchando");
   let texto = String(textoOido || "").trim();
   $("#texto").value = "";
@@ -1813,31 +1814,43 @@ function tipoGrabacion() {
 }
 async function escucharGrabando() {
   callarVoz();
-  // Se prepara el medidor dentro del mismo toque (el iPhone lo exige para que funcione).
+  // El medidor se despierta dentro del mismo toque (el iPhone lo exige).
   const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (Ctx && !ctxMic) { try { ctxMic = new Ctx(); } catch {} }
-  ctxMic?.resume().catch(() => {});
+  try { if (Ctx && !ctxMic) ctxMic = new Ctx(); ctxMic?.resume().catch(() => {}); } catch {}
   escuchando = true; // evita dobles toques mientras se pide el micrófono
+  $("#btn-mic").classList.add("escuchando");
+  $("#texto").placeholder = "Abriendo el micrófono…";
+  const soltar = (aviso) => {
+    escuchando = false;
+    $("#btn-mic").classList.remove("escuchando");
+    $("#texto").placeholder = textoMarcador;
+    orbe.estado("reposo");
+    if (aviso) burbuja("aviso", aviso);
+  };
   let flujo;
   try {
-    flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // Si el iPhone no contesta (permiso trabado), no se queda colgado: avisa a los 15 s.
+    flujo = await Promise.race([
+      navigator.mediaDevices.getUserMedia({ audio: true }),
+      new Promise((_, no) => setTimeout(() => no(Object.assign(new Error("tardó"), { name: "Timeout" })), 15000)),
+    ]);
   } catch (e) {
-    escuchando = false;
-    orbe.estado("reposo");
-    return avisoMicrofono(e.name);
+    soltar();
+    return e.name === "Timeout"
+      ? burbuja("aviso", "El micrófono no respondió. Cierre DELTA por completo, vuelva a abrirla y toque el micrófono otra vez.")
+      : avisoMicrofono(e.name);
   }
   const tipo = tipoGrabacion();
   let grabadora;
-  try { grabadora = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined); } catch {
+  try { grabadora = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined); } catch (e) {
     flujo.getTracks().forEach((t) => t.stop());
-    escuchando = false;
-    return avisoMicrofono("");
+    return soltar(`Este teléfono no me deja grabar (${e.name || e.message}). Mientras, escríbame.`);
   }
   const trozos = [];
-  let huboVoz = false;
   let cancelado = false;
   let reloj = 0;
   let fuente = null;
+  const inicio = Date.now();
   const apagar = () => {
     clearInterval(reloj);
     try { fuente?.disconnect(); } catch {}
@@ -1846,9 +1859,17 @@ async function escucharGrabando() {
   const detener = () => { if (grabadora.state !== "inactive") grabadora.stop(); };
   reconocedor = { stop: detener, abort: () => { cancelado = true; detener(); } };
   grabadora.ondataavailable = (e) => { if (e.data?.size) trozos.push(e.data); };
+  grabadora.onerror = (e) => { console.warn("[grabar]", e.error?.name); };
   grabadora.onstop = async () => {
     apagar();
-    if (cancelado || !huboVoz || !trozos.length) return terminarEscucha("");
+    const duro = Date.now() - inicio;
+    const audio = new Blob(trozos, { type: grabadora.mimeType || tipo || "audio/mp4" });
+    if (cancelado) return terminarEscucha("");
+    if (!huboVoz && medidorVivo) return terminarEscucha(""); // el medidor funcionó y no hubo nadie hablando
+    if (duro < 700 || audio.size < 1000) {
+      terminarEscucha("");
+      return burbuja("aviso", "No alcancé a oír nada. Toque el micrófono, hable y luego espere un segundo.");
+    }
     escuchando = false;
     $("#btn-mic").classList.remove("escuchando");
     transcribiendo = true;
@@ -1859,15 +1880,16 @@ async function escucharGrabando() {
       const r = await fetch("/api/voz/escuchar", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": grabadora.mimeType || tipo || "application/octet-stream", "X-Delta": "1" },
-        body: new Blob(trozos, { type: grabadora.mimeType || tipo }),
+        headers: { "Content-Type": audio.type || "application/octet-stream", "X-Delta": "1" },
+        body: audio,
       });
       if (r.status === 401) { mostrarEntrada(); throw new Error("sesión cerrada"); }
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error || "no pude entender");
+      if (!r.ok) throw new Error(d.error || `el servidor respondió ${r.status}`);
       texto = d.texto || "";
+      if (!texto && !manosLibres) burbuja("aviso", "Te oí, pero no entendí palabras. Acerca un poco el teléfono e inténtalo otra vez.");
     } catch (e) {
-      burbuja("aviso", `No alcancé a entenderle (${e.message}). Intente otra vez o escríbame.`);
+      burbuja("aviso", `No pude entenderte: ${e.message}. Intenta otra vez o escríbeme.`);
     } finally {
       transcribiendo = false;
       $("#texto").placeholder = textoMarcador;
@@ -1876,18 +1898,20 @@ async function escucharGrabando() {
   };
 
   // Medidor de volumen: se corta sola al terminar de hablar (1.3 s de silencio).
+  // En el iPhone el medidor a veces da puro cero; entonces se graba hasta que se toque otra vez (máx. 15 s).
   let medidor = null;
-  if (ctxMic && ctxMic.state !== "running") await ctxMic.resume().catch(() => {});
-  if (ctxMic?.state === "running") {
-    try {
+  let medidorVivo = false;
+  let huboVoz = false;
+  try {
+    if (ctxMic && ctxMic.state !== "running") await Promise.race([ctxMic.resume(), new Promise((r) => setTimeout(r, 500))]);
+    if (ctxMic?.state === "running") {
       fuente = ctxMic.createMediaStreamSource(flujo);
       medidor = ctxMic.createAnalyser();
       medidor.fftSize = 1024;
       fuente.connect(medidor);
-    } catch { medidor = null; }
-  }
+    }
+  } catch { medidor = null; }
   const muestras = medidor ? new Float32Array(medidor.fftSize) : null;
-  const inicio = Date.now();
   let ultimaVoz = 0;
   let piso = 0.01; // ruido de fondo, se ajusta solo
   reloj = setInterval(() => {
@@ -1897,19 +1921,24 @@ async function escucharGrabando() {
       let suma = 0;
       for (const v of muestras) suma += v * v;
       const nivel = Math.sqrt(suma / muestras.length);
-      if (ahora - inicio < 400) piso = Math.max(piso, nivel);
-      if (nivel > Math.max(0.02, piso * 2.2)) { huboVoz = true; ultimaVoz = ahora; orbe.pulso(); }
-      if (huboVoz && ahora - ultimaVoz > 1300 && !espacioHablando) return detener();
-      if (!huboVoz && ahora - inicio > (manosLibres ? 12000 : 8000)) return detener();
-    } else {
-      huboVoz = true; // sin medidor no se sabe: se manda lo grabado al tocar otra vez o al pasar el tiempo
-      if (ahora - inicio > 10000 && !espacioHablando) return detener();
+      if (nivel > 0) medidorVivo = true;
+      if (medidorVivo) {
+        if (ahora - inicio < 400) piso = Math.max(piso, nivel);
+        if (nivel > Math.max(0.02, piso * 2.2)) { huboVoz = true; ultimaVoz = ahora; orbe.pulso(); }
+        if (huboVoz && ahora - ultimaVoz > 1300 && !espacioHablando) return detener();
+        if (!huboVoz && ahora - inicio > (manosLibres ? 12000 : 8000)) return detener();
+      }
     }
+    if (!medidorVivo && ahora - inicio > 15000 && !espacioHablando) return detener();
     if (ahora - inicio > 45000) detener();
   }, 80);
 
-  grabadora.start(250);
+  try { grabadora.start(); } catch (e) {
+    apagar();
+    return soltar(`No pude empezar a grabar (${e.name || e.message}). Mientras, escríbame.`);
+  }
   empezoEscucha();
+  $("#texto").placeholder = "Te escucho… toca el micrófono cuando termines";
 }
 
 $("#orbe").addEventListener("click", escuchar);
