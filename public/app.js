@@ -1723,6 +1723,7 @@ function hablar(texto) {
 // el dictado del navegador y, si falla, se cambia a grabar sola.
 const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const puedeGrabar = () => Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+const enCelular = esIOS || matchMedia("(pointer: coarse)").matches;
 let dictadoFalla = esIOS; // true = usar la grabación en lugar del dictado del navegador
 let transcribiendo = false;
 const usarGrabacion = () => puedeGrabar() && (dictadoFalla || !Reconocimiento);
@@ -1755,7 +1756,8 @@ function escuchar() {
   reconocedor.onend = () => {
     if (fallo && fallo !== "no-speech" && fallo !== "aborted") {
       // El dictado del navegador no sirve aquí: se intenta grabando (si se puede) sin que la persona repita el toque.
-      if (fallo !== "not-allowed" && puedeGrabar()) {
+      // Solo en celulares: en la computadora el dictado del navegador es el bueno y no se cambia.
+      if (enCelular && ["service-not-allowed", "language-not-supported"].includes(fallo) && puedeGrabar()) {
         dictadoFalla = true;
         escuchando = false;
         $("#btn-mic").classList.remove("escuchando");
@@ -1774,6 +1776,7 @@ function avisoMicrofono(error) {
       ? "No tengo permiso para el micrófono. En el iPhone: Ajustes → Safari → Micrófono → Permitir (o Preguntar), cierre DELTA y vuelva a abrirla."
       : "No tengo permiso para el micrófono. Toque el candado junto a la dirección y permita el micrófono.")
     : error === "NotFoundError" || error === "audio-capture" ? "No encuentro un micrófono en este equipo."
+    : error === "network" ? "El dictado del navegador no respondió (revise el internet). Intente otra vez o escríbame."
     : "No pude usar el micrófono ahora. Intente otra vez o escríbame.";
   burbuja("aviso", msg);
 }
