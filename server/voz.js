@@ -72,6 +72,7 @@ async function llamar(ruta, opciones = {}) {
 }
 
 function mensajeError(estado, detalle) {
+  if (/permission|speech_to_text/i.test(detalle)) return "La clave de ElevenLabs no tiene permiso para entender voz. En ElevenLabs → Developers → API Keys, edite la clave y ponga «Speech to Text» en Access.";
   if (estado === 401) return "La clave de ElevenLabs no es válida. Revísela en Railway.";
   if (/quota|credits/i.test(detalle)) return "Se acabaron los créditos de voz de este mes en ElevenLabs.";
   if (/can_not_use_instant_voice_cloning|subscription|plan/i.test(detalle)) return "Su plan de ElevenLabs no permite clonar voces. Necesita al menos el plan Starter.";
