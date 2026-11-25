@@ -17,6 +17,7 @@ const servidor = http.createServer((req, res) => {
     if (req.headers["xi-api-key"] !== "clave-buena") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end('{"detail":{"status":"invalid_api_key"}}'); }
     if (req.method === "POST" && req.url === "/v1/voices/add") { res.writeHead(200, { "Content-Type": "application/json" }); return res.end(`{"voice_id":"voz${llamadas.length}"}`); }
     if (req.method === "POST" && req.url.startsWith("/v1/text-to-speech/")) { res.writeHead(200, { "Content-Type": "audio/mpeg" }); return res.end(Buffer.from("ID3audio-falso")); }
+    if (req.method === "POST" && req.url === "/v1/speech-to-text") { res.writeHead(200, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ text: "  Delta,  qué tengo hoy " })); }
     if (req.method === "DELETE" && req.url.startsWith("/v1/voices/")) { res.writeHead(200, { "Content-Type": "application/json" }); return res.end("{}"); }
     res.writeHead(404); res.end();
   });
@@ -88,4 +89,21 @@ test("una clave mala da un mensaje claro", async () => {
   voz.guardarMuestra(ogg);
   await assert.rejects(voz.crearVoz({ nombre: "X", permiso: true }), /clave de ElevenLabs no es válida/);
   voz.borrarMuestras();
+});
+
+test("el oído del celular: manda la grabación a ElevenLabs y devuelve el texto", async () => {
+  process.env.ELEVENLABS_API_KEY = "clave-buena";
+  assert.equal(voz.estadoVoz().oido, true);
+  const m4a = Buffer.concat([Buffer.alloc(4), Buffer.from("ftypM4A "), Buffer.alloc(3000, 2)]);
+  const { texto } = await voz.transcribir(m4a);
+  assert.equal(texto, "Delta, qué tengo hoy");
+  const l = llamadas.findLast((x) => x.ruta === "/v1/speech-to-text");
+  const cuerpo = l.cuerpo.toString("latin1");
+  assert.match(cuerpo, /scribe_v1/);
+  assert.match(cuerpo, /filename="voz\.m4a"/);
+  assert.match(cuerpo, /audio\/mp4/);
+  await assert.rejects(voz.transcribir(Buffer.alloc(10)), /No alcancé a oír/);
+  delete process.env.ELEVENLABS_API_KEY;
+  assert.equal(voz.estadoVoz().oido, false);
+  await assert.rejects(voz.transcribir(m4a), /no está configurado/);
 });
