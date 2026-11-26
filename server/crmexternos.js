@@ -202,7 +202,7 @@ function guardar(f, x) {
   if (!x.nombre && !x.telefono) return "vacio";
   let tel = null;
   try { tel = normalizarTelefono(x.telefono); } catch { /* raro: se omite */ }
-  const ya = db.prepare("SELECT id, etapa, externo_etapa, campana FROM prospectos WHERE externo_id = ?").get(x.id);
+  const ya = db.prepare("SELECT id, etapa, externo_etapa, campana FROM prospectos WHERE externo_id = ? AND cliente_id = ?").get(x.id, f.cliente_id);
   if (ya) {
     if (x.campana && x.campana !== ya.campana && (!ya.campana || /^Anuncio( \(clic a WhatsApp\)| \d+)?$/.test(ya.campana))) db.prepare("UPDATE prospectos SET campana = ? WHERE id = ?").run(x.campana.slice(0, 160), ya.id);
     // Solo se mueve si cambió allá (así no se pisa lo que tú cambies en DELTA)
@@ -247,6 +247,13 @@ export function listarFuentes(cliente) {
 export async function sincronizarFuente(id) {
   const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(id));
   if (!f) throw new Error("Esa conexión ya no existe");
+  // La misma página no puede alimentar a dos clientes: se queda con el que la conectó primero.
+  const dueno = duenoDeCuenta(f);
+  if (dueno) {
+    const msg = `Esta llave es de la página de ${dueno}, no de este cliente. Quita esta conexión y pega la llave de la página correcta.`;
+    db.prepare("UPDATE crm_fuentes SET error = ? WHERE id = ?").run(msg, f.id);
+    throw new Error(`${TIPOS[f.tipo].nombre}: ${msg}`);
+  }
   // Pancake: si hay conversaciones de antes sin su número de mensajes (versión vieja), se repasa el mes completo
   const repasar = f.tipo === "pancake" && db.prepare("SELECT 1 FROM prospectos WHERE externo_id LIKE ? AND (externo_mensajes IS NULL OR campana = 'Anuncio (clic a WhatsApp)') LIMIT 1").get(`pancake:${f.cuenta}:%`);
   const desde = f.ultimo && !repasar ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
@@ -272,6 +279,12 @@ export async function sincronizarFuente(id) {
     db.prepare("UPDATE crm_fuentes SET error = ? WHERE id = ?").run(String(e.message).slice(0, 300), f.id);
     throw new Error(`${TIPOS[f.tipo].nombre}: ${e.message}`);
   }
+}
+
+/** Si otro cliente ya tenía conectada esa misma cuenta (antes que esta conexión), regresa su nombre. */
+function duenoDeCuenta(f) {
+  return db.prepare("SELECT c.nombre FROM crm_fuentes x JOIN clientes c ON c.id = x.cliente_id WHERE x.tipo = ? AND x.cuenta = ? AND x.cliente_id != ? AND x.id < ? ORDER BY x.id LIMIT 1")
+    .get(f.tipo, f.cuenta, f.cliente_id, f.id ?? Number.MAX_SAFE_INTEGER)?.nombre || null;
 }
 
 /** La llave de Pancake es un JWT cuyo contenido trae el id de la página ({ id, timestamp }). */
@@ -301,6 +314,8 @@ export async function conectarFuente({ cliente, tipo, cuenta, token } = {}) {
   if (tipo === "kommo") cu = cu.replace(/^https?:\/\//, "").replace(/\.kommo\.com.*$/i, "").replace(/\/.*$/, "").toLowerCase();
   if (!cu || !/^[\w.-]{2,80}$/.test(cu)) throw new Error(`Falta el dato: ${TIPOS[tipo].cuenta}`);
   if (tk.length < 10) throw new Error("Pega la llave completa");
+  const otro = duenoDeCuenta({ tipo, cuenta: cu, cliente_id: c.id });
+  if (otro) throw new Error(`Esa llave es de la página de ${otro}, no de ${c.nombre}. Pega la llave de la página de ${c.nombre}.`);
   const ya = db.prepare("SELECT id FROM crm_fuentes WHERE cliente_id = ? AND tipo = ? AND cuenta = ?").get(c.id, tipo, cu);
   const id = ya ? (db.prepare("UPDATE crm_fuentes SET token = ?, error = NULL WHERE id = ?").run(tk, ya.id), ya.id)
     : db.prepare("INSERT INTO crm_fuentes (cliente_id, tipo, cuenta, token) VALUES (?,?,?,?)").run(c.id, tipo, cu, tk).lastInsertRowid;
@@ -390,11 +405,13 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
   const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(fuenteId));
   if (!f) throw new Error("Esa conexión ya no existe");
   if (f.tipo !== "pancake") throw new Error("Por ahora DELTA lee los chats de Pancake");
+  const dueno = duenoDeCuenta(f);
+  if (dueno) throw new Error(`Esta llave es de la página de ${dueno}, no de este cliente`);
   const cliente = db.prepare("SELECT * FROM clientes WHERE id = ?").get(f.cliente_id);
   // Primero las ventas que nadie ha confirmado (las que salieron de la etiqueta), luego los chats que cambiaron.
   const pendientes = db.prepare(`SELECT id, nombre, etapa, externo_id, valor, interes, origen, campana, externo_etiquetas FROM prospectos
-      WHERE externo_id LIKE ? AND (${PENDIENTE})
-      ORDER BY (etapa = 'venta') DESC, externo_actualizado DESC LIMIT ?`).all(`pancake:${f.cuenta}:%`, Number(max));
+      WHERE externo_id LIKE ? AND cliente_id = ? AND (${PENDIENTE})
+      ORDER BY (etapa = 'venta') DESC, externo_actualizado DESC LIMIT ?`).all(`pancake:${f.cuenta}:%`, f.cliente_id, Number(max));
   const r = { leidos: 0, movidos: 0, ventas: 0, perdidos: 0, errores: 0 };
   for (const p of pendientes) {
     try {
@@ -450,7 +467,7 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
       if (/ANTHROPIC_API_KEY|credit|billing|429|rate/i.test(e.message)) break;
     }
   }
-  r.pendientes = Math.max(0, db.prepare(`SELECT COUNT(*) n FROM prospectos WHERE externo_id LIKE ? AND (${PENDIENTE})`).get(`pancake:${f.cuenta}:%`).n);
+  r.pendientes = Math.max(0, db.prepare(`SELECT COUNT(*) n FROM prospectos WHERE externo_id LIKE ? AND cliente_id = ? AND (${PENDIENTE})`).get(`pancake:${f.cuenta}:%`, f.cliente_id).n);
   db.prepare("UPDATE crm_fuentes SET resultado = json_set(COALESCE(resultado, '{}'), '$.chats', json(?)) WHERE id = ?").run(JSON.stringify({ ...r, fecha: new Date().toISOString() }), f.id);
   if (r.movidos) avisarPantalla({ tipo: "crm" });
   return r;

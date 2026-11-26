@@ -238,3 +238,24 @@ test("ventas sin confirmar se releen: se quitan si no compró y se cuentan por f
   assert.equal(ext.leerRespuestaIA('{"etapa":"asistió","origen":"redes","resumen":"Fue y luego').etapa, "asistio");
   ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
 });
+
+test("la llave de Pancake de un cliente no se puede usar en otro (no se cuelan sus prospectos)", async () => {
+  const betzy = agencia.crearCliente({ nombre: "Betzy Llave" });
+  const hector = agencia.crearCliente({ nombre: "Héctor Llave" });
+  ext._fetchDePrueba(async () => ({ success: true, conversations: [
+    { id: "waba_77_5212221770671", type: "INBOX", inserted_at: hace(1).toISOString(), customers: [{ name: "Luis Acevedo" }], recent_phone_numbers: [], from: { id: "wa_5212221770671" } },
+  ] }));
+  const llave = "eyJhbGciOiJIUzI1NiJ9." + Buffer.from(JSON.stringify({ id: "waba_77", timestamp: 1 })).toString("base64url") + ".firma";
+  const r = await ext.conectarFuente({ cliente: betzy.id, tipo: "pancake", cuenta: "", token: llave });
+  assert.equal(r.nuevos, 1);
+  await assert.rejects(ext.conectarFuente({ cliente: hector.id, tipo: "pancake", cuenta: "", token: llave }), /es de la página de Betzy Llave/);
+  assert.equal(ext.listarFuentes(hector.id).length, 0, "no se guarda la conexión equivocada");
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM prospectos WHERE cliente_id = ?").get(hector.id).n, 0);
+  // Una conexión equivocada que ya existía deja de traer datos y avisa
+  const id = db.prepare("INSERT INTO crm_fuentes (cliente_id, tipo, cuenta, token) VALUES (?,?,?,?)").run(hector.id, "pancake", "waba_77", llave).lastInsertRowid;
+  await assert.rejects(ext.sincronizarFuente(id), /es de la página de Betzy Llave/);
+  assert.match(ext.listarFuentes(hector.id)[0].error, /Quita esta conexión/);
+  await assert.rejects(ext.leerChats(id), /es de la página de Betzy Llave/);
+  // La de Betzy sigue funcionando
+  assert.ok((await ext.sincronizarFuente(r.id)).revisados >= 1);
+});
