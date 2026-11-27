@@ -311,3 +311,18 @@ test("prospectos de Pancake que quedaron en otro cliente regresan a su dueño; m
   assert.equal(crm.guardarUtilidad({ cliente: dueno.id, ticket: 3000, margen: 0 }).margen, null);
   assert.equal(crm.guardarUtilidad({ cliente: dueno.id, margen: "60" }).margen, 60);
 });
+
+test("la etiqueta VENTA se prende sola una vez en el Pancake del Dr. Escutia", async () => {
+  const doc = agencia.crearCliente({ nombre: "Dr. Héctor Escutia Prueba" });
+  const id = db.prepare("INSERT INTO crm_fuentes (cliente_id, tipo, cuenta, token) VALUES (?,?,?,?)").run(doc.id, "pancake", "waba_esc", "tok-esc-123456").lastInsertRowid;
+  const p = crm.crearProspecto({ cliente: doc.id, nombre: "Con etiqueta" });
+  db.prepare("UPDATE prospectos SET externo_id = 'pancake:waba_esc:1', externo_etiquetas = 'VENTA' WHERE id = ?").run(p.id);
+  ext._fetchDePrueba(async () => ({ success: true, conversations: [] }));
+  const r = await ext.prenderVentaPorEtiquetaDelDoctor();
+  assert.ok(r.some((x) => x.id === Number(id) && x.venta_etiqueta));
+  assert.equal(crm.obtenerProspecto(p.id).etapa, "venta");
+  // Si el dueño la apaga, no se vuelve a prender sola
+  await ext.ventaPorEtiqueta(id, false);
+  assert.equal((await ext.prenderVentaPorEtiquetaDelDoctor()).length, 0);
+  ext._fetchDePrueba(null);
+});

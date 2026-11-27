@@ -361,6 +361,8 @@ export async function ventaPorEtiqueta(id, si) {
   const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(id));
   if (!f) throw new Error("Esa conexión ya no existe");
   if (f.tipo !== "pancake") throw new Error("Esto solo aplica a Pancake");
+  const dueno = duenoDeCuenta(f);
+  if (dueno) throw new Error(`Esta llave es de la página de ${dueno}, no de este cliente`);
   const valor = si ? 1 : 0;
   db.prepare("UPDATE crm_fuentes SET venta_etiqueta = ?, historia = CASE WHEN ? = 1 THEN NULL ELSE historia END WHERE id = ?").run(valor, valor, f.id);
   const filas = db.prepare("SELECT id, etapa, externo_etapa, externo_etiquetas FROM prospectos WHERE externo_id LIKE ? AND cliente_id = ?").all(`pancake:${f.cuenta}:%`, f.cliente_id);
@@ -382,6 +384,19 @@ export async function ventaPorEtiqueta(id, si) {
   if (valor) { try { r = await sincronizarFuente(f.id); } catch (e) { r = { error: e.message }; } }
   return { ...vestir(db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(f.id)), cambiadas, sincronizado: r };
 }
+
+/** El dueño decidió (27/11/2026) que en el Pancake del Dr. Héctor Escutia la etiqueta VENTA sí es venta: se prende sola
+ *  una vez (si nadie la ha tocado), se aplica a lo que ya está y se vuelven a traer los 90 días. Se puede apagar en Conexiones. */
+export async function prenderVentaPorEtiquetaDelDoctor() {
+  const filas = db.prepare(`SELECT f.id FROM crm_fuentes f JOIN clientes c ON c.id = f.cliente_id
+      WHERE f.tipo = 'pancake' AND f.venta_etiqueta IS NULL AND c.estado != 'terminado' AND lower(c.nombre) LIKE '%escutia%'`).all();
+  const r = [];
+  for (const f of filas) {
+    try { r.push(await ventaPorEtiqueta(f.id, true)); } catch (e) { console.error("[crm etiqueta VENTA]", e.message); }
+  }
+  return r;
+}
+if (!process.env.NODE_TEST_CONTEXT) setTimeout(() => prenderVentaPorEtiquetaDelDoctor().then((r) => { for (const x of r) console.log(`[crm] etiqueta VENTA prendida en ${x.cuenta}: ${x.cambiadas} ventas, ${x.sincronizado?.nuevos ?? 0} nuevos`); }), 5000).unref?.();
 
 /** Prospectos de Pancake que quedaron en el cliente equivocado (por ejemplo, si un cliente tuvo un rato la llave de otro):
  *  se regresan al cliente dueño de esa página. */
@@ -561,9 +576,9 @@ export function leerChatsEnFondo(fuenteId, opciones) {
 // Antes, etiquetas como "Tratamiento facial", "Página" o "Comprobante" contaban como venta. Se vuelven a revisar
 // con la regla nueva; las que ya no son venta regresan a su etapa y DELTA vuelve a leer su chat para decidir.
 export function revisarVentasPorEtiqueta() {
-  const confiables = new Set(db.prepare("SELECT cuenta FROM crm_fuentes WHERE tipo = 'pancake' AND venta_etiqueta = 1").all().map((r) => r.cuenta));
-  const filas = db.prepare("SELECT id, notas, externo_id FROM prospectos WHERE externo_id LIKE 'pancake:%' AND etapa = 'venta' AND externo_etapa = 'venta'").all()
-    .filter((f) => !confiables.has(f.externo_id.split(":")[1]));
+  const confiables = new Set(db.prepare("SELECT cuenta, cliente_id FROM crm_fuentes WHERE tipo = 'pancake' AND venta_etiqueta = 1").all().map((r) => `${r.cuenta}|${r.cliente_id}`));
+  const filas = db.prepare("SELECT id, notas, externo_id, cliente_id FROM prospectos WHERE externo_id LIKE 'pancake:%' AND etapa = 'venta' AND externo_etapa = 'venta'").all()
+    .filter((f) => !confiables.has(`${f.externo_id.split(":")[1]}|${f.cliente_id}`));
   let corregidas = 0;
   for (const f of filas) {
     const m = /\(etapa: ([^)\n]*)\)/.exec(f.notas || "");
