@@ -2315,3 +2315,47 @@ html[data-mood="dia"] .crm-edad-barra { background: #ece8f8; }
 .punto-mac { width: 10px; height: 10px; border-radius: 50%; background: rgba(160,160,180,.5); flex: none; align-self: center; }
 .punto-mac.on { background: #3ddc97; box-shadow: 0 0 8px rgba(61,220,151,.7); }
 .mac-codigo { font-size: 1.35em; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+
+/* ---------- Crear campaña (Paid media) ---------- */
+.cp-dialogo { width: min(880px, calc(100% - 32px)); }
+.cp-aviso { margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; background: rgba(255,207,92,.12); border: 1px solid rgba(255,207,92,.35); color: var(--texto); font-size: 13px; }
+.cp-estrategia { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--cian-suave); margin-bottom: 12px; }
+.cp-estrategia b { font-size: 15px; }
+.cp-estrategia p { margin: 0; font-size: 14px; line-height: 1.45; }
+.cp-rejilla { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cp-img { aspect-ratio: 1 / 1; border-radius: 12px; border: 1px dashed var(--borde); display: grid; place-items: center; overflow: hidden; background: rgba(8,5,24,.4); font-size: 13px; }
+.cp-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cp-img-chica { width: 140px; flex: none; }
+.cp-img-botones.botones { display: grid; gap: 8px; margin-top: 8px; }
+.cp-img-botones select { min-width: 0; }
+.cp-sub { font-size: 12px; color: var(--tenue); }
+.cp-textos { display: grid; gap: 8px; }
+.dialogo label.cp-texto { display: grid; gap: 6px; margin: 0; padding: 10px; border-radius: 12px; border: 1px solid var(--borde); color: var(--texto); }
+.dialogo label.cp-texto.elegido { border-color: var(--lila); background: var(--cian-suave); }
+.cp-texto-cabeza { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.cp-texto textarea { font-size: 13.5px; }
+.cp-texto .fila-2 input { font-size: 12.5px; }
+.cp-publico { border: 1px solid var(--borde); border-radius: 12px; padding: 4px 12px 10px; margin: 14px 0 4px; }
+.cp-publico legend { font-size: 12px; color: var(--tenue); padding: 0 6px; }
+.fila-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.fila-4 label { margin: 8px 0 0; }
+.cp-consejos { margin: 8px 0 0; padding-left: 18px; }
+.cp-listo { display: flex; gap: 16px; align-items: center; padding: 8px 0; }
+.cp-listo b { font-size: 16px; }
+.cp-listo p { margin: 6px 0 10px; line-height: 1.45; }
+.cp-listo a { color: var(--lila); font-size: 13px; }
+.cp-rapidos { display: flex; gap: 8px; margin-top: -4px; }
+.cp-rapidos button, .pm-camp-acciones button { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--borde); background: transparent; color: var(--lila); font-size: 12px; font-weight: 600; }
+.pm-camp-acciones { display: flex; gap: 8px; justify-content: flex-end; }
+.pm-camp-acciones button.seguro, #cp-siguiente.seguro, #pr-guardar.seguro { border-color: rgba(255,207,92,.7); color: var(--amarillo); }
+.pm-crear { border-color: rgba(183,166,255,.55); }
+@media (max-width: 720px) {
+  .cp-rejilla { grid-template-columns: 1fr; }
+  .fila-4 { grid-template-columns: 1fr 1fr; }
+  .cp-listo { flex-direction: column; align-items: flex-start; }
+  .pm-camp-acciones { justify-content: flex-start; }
+}
+html[data-mood="dia"] .cp-img { background: rgba(255,255,255,.7); }
+html[data-mood="dia"] .cp-aviso { background: rgba(255,190,40,.16); }
+html[data-mood="dia"] .cp-rapidos button, html[data-mood="dia"] .pm-camp-acciones button { color: var(--cian); background: rgba(255,255,255,.7); }
+html[data-mood="dia"] #cp-siguiente.seguro, html[data-mood="dia"] #pr-guardar.seguro, html[data-mood="dia"] .pm-camp-acciones button.seguro { color: #8a5a00; }

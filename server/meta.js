@@ -7,7 +7,8 @@
 //     Si la app es de tipo "Negocio", también va META_CONFIG_ID (la configuración de Facebook Login for Business).
 //  2. META_ACCESS_TOKEN: permiso de un "usuario del sistema" del Business Manager (no vence).
 //
-// Solo LEE: seguidores, alcance, publicaciones y anuncios. No publica ni toca campañas.
+// Casi todo es de LECTURA: seguidores, alcance, publicaciones y anuncios. Lo único que escribe vive en
+// campanas.js (crear campañas EN PAUSA, pausar/encender y cambiar presupuesto), siempre con un toque del dueño.
 import crypto from "node:crypto";
 import { db, getAjuste, setAjuste } from "./db.js";
 import { listarClientes, obtenerCliente, registrarGasto, clienteRequerido, mesActual } from "./agencia.js";
@@ -21,6 +22,7 @@ const PERMISOS = [
   "read_insights", "instagram_basic", "instagram_manage_insights",
   "leads_retrieval", "pages_manage_ads", // formularios instantáneos (clientes potenciales) para el CRM
   "pages_messaging", "instagram_manage_messages", // quién escribió por Messenger e Instagram (solo leer)
+  "ads_management", // crear campañas en pausa, pausarlas y cambiar presupuesto (solo con un toque del dueño)
 ].join(",");
 /** Lo que necesita el CRM, en palabras sencillas. */
 export const PERMISOS_CRM = {
@@ -29,6 +31,8 @@ export const PERMISOS_CRM = {
   pages_messaging: "mensajes de Messenger",
   instagram_manage_messages: "mensajes de Instagram",
 };
+/** Lo que necesita "Crear campaña" y los botones de Paid media. */
+export const PERMISOS_ANUNCIOS = { ads_management: "crear y manejar anuncios" };
 const DIA = 864e5;
 const CADA = 6 * 3600e3; // se actualiza sola cada 6 horas
 
@@ -113,6 +117,29 @@ async function pedir(ruta, params = {}, token = tokenPrincipal(), { sinPrueba = 
   }
   return d;
 }
+
+/** Escribe en Meta (POST). Solo lo usa campanas.js, siempre por un toque del dueño. */
+async function enviar(ruta, cuerpo = {}, token = tokenPrincipal()) {
+  if (!token) throw new Error("Meta no está conectado. Conéctelo en Ajustes ⚙ → Conectar Meta.");
+  const url = ruta.startsWith("http") ? ruta : GRAPH() + ruta;
+  if (!url.startsWith("https://graph.facebook.com/")) throw new Error("Dirección de Meta no válida");
+  const form = new URLSearchParams();
+  for (const [k, v] of Object.entries(cuerpo)) if (v !== undefined && v !== null) form.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+  form.set("access_token", token);
+  const p = prueba(token);
+  if (p) form.set("appsecret_proof", p);
+  const r = await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(90000) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) {
+    const e = new Error("Meta: " + (d.error?.error_user_msg || d.error?.message || `error ${r.status}`));
+    e.codigo = d.error?.code;
+    e.subcodigo = d.error?.error_subcode;
+    throw e;
+  }
+  return d;
+}
+/** Para campanas.js: leer y escribir en Meta con la conexión del dueño. */
+export const graph = { leer: (ruta, params) => pedir(ruta, params), escribir: (ruta, cuerpo) => enviar(ruta, cuerpo) };
 
 /** Trae todas las páginas de una lista de Meta (con tope para no gastar de más). */
 async function todo(ruta, params, token, max = 500) {
@@ -493,14 +520,14 @@ export async function formulariosDeCliente(clienteId, { desde } = {}) {
   return { paginas: paginas.length, formularios, leads };
 }
 
-/** ¿Qué permisos de los que usa el CRM le faltan a la conexión de Meta? (null si no se pudo saber) */
-export async function permisosFaltantes() {
+/** ¿Qué permisos de los que usa el CRM (o los anuncios) le faltan a la conexión de Meta? (null si no se pudo saber) */
+export async function permisosFaltantes(cuales = PERMISOS_CRM) {
   if (!metaConectado() || modoSistema()) return null;
   if (leadsDePrueba) return [];
   try {
     const d = await pedir("/me/permissions");
     const dados = new Set((d.data || []).filter((x) => x.status === "granted").map((x) => x.permission));
-    return Object.keys(PERMISOS_CRM).filter((k) => !dados.has(k));
+    return Object.keys(cuales).filter((k) => !dados.has(k));
   } catch { return null; }
 }
 

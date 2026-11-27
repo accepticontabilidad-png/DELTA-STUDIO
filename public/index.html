@@ -702,6 +702,7 @@
           <div class="ag-botones">
             <button type="button" class="tb-link" data-abrir-meta title="Facebook, Instagram y anuncios de tus clientes">Meta</button>
             <button type="button" class="tb-link" data-fi-ir="#pm-form">+ Resultados</button>
+            <button type="button" class="tb-link pm-crear" id="pm-crear" hidden>+ Crear campaña</button>
             <button type="button" class="ag-agregar" data-pedir="¿Cómo van los anuncios de mis clientes este mes? Empieza por las campañas que gastan sin resultados, luego dime cuánto le cuesta cada contacto a cada cliente, quién vende más de lo que invierte y qué harías tú.">Resumen con DELTA</button>
           </div>
         </div>
@@ -722,6 +723,10 @@
             </div>
           </div>
           <div class="pg-col fi-col-2">
+            <div class="panel pm-mias" id="pm-mias-caja" hidden>
+              <div class="ag-cabeza"><h2>Campañas hechas con DELTA</h2><span class="tb-hora" id="pm-mias-n"></span></div>
+              <ul id="pm-mias" class="pm-avisos"></ul>
+            </div>
             <div class="panel">
               <div class="ag-cabeza"><h2>Inversión y contactos</h2><span class="tb-hora">últimos 6 meses</span></div>
               <div id="pm-grafica" class="fi-grafica"></div>
@@ -751,7 +756,7 @@
               </dl>
             </div>
           </div>
-          <p class="tenue chico tb-nota">DELTA solo lee tus campañas: no las apaga ni las cambia. Los números de Meta se actualizan solos cada 6 horas. Dile a DELTA: "Clínica Sonrisa vendió 40 mil este mes por los anuncios".</p>
+          <p class="tenue chico tb-nota">DELTA nunca enciende, pausa ni cambia una campaña por su cuenta: solo cuando tú tocas el botón y lo confirmas. Las campañas que arma DELTA se suben a Meta en pausa. Los números de Meta se actualizan solos cada 6 horas. Dile a DELTA: "Clínica Sonrisa vendió 40 mil este mes por los anuncios".</p>
         </div>
       </section>
 
@@ -939,6 +944,104 @@
       <div class="botones">
         <button type="button" id="cl-cancelar">Cancelar</button>
         <button type="submit" class="primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Crear campaña: DELTA arma estrategia, textos e imagen; se sube a Meta EN PAUSA y solo se enciende con tu toque -->
+  <dialog id="dlg-campana" class="dialogo ancho cp-dialogo">
+    <form id="form-campana" method="dialog">
+      <h2 id="cp-titulo">Crear campaña</h2>
+      <p id="cp-aviso" class="cp-aviso" hidden></p>
+
+      <div id="cp-paso1" class="cp-paso">
+        <div class="fila-2">
+          <label>Cliente <select id="cp-cliente" required></select></label>
+          <label>Objetivo <select id="cp-objetivo"></select></label>
+        </div>
+        <label>¿Qué quieres anunciar? <textarea id="cp-oferta" rows="2" maxlength="600" placeholder="Ej. Limpieza dental con revisión gratis, solo este mes, en la clínica de Angelópolis" required></textarea></label>
+        <label id="cp-enlace-caja" hidden>Sitio web al que llegan <input id="cp-enlace" type="text" maxlength="300" placeholder="https://clinica.mx/limpieza" /></label>
+        <div class="fila-2">
+          <label>Inversión al día ($) <input id="cp-presupuesto" type="text" inputmode="decimal" maxlength="10" placeholder="Ej. 150" required /></label>
+          <label>Cuántos días <input id="cp-dias" type="text" inputmode="numeric" maxlength="2" placeholder="Vacío = sin fin" /></label>
+        </div>
+        <label>Algo más que deba saber DELTA (opcional) <input id="cp-indicaciones" type="text" maxlength="600" placeholder="Ej. que hable a mamás, tono cercano" /></label>
+      </div>
+
+      <div id="cp-paso2" class="cp-paso" hidden>
+        <div class="cp-estrategia">
+          <b id="cp-nombre"></b>
+          <p id="cp-resumen"></p>
+          <small class="tenue" id="cp-porque"></small>
+        </div>
+        <div class="cp-rejilla">
+          <div class="cp-img-caja">
+            <div class="cp-img" id="cp-img"><span class="tenue">Aún no hay imagen</span></div>
+            <label>Idea de la imagen <textarea id="cp-prompt" rows="3" maxlength="3000"></textarea></label>
+            <div class="cp-img-botones botones">
+              <button type="button" id="cp-generar">Crear imagen con IA</button>
+              <select id="cp-pieza" aria-label="Usar una imagen del Estudio"><option value="">o usa una del Estudio…</option></select>
+            </div>
+          </div>
+          <div class="cp-textos">
+            <span class="cp-sub">Elige el texto del anuncio (puedes corregirlo)</span>
+            <div id="cp-textos"></div>
+          </div>
+        </div>
+        <fieldset class="cp-publico">
+          <legend>A quién le llega</legend>
+          <div class="fila-4">
+            <label>Edad de <input id="cp-edad-min" type="text" inputmode="numeric" maxlength="2" /></label>
+            <label>a <input id="cp-edad-max" type="text" inputmode="numeric" maxlength="2" /></label>
+            <label>Género <select id="cp-genero"><option value="todos">Todos</option><option value="mujeres">Mujeres</option><option value="hombres">Hombres</option></select></label>
+            <label>Radio (km) <input id="cp-radio" type="text" inputmode="numeric" maxlength="2" /></label>
+          </div>
+          <label>Ciudad <input id="cp-ciudad" type="text" maxlength="80" placeholder="Vacío = todo México" /></label>
+          <small class="tenue" id="cp-publico-desc"></small>
+        </fieldset>
+        <div class="fila-2">
+          <label>Inversión al día ($) <input id="cp-presupuesto-2" type="text" inputmode="decimal" maxlength="10" /></label>
+          <label>Cuántos días <input id="cp-dias-2" type="text" inputmode="numeric" maxlength="2" placeholder="Vacío = sin fin" /></label>
+        </div>
+        <div class="fila-2" id="cp-cuentas-fila">
+          <label>Cuenta de anuncios <select id="cp-cuenta"></select></label>
+          <label>Página de Facebook <select id="cp-pagina"></select></label>
+        </div>
+        <ul class="cp-consejos tenue chico" id="cp-consejos"></ul>
+      </div>
+
+      <div id="cp-paso3" class="cp-paso" hidden>
+        <div class="cp-listo">
+          <div class="cp-img cp-img-chica" id="cp-img-3"></div>
+          <div>
+            <b id="cp-estado-txt"></b>
+            <p id="cp-estado-detalle" class="tenue"></p>
+            <a id="cp-admin" href="#" target="_blank" rel="noopener" hidden>Verla en el Administrador de anuncios ↗</a>
+          </div>
+        </div>
+      </div>
+
+      <p id="cp-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="cp-descartar" class="peligro" hidden>Descartar</button>
+        <button type="button" id="cp-cerrar">Cerrar</button>
+        <button type="button" id="cp-guardar" hidden>Guardar cambios</button>
+        <button type="submit" id="cp-siguiente" class="primario">Que DELTA la arme</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Cambiar el presupuesto diario de una campaña que ya existe -->
+  <dialog id="dlg-presu" class="dialogo">
+    <form id="form-presu" method="dialog">
+      <h2>Presupuesto diario</h2>
+      <p><b id="pr-nombre"></b><br /><small class="tenue" id="pr-actual"></small></p>
+      <label>Nuevo presupuesto al día ($) <input id="pr-monto" type="text" inputmode="decimal" maxlength="10" required /></label>
+      <div class="cp-rapidos"><button type="button" data-pr-factor="0.8">−20 %</button><button type="button" data-pr-factor="1.2">+20 %</button><button type="button" data-pr-factor="1.5">+50 %</button></div>
+      <p id="pr-msg" class="error" hidden></p>
+      <div class="botones">
+        <button type="button" id="pr-cancelar">Cancelar</button>
+        <button type="submit" id="pr-guardar" class="primario">Cambiar en Meta</button>
       </div>
     </form>
   </dialog>

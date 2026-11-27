@@ -23,6 +23,7 @@ import * as voz from "./voz.js";
 import * as agencia from "./agencia.js";
 import * as finanzas from "./finanzas.js";
 import * as paidmedia from "./paidmedia.js";
+import * as campanas from "./campanas.js";
 import * as contenido from "./contenido.js";
 import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
@@ -471,6 +472,19 @@ api.delete("/contenido/:id", envolver((req) => contenido.borrarContenido(Number(
 api.get("/paidmedia", envolver((req) => paidmedia.paidMedia(req.query.mes ? String(req.query.mes) : undefined)));
 api.put("/paidmedia/resultados", envolver((req) => paidmedia.registrarResultados(req.body || {})));
 api.delete("/paidmedia/resultados", envolver((req) => paidmedia.borrarResultados({ cliente: req.query.cliente, mes: req.query.mes })));
+// Crear campañas (quedan EN PAUSA) y botones de Paid media. Solo el dueño: el equipo no tiene permiso para estas rutas.
+// Encender, pausar y cambiar presupuesto SIEMPRE lo pide el dueño con un toque; DELTA (el chat) no tiene herramienta para esto.
+api.get("/campanas", envolver(async (req) => ({ ...(await campanas.estado()), campanas: campanas.listar({ cliente: req.query.cliente || undefined }) })));
+api.post("/campanas", envolver((req) => campanas.crear(req.body || {})));
+api.get("/campanas/:id", envolver((req) => campanas.obtener(req.params.id) || Promise.reject(new Error("No existe esa campaña"))));
+api.patch("/campanas/:id", envolver((req) => campanas.editar(req.params.id, req.body || {})));
+api.delete("/campanas/:id", envolver((req) => campanas.descartar(req.params.id)));
+api.post("/campanas/:id/imagen", envolver((req) => campanas.generarImagen(req.params.id, req.body || {})));
+api.post("/campanas/:id/meta", envolver((req) => campanas.subirAMeta(req.params.id)));
+api.post("/campanas/:id/encender", envolver((req) => campanas.encender(req.params.id)));
+api.get("/paidmedia/campanas/:id/presupuesto", envolver((req) => campanas.presupuesto(req.params.id)));
+api.put("/paidmedia/campanas/:id/presupuesto", envolver((req) => campanas.cambiarPresupuesto(req.params.id, req.body?.diario)));
+api.put("/paidmedia/campanas/:id/estado", envolver((req) => campanas.cambiarEstado(req.params.id, Boolean(req.body?.activa))));
 api.post("/cobros", envolver((req) => finanzas.registrarCobro(req.body || {})));
 api.patch("/cobros/:id", envolver((req) => {
   const b = req.body || {};
