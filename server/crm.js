@@ -108,6 +108,9 @@ function origenValido(x) {
 db.exec("UPDATE prospectos SET alcanzo = 3 WHERE alcanzo >= 4 AND etapa != 'venta'");
 // Para la utilidad del cliente: cuánto vale una venta en promedio (si no se anotó el monto) y su margen (%).
 for (const col of ["ticket REAL", "margen REAL"]) { try { db.exec(`ALTER TABLE crm_config ADD COLUMN ${col}`); } catch { /* ya existe */ } }
+// Un margen de 0 % no existe (querría decir que al cliente no le queda nada de lo que vende) y hacía que la utilidad
+// saliera igual a menos la inversión. Se trata como "sin margen": la utilidad es lo vendido menos los anuncios.
+db.exec("UPDATE crm_config SET margen = NULL WHERE margen <= 0");
 try {
   db.exec("ALTER TABLE prospectos ADD COLUMN meta_lead_id TEXT"); // formulario de anuncio de Meta del que vino
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_meta ON prospectos(meta_lead_id)");
@@ -601,7 +604,7 @@ export function guardarUtilidad({ cliente, ticket, margen } = {}) {
     return Math.round(n * 100) / 100;
   };
   if (ticket !== undefined) db.prepare("UPDATE crm_config SET ticket = ? WHERE cliente_id = ?").run(num(ticket, "El valor promedio de una venta", 1e9), c.id);
-  if (margen !== undefined) db.prepare("UPDATE crm_config SET margen = ? WHERE cliente_id = ?").run(num(margen, "El margen (de 0 a 100 %)", 100), c.id);
+  if (margen !== undefined) { const m = num(margen, "El margen (de 0 a 100 %)", 100); db.prepare("UPDATE crm_config SET margen = ? WHERE cliente_id = ?").run(m > 0 ? m : null, c.id); }
   return utilidadConfig(c.id);
 }
 

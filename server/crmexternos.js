@@ -25,6 +25,9 @@ for (const col of ["externo_id TEXT", "externo_etapa TEXT", "externo_actualizado
   try { db.exec(`ALTER TABLE prospectos ADD COLUMN ${col}`); } catch { /* ya existe */ }
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prospectos_externo ON prospectos(externo_id)");
+// venta_etiqueta = 1: en esta página la etiqueta VENTA de Pancake SÍ quiere decir que compró (así trabaja, p. ej., el Dr. Héctor).
+// historia = 1: ya se trajeron completos los últimos 90 días (antes solo se traían 30 y faltaban conversaciones del mes).
+for (const col of ["venta_etiqueta INTEGER", "historia INTEGER"]) { try { db.exec(`ALTER TABLE crm_fuentes ADD COLUMN ${col}`); } catch { /* ya existe */ } }
 
 export const TIPOS = {
   kommo: { nombre: "Kommo", cuenta: "Subdominio de Kommo", ejemplo: "miclinica (de miclinica.kommo.com)" },
@@ -131,25 +134,33 @@ const basePancake = (f) => `https://pages.fm/api/public_api/v1/pages/${encodeURI
 async function leerPancake(f, { desde }) {
   const base = basePancake(f);
   const fin = Math.floor(Date.now() / 1000);
-  // Pancake deja pedir de un mes a la vez
-  const ini = Math.max(Math.floor(Date.parse(desde) / 1000), fin - 30 * 86400);
+  // Pancake deja pedir de un mes a la vez: se pide en tramos de 30 días hasta cubrir todo el rango
+  // (antes solo se pedían los últimos 30 y se perdían las conversaciones de principios de mes).
+  const ini = Math.max(Math.floor(Date.parse(desde) / 1000), fin - 92 * 86400);
+  const tramos = [];
+  for (let a = fin; a > ini; a -= 30 * 86400) tramos.push([Math.max(ini, a - 30 * 86400), a]);
   // Etiquetas de la página (LEAD, PERFILAMIENTO, APROBADO, VENTA…): si las usan, dicen la etapa
   const etiquetas = new Map();
   try {
     const t = await pedir(`${base}/tags?page_access_token=${encodeURIComponent(f.token)}`);
     for (const x of t.tags || []) if (x) etiquetas.set(String(x.id), x.text || x.name || "");
   } catch { /* sin etiquetas no pasa nada */ }
-  const lista = [];
-  for (let page = 1; page <= 30; page++) {
-    const d = await pedir(`${base}/conversations?page_access_token=${encodeURIComponent(f.token)}&page_id=${encodeURIComponent(f.cuenta)}&since=${ini}&until=${fin}&page_number=${page}&order_by=updated_at`);
-    if (d.success === false) {
-      if (/access_token|token/i.test(d.message || "")) throw new Error(`Pancake dice que esa llave no es de la página "${f.cuenta}". Revisa el id: en WhatsApp empieza con waba_ y no es el número de teléfono.`);
-      throw new Error("Pancake: " + (d.message || "no respondió"));
+  const vistas = new Map();
+  for (const [desdeT, hastaT] of tramos) {
+    let enTramo = 0;
+    for (let page = 1; page <= 60; page++) {
+      const d = await pedir(`${base}/conversations?page_access_token=${encodeURIComponent(f.token)}&page_id=${encodeURIComponent(f.cuenta)}&since=${desdeT}&until=${hastaT}&page_number=${page}&order_by=updated_at`);
+      if (d.success === false) {
+        if (/access_token|token/i.test(d.message || "")) throw new Error(`Pancake dice que esa llave no es de la página "${f.cuenta}". Revisa el id: en WhatsApp empieza con waba_ y no es el número de teléfono.`);
+        throw new Error("Pancake: " + (d.message || "no respondió"));
+      }
+      const c = d.conversations || [];
+      for (const x of c) if (!vistas.has(x.id)) vistas.set(x.id, x);
+      enTramo += c.length;
+      if (!c.length || (d.total && enTramo >= d.total)) break;
     }
-    const c = d.conversations || [];
-    lista.push(...c);
-    if (!c.length || (d.total && lista.length >= d.total)) break;
   }
+  const lista = [...vistas.values()];
   const red = (c) => { const t = String(c.id || c.customer_id || ""); return /^wa(ba)?_|whatsapp/i.test(t) ? "whatsapp" : /^ig(o)?_|^ig|instagram/i.test(t) || c.platform === "instagram" ? "instagram" : "facebook"; };
   const salida = [];
   for (const c of lista.filter((c) => (c.type || "INBOX") === "INBOX")) {
@@ -162,7 +173,10 @@ async function leerPancake(f, { desde }) {
     let etapa = c.last_sent_by?.id && c.from?.id && String(c.last_sent_by.id) !== String(c.from.id) ? "contactado" : "nuevo";
     // La etiqueta de venta en Pancake se pone a cualquiera que ya es cliente (clientes de antes, recomendados, postventa),
     // así que sola NO hace venta: DELTA lee el chat y decide si compró, cuándo y si vino de redes.
-    for (const t of nombresTags) { const e = etapaPorNombre(t); etapa = masAvanzada(etapa, e === "venta" ? "contactado" : e); }
+    // Excepción: si el dueño dijo que en esta página la etiqueta VENTA sí es venta, cuenta tal cual (sin esperar a que DELTA lea el chat).
+    const confiar = f.venta_etiqueta === 1;
+    for (const t of nombresTags) { const e = etapaPorNombre(t); etapa = masAvanzada(etapa, e === "venta" && !confiar ? "contactado" : e); }
+    const ventaPorEtiqueta = confiar && nombresTags.some((t) => etapaPorNombre(t) === "venta");
     const adId = (c.ad_ids || [])[0] || null;
     salida.push({
       id: `pancake:${f.cuenta}:${c.id}`, conversacion: c.id, nombre: cu.name || c.from?.name || null, telefono: tel, correo: null,
@@ -170,6 +184,7 @@ async function leerPancake(f, { desde }) {
       actualizado: fechaPancake(c.updated_at), mensajes: Number(c.message_count) || 0,
       fuente: red(c), campana: adId ? (await meta.nombreAnuncio(adId)) || `Anuncio ${adId}` : null,
       solo_nuevos: true, // en Pancake no hay etapas fijas: solo se avanza, nunca se regresa lo que tú muevas
+      venta_etiqueta: confiar ? ventaPorEtiqueta : undefined,
     });
   }
   return salida;
@@ -215,12 +230,20 @@ function guardar(f, x) {
     }
     if (x.actualizado) db.prepare("UPDATE prospectos SET externo_actualizado = ?, externo_mensajes = ? WHERE id = ?").run(x.actualizado, x.mensajes ?? null, ya.id);
     if (x.solo_nuevos) db.prepare("UPDATE prospectos SET externo_etiquetas = ? WHERE id = ?").run(x.etapa_original || null, ya.id);
-    // Pancake: solo avanza (si allá ya le contestaron o lo etiquetaron más adelante), nunca regresa
-    if (x.solo_nuevos && ya.etapa !== "perdido" && masAvanzada(ya.etapa, x.etapa) !== ya.etapa) {
-      actualizarProspecto(ya.id, { etapa: x.etapa });
+    // Página donde la etiqueta VENTA manda: si allá le quitaron la etiqueta, aquí deja de contar como venta.
+    if (x.venta_etiqueta === false && ya.etapa === "venta" && ya.externo_etapa === "venta") {
+      actualizarProspecto(ya.id, { etapa: x.etapa === "venta" ? "contactado" : x.etapa });
       db.prepare("UPDATE prospectos SET externo_etapa = ? WHERE id = ?").run(x.etapa, ya.id);
+      notaProspecto(ya.id, "DELTA quitó la venta: en Pancake ya no tiene la etiqueta VENTA.");
       return "movido";
     }
+    // Pancake: solo avanza (si allá ya le contestaron o lo etiquetaron más adelante), nunca regresa
+    if (x.solo_nuevos && (ya.etapa !== "perdido" || x.venta_etiqueta) && masAvanzada(ya.etapa === "perdido" ? "nuevo" : ya.etapa, x.etapa) !== (ya.etapa === "perdido" ? "nuevo" : ya.etapa)) {
+      actualizarProspecto(ya.id, { etapa: x.etapa });
+      db.prepare(`UPDATE prospectos SET externo_etapa = ?${x.venta_etiqueta ? ", venta_revisada = 1" : ""} WHERE id = ?`).run(x.etapa, ya.id);
+      return "movido";
+    }
+    if (x.venta_etiqueta && ya.etapa === "venta" && ya.externo_etapa !== "venta") db.prepare("UPDATE prospectos SET externo_etapa = 'venta', venta_revisada = 1 WHERE id = ?").run(ya.id);
     return "igual";
   }
   const p = crearProspecto({
@@ -234,10 +257,11 @@ function guardar(f, x) {
   }
   db.prepare("UPDATE prospectos SET externo_id = ?, externo_etapa = ?, creado = COALESCE(?, creado), etapa_desde = COALESCE(?, etapa_desde), externo_actualizado = ?, externo_mensajes = ?, externo_etiquetas = ? WHERE id = ?")
     .run(x.id, x.etapa, x.creado, x.creado, x.actualizado || null, x.mensajes ?? null, x.solo_nuevos ? x.etapa_original || null : null, p.id);
+  if (x.venta_etiqueta) db.prepare("UPDATE prospectos SET venta_revisada = 1 WHERE id = ?").run(p.id);
   return "nuevo";
 }
 
-const vestir = ({ token, ...f }) => ({ ...f, nombre: TIPOS[f.tipo]?.nombre || f.tipo, token_final: token ? `…${token.slice(-4)}` : null, resultado: f.resultado ? JSON.parse(f.resultado) : null });
+const vestir = ({ token, historia, ...f }) => ({ ...f, venta_etiqueta: f.venta_etiqueta === 1, nombre: TIPOS[f.tipo]?.nombre || f.tipo, token_final: token ? `…${token.slice(-4)}` : null, resultado: f.resultado ? JSON.parse(f.resultado) : null });
 export function listarFuentes(cliente) {
   const c = cliente ? clienteRequerido(cliente) : null;
   return db.prepare(`SELECT * FROM crm_fuentes ${c ? "WHERE cliente_id = ?" : ""} ORDER BY id`).all(...(c ? [c.id] : [])).map(vestir);
@@ -256,7 +280,8 @@ export async function sincronizarFuente(id) {
   }
   // Pancake: si hay conversaciones de antes sin su número de mensajes (versión vieja), se repasa el mes completo
   const repasar = f.tipo === "pancake" && db.prepare("SELECT 1 FROM prospectos WHERE externo_id LIKE ? AND (externo_mensajes IS NULL OR campana = 'Anuncio (clic a WhatsApp)') LIMIT 1").get(`pancake:${f.cuenta}:%`);
-  const desde = f.ultimo && !repasar ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
+  const completa = f.tipo === "pancake" && f.historia !== 1;
+  const desde = f.ultimo && !repasar && !completa ? new Date(Date.parse(f.ultimo) - DIA).toISOString() : new Date(Date.now() - 90 * DIA).toISOString();
   const inicio = new Date().toISOString();
   try {
     const lista = await LECTORES[f.tipo](f, { desde });
@@ -270,6 +295,7 @@ export async function sincronizarFuente(id) {
       db.prepare("UPDATE prospectos SET externo_mensajes = 0 WHERE externo_id LIKE ? AND externo_mensajes IS NULL").run(`pancake:${f.cuenta}:%`);
       db.prepare("UPDATE prospectos SET campana = 'Anuncio' WHERE externo_id LIKE ? AND campana = 'Anuncio (clic a WhatsApp)'").run(`pancake:${f.cuenta}:%`);
     }
+    if (completa) db.prepare("UPDATE crm_fuentes SET historia = 1 WHERE id = ?").run(f.id);
     const previo = f.resultado ? JSON.parse(f.resultado) : {};
     if (previo.chats) r.chats = previo.chats;
     db.prepare("UPDATE crm_fuentes SET ultimo = ?, resultado = ?, error = NULL WHERE id = ?").run(inicio, JSON.stringify(r), f.id);
@@ -328,6 +354,48 @@ export async function conectarFuente({ cliente, tipo, cuenta, token } = {}) {
     throw e;
   }
 }
+
+/** Dice si en esta página de Pancake la etiqueta VENTA sí quiere decir que compró. Al prenderlo se aplica de inmediato
+ *  a lo que ya está en el CRM y se vuelven a traer los últimos 90 días; al apagarlo, DELTA vuelve a revisar esas ventas leyendo el chat. */
+export async function ventaPorEtiqueta(id, si) {
+  const f = db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(Number(id));
+  if (!f) throw new Error("Esa conexión ya no existe");
+  if (f.tipo !== "pancake") throw new Error("Esto solo aplica a Pancake");
+  const valor = si ? 1 : 0;
+  db.prepare("UPDATE crm_fuentes SET venta_etiqueta = ?, historia = CASE WHEN ? = 1 THEN NULL ELSE historia END WHERE id = ?").run(valor, valor, f.id);
+  const filas = db.prepare("SELECT id, etapa, externo_etapa, externo_etiquetas FROM prospectos WHERE externo_id LIKE ? AND cliente_id = ?").all(`pancake:${f.cuenta}:%`, f.cliente_id);
+  let cambiadas = 0;
+  for (const p of filas) {
+    const tieneVenta = String(p.externo_etiquetas || "").split(", ").some((t) => t && etapaPorNombre(t) === "venta");
+    if (valor && tieneVenta && p.etapa !== "venta") {
+      actualizarProspecto(p.id, { etapa: "venta" });
+      db.prepare("UPDATE prospectos SET externo_etapa = 'venta', venta_revisada = 1 WHERE id = ?").run(p.id);
+      cambiadas++;
+    } else if (valor && tieneVenta) {
+      db.prepare("UPDATE prospectos SET externo_etapa = 'venta', venta_revisada = 1 WHERE id = ?").run(p.id);
+    } else if (!valor && p.etapa === "venta" && p.externo_etapa === "venta") {
+      db.prepare("UPDATE prospectos SET venta_revisada = NULL WHERE id = ?").run(p.id); // DELTA la vuelve a revisar leyendo el chat
+    }
+  }
+  if (cambiadas) avisarPantalla({ tipo: "crm" });
+  let r = null;
+  if (valor) { try { r = await sincronizarFuente(f.id); } catch (e) { r = { error: e.message }; } }
+  return { ...vestir(db.prepare("SELECT * FROM crm_fuentes WHERE id = ?").get(f.id)), cambiadas, sincronizado: r };
+}
+
+/** Prospectos de Pancake que quedaron en el cliente equivocado (por ejemplo, si un cliente tuvo un rato la llave de otro):
+ *  se regresan al cliente dueño de esa página. */
+export function acomodarProspectosDeOtraPagina() {
+  const fuentes = db.prepare("SELECT cuenta, cliente_id FROM crm_fuentes WHERE tipo = 'pancake' ORDER BY id").all();
+  const dueno = new Map();
+  for (const f of fuentes) if (!dueno.has(f.cuenta)) dueno.set(f.cuenta, f.cliente_id);
+  let movidos = 0;
+  for (const [cuenta, cliente] of dueno) {
+    movidos += db.prepare("UPDATE prospectos SET cliente_id = ? WHERE externo_id LIKE ? AND cliente_id != ?").run(cliente, `pancake:${cuenta}:%`, cliente).changes;
+  }
+  return movidos;
+}
+try { const n = acomodarProspectosDeOtraPagina(); if (n) console.log(`[crm] ${n} prospectos regresados a su cliente`); } catch (e) { console.error("[crm acomodar]", e.message); }
 
 export function quitarFuente(id) {
   db.prepare("DELETE FROM crm_fuentes WHERE id = ?").run(Number(id));
@@ -432,6 +500,15 @@ export async function leerChats(fuenteId, { max = 40 } = {}) {
       const origen = ["anuncio", "redes", "recomendado", "cliente", "otro"].includes(x.origen) ? x.origen : null;
       const fechaVenta = /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha_venta || "")) ? x.fecha_venta : null;
       if (origen && origen !== p.origen) cambios.origen = origen;
+      if (f.venta_etiqueta === 1) {
+        // Aquí la etiqueta VENTA de Pancake es la que manda: leer el chat no pone ni quita ventas.
+        if (p.etapa === "venta") {
+          db.prepare("UPDATE prospectos SET venta_revisada = 1 WHERE id = ?").run(p.id);
+          continue;
+        }
+        if (x.etapa === "venta") x.etapa = p.etapa; // dice que compró pero no tiene la etiqueta: se queda donde está
+        if (x.etapa === p.etapa) { if (x.interes && !p.interes) actualizarProspecto(p.id, { interes: String(x.interes) }, { automatico: true }); if (x.resumen) notaProspecto(p.id, `DELTA leyó el chat: ${String(x.resumen).slice(0, 400)}`); continue; }
+      }
       if (p.etapa === "venta") {
         // Revisión de una venta sin confirmar: si el chat no muestra compra, deja de contar como venta.
         if (x.etapa !== "venta") {
@@ -484,7 +561,9 @@ export function leerChatsEnFondo(fuenteId, opciones) {
 // Antes, etiquetas como "Tratamiento facial", "Página" o "Comprobante" contaban como venta. Se vuelven a revisar
 // con la regla nueva; las que ya no son venta regresan a su etapa y DELTA vuelve a leer su chat para decidir.
 export function revisarVentasPorEtiqueta() {
-  const filas = db.prepare("SELECT id, notas FROM prospectos WHERE externo_id LIKE 'pancake:%' AND etapa = 'venta' AND externo_etapa = 'venta'").all();
+  const confiables = new Set(db.prepare("SELECT cuenta FROM crm_fuentes WHERE tipo = 'pancake' AND venta_etiqueta = 1").all().map((r) => r.cuenta));
+  const filas = db.prepare("SELECT id, notas, externo_id FROM prospectos WHERE externo_id LIKE 'pancake:%' AND etapa = 'venta' AND externo_etapa = 'venta'").all()
+    .filter((f) => !confiables.has(f.externo_id.split(":")[1]));
   let corregidas = 0;
   for (const f of filas) {
     const m = /\(etapa: ([^)\n]*)\)/.exec(f.notas || "");

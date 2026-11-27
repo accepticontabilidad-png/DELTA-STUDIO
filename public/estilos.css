@@ -1828,6 +1828,9 @@ html[data-mood="dia"] input[type=datetime-local] { color-scheme: light; }
 .crm-link { display: grid; gap: 8px; margin: 6px 0 10px; }
 .crm-url { display: block; padding: 8px 10px; border-radius: 10px; background: rgba(8,5,24,.45); border: 1px solid var(--borde); font-size: 12px; overflow-wrap: anywhere; }
 .crm-link-botones { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#crm-ext-lista .crm-ext-venta { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 6px 0 2px; cursor: pointer; }
+#crm-ext-lista .crm-ext-venta input { flex: none; margin-top: 2px; width: 16px; height: 16px; accent-color: var(--acento, #8b73ff); }
+#crm-ext-lista .crm-ext-venta span, #crm-ext-lista .crm-ext-venta b { display: inline; }
 @media (max-width: 900px) {
   .crm-medio { grid-template-columns: minmax(0, 1fr); }
   .dlg-prospecto.con-conversa .crm-ficha { grid-template-columns: minmax(0, 1fr); }
