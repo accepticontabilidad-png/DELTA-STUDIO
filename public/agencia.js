@@ -1069,7 +1069,7 @@ export function iniciarAgencia(h) {
 
   async function cargarPaidMedia() {
     if (!clientesFi.length) await prepararFinanzas();
-    const p = await api(`/paidmedia${mesPm ? `?mes=${mesPm}` : ""}`);
+    const [p] = await Promise.all([api(`/paidmedia${mesPm ? `?mes=${mesPm}` : ""}`), cargarCampanasDelta()]);
     ultimaPm = p;
     pintarPaidMedia(p);
   }
@@ -1139,6 +1139,10 @@ export function iniciarAgencia(h) {
             </div>
             ${k.objetivo_nombre ? `<small class="tenue">${esc(k.objetivo_nombre)}${k.semana?.gasto ? ` · últimos 7 días: ${dinero0(k.semana.gasto)} y ${entero(k.semana.resultados)} resultado${k.semana.resultados === 1 ? "" : "s"}` : ""}</small>` : ""}
             ${a ? `<small class="t-${a.nivel}">${esc(a.texto.replace(/^"[^"]+"\s*:?\s*/, ""))}</small>` : ""}
+            ${infoCp ? `<div class="pm-camp-acciones">
+              ${k.activa === null ? "" : `<button type="button" data-pm-estado="${esc(k.id)}" data-activa="${k.activa ? "0" : "1"}">${k.activa ? "Pausar" : "Encender"}</button>`}
+              <button type="button" data-pm-presu="${esc(k.id)}" data-nombre="${esc(k.nombre)}">Presupuesto</button>
+            </div>` : ""}
           </div>`;
         }).join("")
       : `<p class="pg-vacio">${p.cuentas_meta ? "Meta aún no trae campañas con gasto este mes." : "Cuando conectes Meta y asignes las cuentas de anuncios a cada cliente, aquí verás cada campaña con su gasto y resultados."} <a href="#" data-abrir-meta>Abrir Meta</a></p>`;
@@ -1219,6 +1223,313 @@ export function iniciarAgencia(h) {
     const destino = $(ir.dataset.fiIr);
     (destino?.closest(".panel") || destino)?.scrollIntoView({ behavior: "smooth", block: "center" });
     if (destino?.tagName === "FORM") setTimeout(() => destino.querySelector("select, input")?.focus(), 350);
+  });
+
+
+  // =====================================================================
+  //  CREAR CAMPAÑA (queda EN PAUSA en Meta) y botones de cada campaña
+  // =====================================================================
+  let infoCp = null;      // lo que regresa /campanas (null = no se puede: equipo o error)
+  let cp = null;          // la campaña abierta en el diálogo
+  const dinCp = (n) => `$${Number(n).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
+  const ESTADO_CP = { borrador: "Borrador", en_meta: "En Meta, en pausa", activa: "Encendida" };
+
+  async function cargarCampanasDelta() {
+    if (h.esEquipo?.()) { infoCp = null; return; }
+    try { infoCp = await api("/campanas"); } catch { infoCp = null; }
+    $("#pm-crear").hidden = !infoCp;
+    const lista = infoCp?.campanas || [];
+    $("#pm-mias-caja").hidden = !lista.length;
+    $("#pm-mias-n").textContent = lista.length ? `${lista.length}` : "";
+    $("#pm-mias").innerHTML = lista.map((k) => `<li class="pm-aviso n-${k.estado === "activa" ? "verde" : k.estado === "en_meta" ? "amarillo" : "info"}" data-cp="${k.id}" tabindex="0">
+        ${foco(k.estado === "activa" ? "verde" : k.estado === "en_meta" ? "amarillo" : "")}
+        <span class="pg-linea-txt"><b>${esc(k.propuesta?.nombre || k.oferta)}</b><small>${esc(k.cliente || "")} · ${esc(ESTADO_CP[k.estado] || k.estado)} · ${dinCp(k.presupuesto_diario)} al día${k.error ? " · ⚠ revisar" : ""}</small></span>
+      </li>`).join("");
+  }
+
+  const mensajeCp = (txt, ok = false) => { const m = $("#cp-msg"); m.textContent = txt || ""; m.hidden = !txt; m.classList.toggle("ok", ok); };
+  const opciones = (lista, valor) => lista.map((x) => `<option value="${esc(x.id)}" ${String(x.id) === String(valor) ? "selected" : ""}>${esc(x.nombre)}</option>`).join("");
+
+  function avisoCp() {
+    const a = $("#cp-aviso");
+    let txt = "";
+    if (!infoCp?.meta_conectado) txt = "Meta no está conectado: DELTA puede armar la campaña, pero para subirla primero conecta Meta (botón Meta, arriba).";
+    else if (infoCp.falta_permiso) txt = "Falta un permiso de Meta: DELTA puede armar la campaña, pero para subirla hay que darle a la app de Meta el permiso \"ads_management\" y volver a conectar Meta. Mira la guía \"Crear campañas\".";
+    else if (!infoCp.claude) txt = "Falta la llave de Claude en Railway para que DELTA arme la campaña.";
+    a.textContent = txt;
+    a.hidden = !txt;
+  }
+
+  function abrirCrearCampana() {
+    if (!infoCp) return;
+    cp = null;
+    $("#cp-titulo").textContent = "Crear campaña";
+    $("#cp-cliente").innerHTML = infoCp.clientes.map((c) => `<option value="${c.id}">${esc(c.nombre)}${c.cuentas.length ? "" : " (sin cuenta de anuncios)"}</option>`).join("") || `<option value="">Primero da de alta un cliente</option>`;
+    $("#cp-objetivo").innerHTML = Object.entries(infoCp.objetivos).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    for (const id of ["#cp-oferta", "#cp-enlace", "#cp-presupuesto", "#cp-dias", "#cp-indicaciones"]) $(id).value = "";
+    $("#cp-enlace-caja").hidden = true;
+    mostrarPaso(1);
+    avisoCp();
+    mensajeCp("");
+    $("#dlg-campana").showModal();
+    setTimeout(() => $("#cp-oferta").focus(), 50);
+  }
+
+  function mostrarPaso(n) {
+    [1, 2, 3].forEach((i) => { $(`#cp-paso${i}`).hidden = i !== n; });
+    const sig = $("#cp-siguiente");
+    sig.classList.remove("seguro");
+    sig.disabled = false;
+    $("#cp-guardar").hidden = n !== 2;
+    $("#cp-descartar").hidden = n === 1 || cp?.estado === "activa";
+    $("#cp-descartar").classList.remove("seguro");
+    $("#cp-descartar").textContent = "Descartar";
+    if (n === 1) { sig.hidden = false; sig.textContent = "Que DELTA la arme"; }
+    if (n === 2) { sig.hidden = false; sig.textContent = "Dejar lista en Meta (en pausa)"; }
+    if (n === 3) { sig.hidden = cp?.estado !== "en_meta"; sig.textContent = "Aprobar y encender"; }
+  }
+
+  function pintarCp() {
+    const k = cp;
+    const p = k.propuesta || {};
+    $("#cp-titulo").textContent = `${k.cliente} · ${k.objetivo_nombre}`;
+    const img = k.imagen_url ? `<img src="${esc(k.imagen_url)}" alt="Imagen del anuncio" />` : `<span class="tenue">Aún no hay imagen</span>`;
+    if (k.estado === "borrador") {
+      $("#cp-nombre").textContent = p.nombre || "";
+      $("#cp-resumen").textContent = p.resumen || "";
+      $("#cp-porque").textContent = p.por_que || "";
+      $("#cp-img").innerHTML = img;
+      $("#cp-prompt").value = p.prompt_imagen || "";
+      $("#cp-generar").textContent = k.imagen_url ? "Hacer otra con IA" : "Crear imagen con IA";
+      $("#cp-generar").disabled = !infoCp?.higgsfield;
+      $("#cp-generar").title = infoCp?.higgsfield ? "Higgsfield hace la imagen (cuesta créditos)" : "Higgsfield no está conectado";
+      $("#cp-pieza").innerHTML = `<option value="">o usa una del Estudio…</option>` + (infoCp?.piezas || []).map((x) => `<option value="${x.id}/${esc(x.archivo)}" ${k.pieza === `${x.id}/${x.archivo}` ? "selected" : ""}>${esc(x.titulo)}${x.cliente ? ` · ${esc(x.cliente)}` : ""}</option>`).join("");
+      $("#cp-textos").innerHTML = (p.textos || []).map((t, i) => `<label class="cp-texto ${i === k.texto_elegido ? "elegido" : ""}">
+          <span class="cp-texto-cabeza"><input type="radio" name="cp-texto" value="${i}" ${i === k.texto_elegido ? "checked" : ""} /> <b>${esc(t.enfoque || `Opción ${i + 1}`)}</b></span>
+          <textarea data-cp-t="${i}" data-campo="texto" rows="5" maxlength="2000">${esc(t.texto)}</textarea>
+          <span class="fila-2"><input data-cp-t="${i}" data-campo="titulo" type="text" maxlength="80" value="${esc(t.titulo)}" aria-label="Título" /><input data-cp-t="${i}" data-campo="descripcion" type="text" maxlength="60" value="${esc(t.descripcion)}" aria-label="Descripción" /></span>
+        </label>`).join("");
+      const pub = p.publico || {};
+      $("#cp-edad-min").value = pub.edad_min ?? 18;
+      $("#cp-edad-max").value = pub.edad_max ?? 65;
+      $("#cp-genero").value = pub.genero || "todos";
+      $("#cp-radio").value = pub.radio_km ?? 20;
+      $("#cp-ciudad").value = pub.ciudad || "";
+      $("#cp-publico-desc").textContent = pub.descripcion || "";
+      $("#cp-presupuesto-2").value = k.presupuesto_diario;
+      $("#cp-dias-2").value = k.dias ?? "";
+      const cli = infoCp?.clientes.find((c) => c.id === k.cliente_id) || { cuentas: [], paginas: [] };
+      $("#cp-cuenta").innerHTML = opciones(cli.cuentas, k.cuenta_id) || `<option value="">Sin cuenta ligada</option>`;
+      $("#cp-pagina").innerHTML = opciones(cli.paginas, k.pagina_id) || `<option value="">Sin página ligada</option>`;
+      $("#cp-consejos").innerHTML = (p.consejos || []).map((c) => `<li>${esc(c)}</li>`).join("");
+      mostrarPaso(2);
+    } else {
+      $("#cp-img-3").innerHTML = img;
+      const fin = k.dias ? ` durante ${k.dias} día${k.dias === 1 ? "" : "s"}` : "";
+      if (k.estado === "en_meta") {
+        $("#cp-estado-txt").textContent = "Lista en Meta, en pausa. No ha gastado nada.";
+        $("#cp-estado-detalle").textContent = `Cuando la apruebes empezará a gastar hasta ${dinCp(k.presupuesto_diario)} al día${fin}${k.meta?.ciudad ? `, en ${k.meta.ciudad}` : ""}. Puedes revisarla en el Administrador de anuncios antes de encenderla.`;
+      } else {
+        $("#cp-estado-txt").textContent = "Encendida ✨";
+        $("#cp-estado-detalle").textContent = `Gasta hasta ${dinCp(k.presupuesto_diario)} al día${fin}. Sus números aparecerán en Campañas de Meta en unas horas; desde ahí la puedes pausar.`;
+      }
+      $("#cp-admin").hidden = !k.administrador;
+      if (k.administrador) $("#cp-admin").href = k.administrador;
+      mostrarPaso(3);
+    }
+    if (k.error) mensajeCp(k.error); else mensajeCp("");
+  }
+
+  async function abrirCampanaDelta(id) {
+    try {
+      cp = await api(`/campanas/${id}`);
+      avisoCp();
+      pintarCp();
+      if (!$("#dlg-campana").open) $("#dlg-campana").showModal();
+    } catch (e) { avisar(e.message); }
+  }
+
+  function cambiosCp() {
+    const textos = (cp.propuesta?.textos || []).map((_, i) => {
+      const t = {};
+      document.querySelectorAll(`[data-cp-t="${i}"]`).forEach((x) => { t[x.dataset.campo] = x.value; });
+      return t;
+    });
+    const elegido = document.querySelector('input[name="cp-texto"]:checked');
+    return {
+      textos, texto_elegido: elegido ? Number(elegido.value) : 0, prompt_imagen: $("#cp-prompt").value.trim() || undefined,
+      publico: { edad_min: Number($("#cp-edad-min").value) || 18, edad_max: Number($("#cp-edad-max").value) || 65, genero: $("#cp-genero").value, radio_km: Number($("#cp-radio").value) || 20, ciudad: $("#cp-ciudad").value.trim() },
+      presupuesto_diario: $("#cp-presupuesto-2").value, dias: $("#cp-dias-2").value.trim() || null,
+      ...($("#cp-cuenta").value ? { cuenta_id: $("#cp-cuenta").value } : {}),
+      ...($("#cp-pagina").value ? { pagina_id: $("#cp-pagina").value } : {}),
+    };
+  }
+  const guardarCp = async () => { cp = await api(`/campanas/${cp.id}`, { method: "PATCH", body: cambiosCp() }); return cp; };
+
+  const ocupado = (b, txt) => { const antes = b.textContent; b.disabled = true; b.textContent = txt; return () => { b.disabled = false; b.textContent = antes; }; };
+
+  $("#pm-crear").addEventListener("click", abrirCrearCampana);
+  $("#cp-objetivo").addEventListener("change", (e) => { $("#cp-enlace-caja").hidden = e.target.value !== "sitio"; });
+  $("#cp-cerrar").addEventListener("click", () => { $("#dlg-campana").close(); cargarCampanasDelta().catch(() => {}); });
+  $("#cp-textos").addEventListener("change", (e) => {
+    if (e.target.name !== "cp-texto") return;
+    document.querySelectorAll(".cp-texto").forEach((x) => x.classList.toggle("elegido", x.contains(e.target)));
+  });
+  $("#cp-guardar").addEventListener("click", async (e) => {
+    const listo = ocupado(e.currentTarget, "Guardando…");
+    try { await guardarCp(); sonar("accion"); mensajeCp("Cambios guardados", true); } catch (err) { mensajeCp(err.message); }
+    listo();
+  });
+  $("#cp-generar").addEventListener("click", async (e) => {
+    const listo = ocupado(e.currentTarget, "Creando imagen… (hasta 1 min)");
+    mensajeCp("");
+    try {
+      await guardarCp();
+      cp = await api(`/campanas/${cp.id}/imagen`, { method: "POST", body: { prompt: $("#cp-prompt").value.trim() } });
+      sonar("accion");
+      listo();
+      pintarCp();
+      return;
+    } catch (err) { mensajeCp(err.message); }
+    listo();
+  });
+  $("#cp-pieza").addEventListener("change", async (e) => {
+    if (!e.target.value) return;
+    try {
+      await guardarCp();
+      cp = await api(`/campanas/${cp.id}`, { method: "PATCH", body: { pieza: e.target.value } });
+      pintarCp();
+    } catch (err) { mensajeCp(err.message); }
+  });
+  $("#cp-descartar").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = cp?.estado === "en_meta" ? "¿Seguro? En Meta queda en pausa" : "¿Seguro? Toca otra vez"; return; }
+    try { await api(`/campanas/${cp.id}`, { method: "DELETE" }); sonar("accion"); $("#dlg-campana").close(); await cargarCampanasDelta(); }
+    catch (err) { mensajeCp(err.message); }
+  });
+  $("#form-campana").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const b = $("#cp-siguiente");
+    mensajeCp("");
+    // Paso 1: DELTA arma la propuesta
+    if (!cp) {
+      const listo = ocupado(b, "DELTA está armando la campaña…");
+      try {
+        cp = await api("/campanas", { method: "POST", body: {
+          cliente: $("#cp-cliente").value, objetivo: $("#cp-objetivo").value, oferta: $("#cp-oferta").value.trim(),
+          enlace: $("#cp-enlace").value.trim() || undefined, presupuesto_diario: $("#cp-presupuesto").value, dias: $("#cp-dias").value.trim() || null,
+          indicaciones: $("#cp-indicaciones").value.trim() || undefined,
+        } });
+        sonar("accion");
+        listo();
+        pintarCp();
+        cargarCampanasDelta().catch(() => {});
+        return;
+      } catch (err) { mensajeCp(err.message); listo(); return; }
+    }
+    // Paso 2: subirla a Meta, en pausa
+    if (cp.estado === "borrador") {
+      const listo = ocupado(b, "Subiendo a Meta (en pausa)…");
+      try {
+        await guardarCp();
+        cp = await api(`/campanas/${cp.id}/meta`, { method: "POST" });
+        sonar("accion");
+        listo();
+        pintarCp();
+        cargarCampanasDelta().catch(() => {});
+        return;
+      } catch (err) {
+        listo();
+        try { cp = await api(`/campanas/${cp.id}`); } catch { /* se queda como estaba */ }
+        mensajeCp(err.message);
+        return;
+      }
+    }
+    // Paso 3: aprobar y encender (siempre con un segundo toque)
+    if (cp.estado === "en_meta") {
+      if (!b.classList.contains("seguro")) {
+        b.classList.add("seguro");
+        b.textContent = `¿Seguro? Empezará a gastar hasta ${dinCp(cp.presupuesto_diario)} al día`;
+        return;
+      }
+      const listo = ocupado(b, "Encendiendo…");
+      try {
+        cp = await api(`/campanas/${cp.id}/encender`, { method: "POST" });
+        sonar("accion");
+        listo();
+        pintarCp();
+        cargarPaidMedia().catch(() => {});
+      } catch (err) { listo(); b.classList.remove("seguro"); b.textContent = "Aprobar y encender"; mensajeCp(err.message); }
+    }
+  });
+  $("#pm-mias").addEventListener("click", (e) => {
+    const li = e.target.closest("[data-cp]");
+    if (li) abrirCampanaDelta(li.dataset.cp);
+  });
+  $("#pm-mias").addEventListener("keydown", (e) => {
+    const li = e.target.closest("[data-cp]");
+    if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); abrirCampanaDelta(li.dataset.cp); }
+  });
+
+  // Pausar / encender y presupuesto de las campañas que ya existen (siempre con confirmación)
+  let presu = null;
+  $("#pm-campanas").addEventListener("click", async (e) => {
+    const est = e.target.closest("[data-pm-estado]");
+    const pr = e.target.closest("[data-pm-presu]");
+    if (!est && !pr) return;
+    e.stopPropagation(); // que no abra la ficha del cliente
+    if (est) {
+      const encender = est.dataset.activa === "1";
+      if (!est.classList.contains("seguro")) { est.classList.add("seguro"); est.textContent = encender ? "¿Seguro? Volverá a gastar" : "¿Seguro? Toca otra vez"; return; }
+      est.disabled = true;
+      est.textContent = encender ? "Encendiendo…" : "Pausando…";
+      try {
+        const r = await api(`/paidmedia/campanas/${est.dataset.pmEstado}/estado`, { method: "PUT", body: { activa: encender } });
+        sonar("accion");
+        avisar(`"${r.nombre}" quedó ${r.activa ? "encendida" : "en pausa"} en Meta. Los números se actualizan en unos minutos.`);
+        est.textContent = r.activa ? "Pausar" : "Encender";
+        est.dataset.activa = r.activa ? "0" : "1";
+        est.closest(".pm-camp")?.querySelector(".pm-estado")?.classList.toggle("on", r.activa);
+      } catch (err) { avisar(err.message); est.textContent = encender ? "Encender" : "Pausar"; }
+      est.disabled = false;
+      est.classList.remove("seguro");
+      return;
+    }
+    pr.disabled = true;
+    try {
+      presu = await api(`/paidmedia/campanas/${pr.dataset.pmPresu}/presupuesto`);
+      if (presu.diario === null) { avisar(`"${presu.nombre}" tiene presupuesto total, no diario: cámbialo en el Administrador de anuncios.`); pr.disabled = false; return; }
+      $("#pr-nombre").textContent = presu.nombre;
+      $("#pr-actual").textContent = `Hoy: ${dinCp(presu.diario)} al día${presu.nivel === "conjuntos" ? ` (repartido en ${presu.conjuntos.length} conjunto${presu.conjuntos.length === 1 ? "" : "s"}; se mantiene la proporción)` : ""}`;
+      $("#pr-monto").value = Math.round(presu.diario);
+      $("#pr-msg").hidden = true;
+      $("#pr-guardar").classList.remove("seguro");
+      $("#pr-guardar").textContent = "Cambiar en Meta";
+      $("#dlg-presu").showModal();
+    } catch (err) { avisar(err.message); }
+    pr.disabled = false;
+  });
+  document.querySelectorAll("[data-pr-factor]").forEach((b) => b.addEventListener("click", () => {
+    if (!presu) return;
+    $("#pr-monto").value = Math.round(presu.diario * Number(b.dataset.prFactor));
+    $("#pr-guardar").classList.remove("seguro");
+    $("#pr-guardar").textContent = "Cambiar en Meta";
+  }));
+  $("#pr-monto").addEventListener("input", () => { $("#pr-guardar").classList.remove("seguro"); $("#pr-guardar").textContent = "Cambiar en Meta"; });
+  $("#pr-cancelar").addEventListener("click", () => $("#dlg-presu").close());
+  $("#form-presu").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const b = $("#pr-guardar");
+    const nuevo = Number(String($("#pr-monto").value).replace(/[$,\s]/g, ""));
+    if (!b.classList.contains("seguro")) { b.classList.add("seguro"); b.textContent = `¿Seguro? De ${dinCp(presu.diario)} a ${dinCp(nuevo || 0)} al día`; return; }
+    b.disabled = true;
+    try {
+      const r = await api(`/paidmedia/campanas/${presu.id}/presupuesto`, { method: "PUT", body: { diario: nuevo } });
+      sonar("accion");
+      $("#dlg-presu").close();
+      avisar(`"${r.nombre}": presupuesto de ${dinCp(r.antes)} a ${dinCp(r.ahora)} al día en Meta.`);
+    } catch (err) { $("#pr-msg").textContent = err.message; $("#pr-msg").hidden = false; b.classList.remove("seguro"); b.textContent = "Cambiar en Meta"; }
+    b.disabled = false;
   });
 
   async function abrirCuenta(id, { mover = true } = {}) {

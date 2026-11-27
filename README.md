@@ -130,7 +130,7 @@ DELTA lee, resume y hace borradores en las dos cuentas, siempre por separado; al
 
 ### 5c. Conectar Meta (Facebook, Instagram y anuncios de los clientes)
 
-DELTA solo **lee**: seguidores, alcance, publicaciones e interacciones de la página de Facebook y el Instagram de cada cliente, y el gasto, alcance, clics, conversaciones, prospectos y compras de sus cuentas de anuncios. No publica ni toca campañas. Se actualiza sola cada 6 horas (y con el botón "Actualizar").
+DELTA **lee** seguidores, alcance, publicaciones e interacciones de la página de Facebook y el Instagram de cada cliente, y el gasto, alcance, clics, conversaciones, prospectos y compras de sus cuentas de anuncios. Lo único que escribe es lo de **Crear campañas** (abajo), y siempre con un toque tuyo. Se actualiza sola cada 6 horas (y con el botón "Actualizar").
 
 Requisito: tu Facebook debe ver los activos de tus clientes (como socio en tu Business Manager o con rol en su página y cuenta de anuncios). Lo que tú ves en Business Suite es lo que verá DELTA.
 
@@ -152,6 +152,17 @@ El permiso dura **60 días**; una semana antes DELTA te avisa para que toques "V
 Alternativa sin vencimiento: en el Business Manager crea un **usuario del sistema** (administrador), asígnale los activos de los clientes, genera un token con esos mismos permisos y ponlo en Railway como `META_ACCESS_TOKEN` (entonces no hace falta el botón).
 
 Opcional: `META_API_VERSION` (por defecto `v23.0`).
+
+#### Crear campañas desde DELTA (Paid media → "+ Crear campaña")
+
+Eliges cliente, objetivo (mensajes por WhatsApp o Messenger, visitas al sitio o alcance), qué anunciar y cuánto al día. DELTA propone la estrategia, el público, 3 textos y la imagen (Higgsfield, o una pieza del Estudio), apoyándose en las campañas que mejor le han funcionado a ese cliente. Con **Dejar lista en Meta** sube imagen, campaña, conjunto y anuncio **en pausa** (no gasta nada). Solo se enciende cuando tocas **Aprobar y encender** dos veces. En cada campaña de Meta también hay botones para **pausar/encender** y cambiar el **presupuesto diario** (también con doble toque). DELTA (el chat) nunca hace nada de esto por su cuenta.
+
+Para eso Meta pide un permiso más, **`ads_management`**:
+1. En [developers.facebook.com](https://developers.facebook.com) → tu app **DELTA** → **Inicio de sesión con Facebook para empresas → Configuraciones** → abre tu configuración (p. ej. "DELTA lectura") → **Editar** → marca también `ads_management` → Guardar.
+2. En DELTA: **Ajustes ⚙ → Conectar Meta** (volver a conectar) y acepta el permiso nuevo.
+3. Tu Facebook debe tener rol de **anunciante o administrador** en la cuenta de anuncios de cada cliente (en su Business Manager → Cuentas publicitarias → Personas o Socios).
+
+La app puede seguir en modo Desarrollo: como administrador, Meta deja manejar tus propias cuentas sin revisión. Si usas `META_ACCESS_TOKEN`, genera el token del usuario del sistema con `ads_management` incluido. Opcional: `DELTA_MODELO_CAMPANAS` (modelo de Claude que arma la campaña).
 
 ### 6. Conectar WhatsApp
 

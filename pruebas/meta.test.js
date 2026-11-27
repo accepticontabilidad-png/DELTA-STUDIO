@@ -63,12 +63,13 @@ test("parecido de nombres: solo liga cuando hay un cliente claro", () => {
   assert.equal(meta.clienteParecido("Cuenta personal", clientes), null);
 });
 
-test("conectar: el enlace lleva los permisos de solo lectura, o la configuración de negocio si existe", () => {
+test("conectar: el enlace lleva los permisos (lectura + manejar anuncios, nunca publicar), o la configuración de negocio si existe", () => {
   const req = { protocol: "https", get: () => "delta.ejemplo.com" };
   const u = new URL(meta.urlConexion(req));
   assert.equal(u.searchParams.get("redirect_uri"), "https://delta.ejemplo.com/oauth/meta");
   assert.match(u.searchParams.get("scope"), /ads_read/);
-  assert.doesNotMatch(u.searchParams.get("scope"), /ads_management|publish/);
+  assert.match(u.searchParams.get("scope"), /ads_management/); // crear campañas en pausa (Paid media → Crear campaña)
+  assert.doesNotMatch(u.searchParams.get("scope"), /publish/);
   process.env.META_CONFIG_ID = "777";
   const u2 = new URL(meta.urlConexion(req));
   assert.equal(u2.searchParams.get("config_id"), "777");
