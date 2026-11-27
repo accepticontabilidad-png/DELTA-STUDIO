@@ -2109,18 +2109,21 @@ export function iniciarAgencia(h) {
       const v = p.valor || p.ticket || 0;
       if (p.valor) real++; else if (p.ticket) estimadas++; else sinMonto++;
       valor += v;
-      if (v && p.margen !== null && p.margen !== undefined) { ganancia += v * (p.margen / 100); conMargen++; }
+      if (v && p.margen > 0) { ganancia += v * (p.margen / 100); conMargen++; }
     }
     return { valor, ventas_reales: real, estimadas, sin_monto: sinMonto, ganancia, con_margen: conMargen };
   }
 
+  const CON_VENTAS = "__con_ventas";
   function datosReporte() {
     const t = ultimaCrm, r = reporteCrm;
     const [desde, hasta] = rangoCrm();
     const filasTodas = r?.anuncios?.filas || [];
     const hayAds = filasTodas.length > 0;
     const fc = filtroCrm;
-    const pasa = (x) => (!fc.campana || x.campana_id === fc.campana) && (!fc.conjunto || x.conjunto_id === fc.conjunto) && (!fc.anuncio || x.anuncio_id === fc.anuncio);
+    // "Campañas con ventas": solo las campañas a las que se les ligó al menos una venta (como el reporte de fin de mes).
+    const conVentas = fc.campana === CON_VENTAS && r?.ventas ? new Set(ligarProspectos(r.ventas, filasTodas).map((v) => v.campana_id).filter(Boolean)) : null;
+    const pasa = (x) => (!fc.campana || (conVentas ? conVentas.has(x.campana_id) : x.campana_id === fc.campana)) && (!fc.conjunto || x.conjunto_id === fc.conjunto) && (!fc.anuncio || x.anuncio_id === fc.anuncio);
     const filtrando = Boolean(fc.campana || fc.conjunto || fc.anuncio);
     const filas = filasTodas.filter(pasa);
     const diasAds = (r?.anuncios?.dias || []).filter(pasa);
@@ -2132,7 +2135,7 @@ export function iniciarAgencia(h) {
     const ventasRedes = ventasTodas ? ventasTodas.filter((v) => v.redes) : null;
     const crm = pros
       ? { prospectos: pros.length, citas: pros.filter((p) => p.alcanzo >= 2).length, asistieron: pros.filter((p) => p.alcanzo >= 3).length, contactados: pros.filter((p) => p.alcanzo >= 1).length,
-          ...(ventasRedes ? { ventas: ventasRedes.length, ventas_otras: ventasTodas.length - ventasRedes.length, ...sumarVentas(ventasRedes) } : { ventas: pros.filter((p) => p.alcanzo >= 4).length, ...sumarVentas(pros.filter((p) => p.alcanzo >= 4)) }) }
+          ...(ventasRedes ? { ventas: ventasRedes.length, ventas_otras: ventasTodas.length - ventasRedes.length, con_anuncio: ventasRedes.filter((v) => v.campana).length, ...sumarVentas(ventasRedes) } : { ventas: pros.filter((p) => p.alcanzo >= 4).length, ...sumarVentas(pros.filter((p) => p.alcanzo >= 4)) }) }
       : { prospectos: t.embudo.prospectos, citas: t.embudo.citas, asistieron: t.embudo.pasos[3].n, ventas: t.embudo.ventas_cerradas?.redes ?? t.embudo.ventas, ventas_otras: t.embudo.ventas_cerradas?.otras || 0, contactados: t.embudo.pasos[1].n, valor: t.embudo.ventas_cerradas?.valor_redes ?? t.embudo.valor_ventas ?? 0 };
     // Series por día (o semana/mes)
     const hoy = hoyLocal();
@@ -2167,7 +2170,7 @@ export function iniciarAgencia(h) {
         <span class="tb-kpi-mes">${esc(k.extra || "")}</span>
         ${k.serie ? spark(k.serie) : ""}
       </div>`;
-    const otras = crm.ventas_otras ? ` · +${crm.ventas_otras} por recomendación o clientes de antes` : "";
+    const otras = (crm.con_anuncio !== undefined && crm.ventas ? ` · ${crm.con_anuncio} con clic de anuncio registrado` : "") + (crm.ventas_otras ? ` · +${crm.ventas_otras} por recomendación o clientes de antes` : "");
     const ventasK = { nombre: "Ventas de redes", valor: String(crm.ventas), chip: crm.prospectos ? (() => { const c = Math.round((crm.ventas / crm.prospectos) * 100); return [c >= 20 ? "verde" : c >= 10 ? "amarillo" : "rojo", `${c} % cierre`]; })() : null, extra: (crm.valor ? `total de venta ${dinero(crm.valor)}${hayAds && tot.gasto ? ` · retorno ${(crm.valor / tot.gasto).toLocaleString("es-MX", { maximumFractionDigits: 1 })}x` : ""}` : `${crm.ventas} venta${crm.ventas === 1 ? "" : "s"}`) + otras, ir: "ventas-lista" };
     const sinResp = { nombre: "Sin responder", valor: String(sr), chip: sr ? ["rojo", "Contestar hoy"] : ["verde", "Al día"], extra: `respuesta típica: ${minutosTxt(e.respuesta_minutos)}`, ir: sr ? "hoy" : null };
     let tarjetas;
@@ -2459,18 +2462,19 @@ export function iniciarAgencia(h) {
     const unicos = (lista, k) => { const m = new Map(); for (const f of lista) if (!m.has(f[`${k}_id`])) m.set(f[`${k}_id`], f[k]); return [...m.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "es")); };
     const todas = D.filasTodas;
     const opciones = (lista, sel, todos) => `<option value="">${todos}</option>` + lista.map(([id, n]) => `<option value="${esc(id)}" ${id === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
-    $("#crm-f-campana").innerHTML = opciones(unicos(todas, "campana"), fc.campana, "Todas las campañas");
-    $("#crm-f-conjunto").innerHTML = opciones(unicos(todas.filter((f) => !fc.campana || f.campana_id === fc.campana), "conjunto"), fc.conjunto, "Todos los conjuntos");
-    $("#crm-f-anuncio").innerHTML = opciones(unicos(todas.filter((f) => (!fc.campana || f.campana_id === fc.campana) && (!fc.conjunto || f.conjunto_id === fc.conjunto)), "anuncio"), fc.anuncio, "Todos los anuncios");
+    const enCampana = (f) => !fc.campana || fc.campana === CON_VENTAS || f.campana_id === fc.campana;
+    $("#crm-f-campana").innerHTML = opciones(unicos(todas, "campana"), fc.campana, "Todas las campañas").replace("</option>", `</option><option value="${CON_VENTAS}" ${fc.campana === CON_VENTAS ? "selected" : ""}>Solo campañas que trajeron ventas</option>`);
+    $("#crm-f-conjunto").innerHTML = opciones(unicos(todas.filter(enCampana), "conjunto"), fc.conjunto, "Todos los conjuntos");
+    $("#crm-f-anuncio").innerHTML = opciones(unicos(todas.filter((f) => enCampana(f) && (!fc.conjunto || f.conjunto_id === fc.conjunto)), "anuncio"), fc.anuncio, "Todos los anuncios");
     $("#crm-f-quitar").hidden = !D.filtrando;
   }
   const cambiarFiltro = (nivel, valor) => {
     if (nivel === "campana") filtroCrm = { campana: valor, conjunto: "", anuncio: "" };
     else if (nivel === "conjunto") filtroCrm = { ...filtroCrm, conjunto: valor, anuncio: "" };
     else filtroCrm = { ...filtroCrm, anuncio: valor };
-    if (valor) {
+    if (valor && valor !== CON_VENTAS) {
       const f = reporteCrm?.anuncios?.filas.find((x) => x[`${nivel}_id`] === valor);
-      if (f) { filtroCrm.campana = f.campana_id; if (nivel === "anuncio") filtroCrm.conjunto = f.conjunto_id; }
+      if (f && filtroCrm.campana !== CON_VENTAS) { filtroCrm.campana = f.campana_id; if (nivel === "anuncio") filtroCrm.conjunto = f.conjunto_id; }
     }
     pintarReporte();
   };
@@ -2912,10 +2916,21 @@ export function iniciarAgencia(h) {
     $("#crm-ext-lista").innerHTML = r.fuentes.map((f) => `<li class="crm-fuente-fila">
         <span><b>${esc(f.nombre)}</b> <small class="tenue">${esc(f.cuenta)} · llave ${esc(f.token_final || "")}</small><br>
         <small class="${f.error ? "t-rojo" : "tenue"}">${f.error ? esc(f.error) : f.ultimo ? `Última vez ${haceRato(f.ultimo)}${f.resultado ? ` · ${f.resultado.nuevos} nuevo${f.resultado.nuevos === 1 ? "" : "s"}` : ""}` : "Conectado"}</small>
-        ${f.tipo === "pancake" ? `<br><small class="tenue">${f.resultado?.chats ? `DELTA leyó ${f.resultado.chats.leidos} chat${f.resultado.chats.leidos === 1 ? "" : "s"} ${haceRato(f.resultado.chats.fecha)}: ${f.resultado.chats.movidos} acomodados (${f.resultado.chats.ventas} venta${f.resultado.chats.ventas === 1 ? "" : "s"}, ${f.resultado.chats.perdidos} perdido${f.resultado.chats.perdidos === 1 ? "" : "s"})${f.resultado.chats.pendientes ? ` · faltan ${f.resultado.chats.pendientes}` : ""}` : "DELTA lee los chats y acomoda a cada quien en su etapa."}</small>` : ""}</span>
+        ${f.tipo === "pancake" ? `<br><label class="crm-ext-venta"><input type="checkbox" data-ext-venta="${f.id}" ${f.venta_etiqueta ? "checked" : ""}><span>En esta página la etiqueta <b>VENTA</b> sí quiere decir que compró</span></label>` : ""}
+        ${f.tipo === "pancake" ? `<br><small class="tenue">${f.venta_etiqueta ? "Las ventas salen solas de la etiqueta VENTA; DELTA lee los chats para citas y perdidos." : ""} ${f.resultado?.chats ? `DELTA leyó ${f.resultado.chats.leidos} chat${f.resultado.chats.leidos === 1 ? "" : "s"} ${haceRato(f.resultado.chats.fecha)}: ${f.resultado.chats.movidos} acomodados (${f.resultado.chats.ventas} venta${f.resultado.chats.ventas === 1 ? "" : "s"}, ${f.resultado.chats.perdidos} perdido${f.resultado.chats.perdidos === 1 ? "" : "s"})${f.resultado.chats.pendientes ? ` · faltan ${f.resultado.chats.pendientes}` : ""}` : "DELTA lee los chats y acomoda a cada quien en su etapa."}</small>` : ""}</span>
         <span class="crm-link-botones"><button type="button" data-ext-sinc="${f.id}">Traer ahora</button>${f.tipo === "pancake" ? `<button type="button" data-ext-leer="${f.id}">Leer chats</button>` : ""}<button type="button" class="peligro" data-ext-quitar="${f.id}">Quitar</button></span>
       </li>`).join("") || `<li class="tenue chico">Ninguno conectado todavía.</li>`;
   }
+  $("#crm-ext-lista").addEventListener("change", async (e) => {
+    const c = e.target.closest("[data-ext-venta]");
+    if (!c) return;
+    c.disabled = true;
+    try {
+      const r = await api(`/crm/fuentes/${c.dataset.extVenta}/venta-etiqueta`, { method: "PUT", body: { si: c.checked } });
+      avisar(c.checked ? `Listo: la etiqueta VENTA cuenta como venta${r.cambiadas ? ` (${r.cambiadas} venta${r.cambiadas === 1 ? "" : "s"} nueva${r.cambiadas === 1 ? "" : "s"})` : ""}. Volví a traer los últimos 90 días de Pancake.` : "Listo: DELTA vuelve a revisar esas ventas leyendo los chats.");
+      await cargarFuentes(); cargarCrm().catch(() => {});
+    } catch (err) { avisar(err.message); c.checked = !c.checked; c.disabled = false; }
+  });
   $("#crm-ext-lista").addEventListener("click", async (e) => {
     const l = e.target.closest("[data-ext-leer]");
     if (l) {

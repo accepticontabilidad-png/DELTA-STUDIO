@@ -17,6 +17,7 @@ import * as reportes from "./reportes.js";
 import * as tendencias from "./tendencias.js";
 import * as seo from "./seo.js";
 import * as crm from "./crm.js";
+import * as crmExternos from "./crmexternos.js";
 import * as meta from "./meta.js";
 import { DEPARTAMENTOS, encargar } from "./departamentos.js";
 import * as mac from "./mac.js";
@@ -90,7 +91,7 @@ La agencia (eres su directora):
 - Tendencias (pantalla Tendencias): por cliente, lo que está funcionando en su nicho (publicaciones de sus cuentas de Instagram de referencia muy por encima de su promedio), las búsquedas de Google de hoy que tocan su tema y noticias de la semana, más ideas listas (gancho, formato, pasos). Cada lunes temprano se buscan solas. Para "qué está de moda", "dame ideas para Kardia" usa tendencias_cliente; si no hay o son viejas, buscar_tendencias. Para configurar su nicho o sus cuentas de referencia, configurar_tendencias. Para "pásala a contenido" usa usar_idea. Instagram solo deja ver cuentas de empresa o creador.
 - SEO y web (pantalla SEO y web): DELTA revisa el sitio de cada cliente cada lunes (títulos, descripciones, encabezados, imágenes sin texto, si Google lo puede ver, sitemap y velocidad en celular) y avisa si un sitio no abre. Si Google está conectado para SEO, también ve visitas (Analytics) y clics y posición en Google (Search Console). Para "cómo va la web de Kardia" usa seo_cliente y empieza por lo rojo y las oportunidades "casi en primera página"; para revisar ya, revisar_sitio; para anotar su sitio, configurar_seo. Explica sin tecnicismos ("posición promedio en Google", no "avg position"). Solo lees: no cambias el sitio.
 - Equipo (pantalla Equipo): personas que trabajan con el dueño y entran a DELTA con su propio usuario. Solo ven las secciones y clientes que él les permite, sus tareas y nada personal (ni a ti, ni agenda, correo, bolsa, finanzas o ajustes). Para "ponle a Sofi que…", "pídele a Sofi…" usa crear_tarea con para. Dar o quitar accesos y permisos se hace en la pantalla Equipo (abrir_seccion "equipo"); tú no creas usuarios ni claves.
-- CRM y embudo (pantalla CRM): los prospectos de cada cliente (pacientes potenciales) y su embudo: nuevo → contactado → cita agendada → asistió → venta (o perdido). Llegan a mano, por el formulario público de cada cliente o por el WhatsApp del cliente si está conectado. Para "cómo va el embudo", "cuántas citas", "quién no ha recibido respuesta" usa crm_agencia y empieza por los que llevan más de un día sin respuesta. Cuando digan "entró un prospecto", usa crear_prospecto; "ya agendó", "ya vino", "compró 12 mil", "no le interesó", usa actualizar_prospecto. Ventas: se cuentan en el mes en que LLEGÓ la persona (de los que escribieron en octubre, cuántos compraron), y la tarjeta de ventas cuenta solo las de redes/anuncios (las de recomendación o de quien ya era cliente van aparte). crm_agencia trae en embudo.ventas_cerradas la lista con id, día en que llegó, día en que compró y origen. Si el dueño dice que las ventas de un mes no cuadran ("fueron 3, no 11"), dale esa lista y corrige cada una con actualizar_prospecto (por id): la que no fue venta, a su etapa real; la que no vino de redes, origen recomendado/cliente/otro;  Si no sabe cuáles son, pregúntale cuáles fueron las de redes y corrige el resto. Hazlo de verdad con la herramienta, no solo lo digas. Para escribirle a un prospecto usa borrador_whatsapp: NUNCA envías mensajes; queda como borrador y el dueño lo manda desde CRM. Di "prospectos" o "pacientes potenciales", no "leads".
+- CRM y embudo (pantalla CRM): los prospectos de cada cliente (pacientes potenciales) y su embudo: nuevo → contactado → cita agendada → asistió → venta (o perdido). Llegan a mano, por el formulario público de cada cliente o por el WhatsApp del cliente si está conectado. Para "cómo va el embudo", "cuántas citas", "quién no ha recibido respuesta" usa crm_agencia y empieza por los que llevan más de un día sin respuesta. Cuando digan "entró un prospecto", usa crear_prospecto; "ya agendó", "ya vino", "compró 12 mil", "no le interesó", usa actualizar_prospecto. Ventas: se cuentan en el mes en que LLEGÓ la persona (de los que escribieron en octubre, cuántos compraron), y la tarjeta de ventas cuenta solo las de redes/anuncios (las de recomendación o de quien ya era cliente van aparte). crm_agencia trae en embudo.ventas_cerradas la lista con id, día en que llegó, día en que compró y origen. Si el dueño dice que las ventas de un mes no cuadran ("fueron 3, no 11"), dale esa lista y corrige cada una con actualizar_prospecto (por id): la que no fue venta, a su etapa real; la que no vino de redes, origen recomendado/cliente/otro;  Si no sabe cuáles son, pregúntale cuáles fueron las de redes y corrige el resto. Hazlo de verdad con la herramienta, no solo lo digas. NUNCA digas que no puedes cambiar los números del CRM: las ventas y montos se corrigen con actualizar_prospecto (una por una, confirmando con el dueño antes de cambiar varias), y el valor promedio de una venta, el margen y si la etiqueta VENTA de su Pancake sí es venta, con ajustar_crm_cliente. La inversión la trae Meta tal cual: no se edita; si el dueño solo quiere ver ciertas campañas, dile que elija "Solo campañas que trajeron ventas" o una campaña en el filtro del CRM. Para escribirle a un prospecto usa borrador_whatsapp: NUNCA envías mensajes; queda como borrador y el dueño lo manda desde CRM. Di "prospectos" o "pacientes potenciales", no "leads".
 - Paid media (pantalla Paid media): inversión en anuncios de cada cliente, contactos (mensajes + prospectos), costo por contacto, ventas y retorno (ROAS: pesos vendidos por cada peso invertido; 3 o más es bueno, menos de 1 pierde dinero). Los números de campañas vienen de Meta; lo que el cliente reporta (prospectos, ventas, cuánto vendió) se anota con registrar_resultados_anuncios y manda sobre Meta. Para "cómo van los anuncios", "qué campaña no sirve" o "cuánto le cuesta cada cliente" usa paid_media y empieza por los avisos rojos (campañas gastando sin resultados). Explica en palabras sencillas: "costo por contacto", no "CPL". Solo lees: no puedes apagar ni cambiar campañas; recomienda qué hacer y el dueño lo hace en Meta.
 - Pulso de la agencia: para "¿qué necesita mi atención hoy?" usa pulso_agencia (clientes en rojo, pagos vencidos, entregas atrasadas, aprobaciones, topes de anuncios, tareas vencidas, juntas de hoy) y responde empezando por lo urgente.
 - Gasto en anuncios de Google y TikTok: todavía no están conectados; se anota a mano con registrar_gasto_anuncios (el total que lleva en el mes por plataforma). Nunca inventes cifras de gasto ni de redes. Para una junta con un cliente, crea el evento con el campo cliente lleno.
@@ -936,6 +937,32 @@ herramientasBase.push(
     },
   }),
   betaTool({
+    name: "ajustar_crm_cliente",
+    description: "Ajusta cómo el CRM calcula los números de un cliente: valor promedio de una venta (ticket, se usa en las ventas sin monto), margen % (opcional; 0 o vacío = sin margen, la utilidad es lo vendido menos los anuncios) y si en su Pancake la etiqueta VENTA SÍ quiere decir que compró (venta_por_etiqueta: true hace que cada conversación con esa etiqueta cuente sola como venta y vuelve a traer los últimos 90 días). Úsala cuando el dueño diga 'el check up vale 3,000', 'no le pongas margen', 'en el Pancake del doctor la etiqueta VENTA sí es venta'. Sin cambios, solo dice cómo está.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string" },
+        ticket: { type: "number", description: "Valor promedio de una venta en pesos" },
+        margen: { type: "number", description: "Margen del cliente en %, 0 = sin margen" },
+        venta_por_etiqueta: { type: "boolean", description: "En su Pancake, la etiqueta VENTA cuenta como venta" },
+      },
+      required: ["cliente"],
+      additionalProperties: false,
+    },
+    run: async ({ cliente, ticket, margen, venta_por_etiqueta }) => {
+      const cambios = {};
+      if (ticket !== undefined || margen !== undefined) Object.assign(cambios, crm.guardarUtilidad({ cliente, ticket, margen }));
+      const fuentes = crmExternos.listarFuentes(cliente).filter((f) => f.tipo === "pancake");
+      if (venta_por_etiqueta !== undefined) {
+        if (!fuentes.length) throw new Error("Ese cliente no tiene Pancake conectado (CRM → Conexiones)");
+        cambios.pancake = [];
+        for (const f of fuentes) { const r = await crmExternos.ventaPorEtiqueta(f.id, venta_por_etiqueta); cambios.pancake.push({ pagina: r.cuenta, venta_por_etiqueta: r.venta_etiqueta, ventas_nuevas: r.cambiadas, traidos: r.sincronizado?.nuevos ?? null, error: r.sincronizado?.error || null }); }
+      }
+      return json({ ...crm.utilidadConfig(cliente), pancake: cambios.pancake || fuentes.map((f) => ({ pagina: f.cuenta, venta_por_etiqueta: f.venta_etiqueta })) });
+    },
+  }),
+  betaTool({
     name: "crear_prospecto",
     description: "Agrega un prospecto (persona interesada) al CRM de un cliente. Si ya existe con ese teléfono, no lo duplica.",
     inputSchema: {
@@ -1037,7 +1064,7 @@ const ACCIONES_QUE_CAMBIAN = new Set([
   "crear_cliente", "actualizar_cliente", "registrar_gasto_anuncios", "crear_proyecto", "actualizar_proyecto", "encargar_a_departamento", "resolver_aprobacion",
   "asignar_meta", "marcar_pagado", "registrar_cobro", "registrar_gasto_agencia", "registrar_resultados_anuncios", "crear_contenido", "mover_contenido", "compartir_reporte",
   "configurar_tendencias", "buscar_tendencias", "usar_idea", "configurar_seo", "revisar_sitio",
-  "crear_prospecto", "actualizar_prospecto", "borrador_whatsapp", "usar_mac",
+  "crear_prospecto", "actualizar_prospecto", "ajustar_crm_cliente", "borrador_whatsapp", "usar_mac",
 ]);
 
 /**

@@ -259,3 +259,55 @@ test("la llave de Pancake de un cliente no se puede usar en otro (no se cuelan s
   // La de Betzy sigue funcionando
   assert.ok((await ext.sincronizarFuente(r.id)).revisados >= 1);
 });
+
+test("Pancake del doctor: la etiqueta VENTA sí cuenta, se traen los 90 días en tramos y DELTA no quita ni inventa ventas", async () => {
+  const doc = agencia.crearCliente({ nombre: "Dr. Héctor Etiqueta" });
+  const tramos = [];
+  const conv = (id, nombre, dias, tags = []) => ({ id, type: "INBOX", inserted_at: hace(dias).toISOString(), updated_at: hace(dias).toISOString(), message_count: 10,
+    customers: [{ name: nombre, fb_id: `wa_52122200${id.slice(-4)}` }], from: { id: `wa_${id}` }, last_sent_by: { id: `wa_${id}` }, tags });
+  let quitarEtiqueta = false;
+  ext._fetchDePrueba(async (url) => {
+    if (/\/tags\?/.test(url)) return { tags: [{ id: 9, text: "VENTA" }, { id: 4, text: "LEAD" }] };
+    const since = Number(/since=(\d+)/.exec(url)[1]), until = Number(/until=(\d+)/.exec(url)[1]);
+    if (/page_number=1&/.test(url)) tramos.push([since, until]);
+    const todas = [conv("waba_h_0001", "Hugo", 50, [9]), conv("waba_h_0002", "Ivan", 45, quitarEtiqueta ? [4] : [9, 4]), conv("waba_h_0003", "Rosa", 10, [4])];
+    return { success: true, conversations: /page_number=1&/.test(url) ? todas.filter((c) => { const t = Date.parse(c.updated_at) / 1000; return t >= since && t <= until; }) : [] };
+  });
+  ext._chatsDePrueba(async (c) => `Cliente: hola ${c}`);
+  ext._iaDePrueba(async (p) => (p.nombre === "Rosa" ? { etapa: "venta", resumen: "dice que pagó" } : { etapa: "contactado", origen: "cliente", resumen: "x" }));
+  const r = await ext.conectarFuente({ cliente: doc.id, tipo: "pancake", cuenta: "waba_h", token: "tok-hector-123456" });
+  assert.ok(tramos.length >= 3, "pide en tramos de 30 días hasta cubrir 90");
+  assert.equal(r.nuevos, 3, "trae también las de hace 45 y 50 días");
+  assert.equal(crm.buscarProspecto({ nombre: "Hugo", cliente: doc.id }).etapa, "contactado", "sin el interruptor, la etiqueta sola no es venta");
+  const v = await ext.ventaPorEtiqueta(r.id, true);
+  assert.equal(v.venta_etiqueta, true);
+  assert.equal(v.cambiadas, 2);
+  const hugo = crm.buscarProspecto({ nombre: "Hugo", cliente: doc.id });
+  assert.equal(hugo.etapa, "venta");
+  assert.equal(hugo.venta_revisada, 1, "ya confirmada: DELTA no la vuelve a revisar");
+  // Leer chats no quita ventas con etiqueta ni pone ventas sin etiqueta
+  await ext.leerChats(r.id, { max: 50 });
+  assert.equal(crm.buscarProspecto({ nombre: "Hugo", cliente: doc.id }).etapa, "venta");
+  assert.equal(crm.buscarProspecto({ nombre: "Rosa", cliente: doc.id }).etapa === "venta", false);
+  // El arreglo de ventas por etiqueta no toca esta página
+  ext.revisarVentasPorEtiqueta();
+  assert.equal(crm.buscarProspecto({ nombre: "Ivan", cliente: doc.id }).etapa, "venta");
+  // Si en Pancake le quitan la etiqueta, deja de ser venta
+  quitarEtiqueta = true;
+  db.prepare("UPDATE crm_fuentes SET historia = NULL WHERE id = ?").run(r.id);
+  await ext.sincronizarFuente(r.id);
+  assert.notEqual(crm.buscarProspecto({ nombre: "Ivan", cliente: doc.id }).etapa, "venta");
+  ext._fetchDePrueba(null); ext._chatsDePrueba(null); ext._iaDePrueba(null);
+});
+
+test("prospectos de Pancake que quedaron en otro cliente regresan a su dueño; margen 0 = sin margen", () => {
+  const dueno = agencia.crearCliente({ nombre: "Dueña Página" });
+  const otro = agencia.crearCliente({ nombre: "Otro Doctor" });
+  db.prepare("INSERT INTO crm_fuentes (cliente_id, tipo, cuenta, token) VALUES (?,?,?,?)").run(dueno.id, "pancake", "waba_mix", "tok-mix-123456");
+  const p = crm.crearProspecto({ cliente: otro.id, nombre: "Colado" });
+  db.prepare("UPDATE prospectos SET externo_id = 'pancake:waba_mix:1' WHERE id = ?").run(p.id);
+  assert.equal(ext.acomodarProspectosDeOtraPagina(), 1);
+  assert.equal(crm.obtenerProspecto(p.id).cliente_id, dueno.id);
+  assert.equal(crm.guardarUtilidad({ cliente: dueno.id, ticket: 3000, margen: 0 }).margen, null);
+  assert.equal(crm.guardarUtilidad({ cliente: dueno.id, margen: "60" }).margen, 60);
+});

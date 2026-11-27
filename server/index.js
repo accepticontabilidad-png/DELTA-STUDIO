@@ -446,6 +446,7 @@ api.get("/crm/fuentes", envolver((req) => ({ fuentes: crmExternos.listarFuentes(
 api.post("/crm/fuentes", envolver((req) => crmExternos.conectarFuente(req.body || {})));
 api.post("/crm/fuentes/:id/sincronizar", envolver((req) => crmExternos.sincronizarFuente(Number(req.params.id))));
 api.post("/crm/fuentes/:id/leer", envolver((req) => crmExternos.leerChatsEnFondo(Number(req.params.id), { max: 150 })));
+api.put("/crm/fuentes/:id/venta-etiqueta", envolver((req) => crmExternos.ventaPorEtiqueta(Number(req.params.id), Boolean(req.body?.si))));
 api.delete("/crm/fuentes/:id", envolver((req) => crmExternos.quitarFuente(Number(req.params.id))));
 api.get("/crm/config", envolver((req) => ({ ...crm.configCrm(String(req.query.cliente || "")), whatsapp_token: Boolean(process.env.WHATSAPP_TOKEN) })));
 api.put("/crm/config", envolver((req) => crm.configurarCrm(req.body || {})));
